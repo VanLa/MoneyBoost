@@ -1,0 +1,46 @@
+allprojects {
+
+    configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'com.google.android.gms' &&
+                    details.requested.name.contains('measurement')) {
+                details.useVersion '21.2.2'
+            }
+            if (details.requested.group == 'com.applovin' && details.requested.name == 'applovin-sdk') {
+                details.useVersion '13.1.0'
+            }
+        }
+    }
+
+    buildscript {
+        repositories {
+            google()
+            mavenCentral()
+            maven { url "https://android-sdk.is.com" }
+            maven { url "https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea" }
+            maven { url "https://artifact.bytedance.com/repository/pangle" }
+        }
+
+        dependencies {
+            // If you are changing the Android Gradle Plugin version, make sure it is compatible with the Gradle version preinstalled with Unity
+            // See which Gradle version is preinstalled with Unity here https://docs.unity3d.com/Manual/android-gradle-overview.html
+            // See official Gradle and Android Gradle Plugin compatibility table here https://developer.android.com/studio/releases/gradle-plugin#updating-gradle
+            // To specify a custom Gradle version in Unity, go do "Preferences > External Tools", uncheck "Gradle Installed with Unity (recommended)" and specify a path to a custom Gradle version
+            classpath 'com.android.tools.build:gradle:7.4.2'
+            classpath 'com.google.gms:google-services:4.4.2'
+            classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.9'
+        }
+    }
+
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://android-sdk.is.com" }
+        maven { url "https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea" }
+        maven { url "https://artifact.bytedance.com/repository/pangle" }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

@@ -1,0 +1,45 @@
+apply plugin: 'maven-publish'
+
+////用户名
+//def NEXUS_USERNAME="princess-amber"
+////密码
+//def NEXUS_PASSWORD="amber520"
+////地址
+//def NEXUS_REPOSITORY_URL="https://gitee.com/buckingham-palace/frmusic-sdkandroid/tree/master/maven2"
+
+afterEvaluate {z
+    publishing {
+        //发布的 jar 包配置
+        publications {
+            release(MavenPublication) {
+                groupId = 'com.dream'
+                artifactId = 'laughtale'
+                version = '1.0.3.8'
+                //aar 文件
+                def projectName = project.getName()
+                artifact "build/outputs/aar/${projectName}-release.aar"
+
+                pom.withXml{
+                    def dependenciesNode = asNode().appendNode("dependencies")
+                    configurations.implementation.allDependencies.forEach(){
+                        Dependency dependency ->
+                            if (dependency.version != "unspecified" && dependency.name != "unspecified"){
+                                def dependencyNode = dependenciesNode.appendNode('dependency')
+                                dependencyNode.appendNode('groupId', dependency.group)
+                                dependencyNode.appendNode('artifactId', dependency.name)
+                                dependencyNode.appendNode('version', dependency.version)
+                            }
+                    }
+                }
+            }
+        }
+        //仓库地址配置
+        repositories {
+            maven {
+//                url NEXUS_REPOSITORY_URL
+                url = "/Users/jinhaoyu/AndroidProject/LaughTaleSDK"
+                allowInsecureProtocol true
+            }
+        }
+    }
+}
