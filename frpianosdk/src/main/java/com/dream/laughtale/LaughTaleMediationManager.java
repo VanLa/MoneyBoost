@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 
 //import androidx.annotation.Nullable;
 
-public class LaughTaleMediationManager extends Activity implements LaughTaleInterstitialListener, LaughTaleRewardVideoListener, LaughTaleSplashListener, LaughTaleNativeListener ,LaughTaleFullNativeListener {
+public class LaughTaleMediationManager extends Activity implements LaughTaleInterstitialListener, LaughTaleRewardVideoListener, LaughTaleSplashListener, LaughTaleNativeListener {
 
     private ConsentInformation consentInformation;
     // Use an atomic boolean to initialize the Google Mobile Ads SDK and load ads once.
@@ -48,9 +48,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
 
     private List<LaughTaleNativeAdapter> LaughTale_nativeAdapterList = new ArrayList();
 
-    private List<LaughTaleFullNativeAdapter> LaughTale_fullNativeAdapterList = new ArrayList();
-
-    // 广告闪屏显示间隔时间, 间隔内不出现广告 ,默认20
+    // 广告闪屏显示间隔时间, 间隔内不出现广告 ,默认3
     private long LaughTale_mSplashADInterval = 1000 * 3;
     // 上次闪屏显示广告的时间
     private long LaughTale_mSplashLastADTime = 0;
@@ -110,16 +108,6 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             adapter.LaughTale_nativeListener = this;
             adapter.LaughTaleInitNativeAdapter();
             LaughTale_nativeAdapterList.add(adapter);
-        }
-
-        String[] LaughTale_fullNativeIdList = nativeKey.split(";");
-        for (String str : LaughTale_nativeIdList){
-            LaughTaleFullNativeAdapter adapter = new LaughTaleFullNativeAdapter();
-            adapter.LaughTale_activity = activity;
-            adapter.LaughTale_ad_unit = str;
-            adapter.LaughTale_fullNativeListener = this;
-            adapter.LaughTaleInitNativeAdapter();
-            LaughTale_fullNativeAdapterList.add(adapter);
         }
 
         String[] LaughTale_bannerIdList = bannerKey.split(";");
@@ -307,61 +295,20 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                 LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("inter_show", object.toString());
             } catch (Exception e) { }
 
-//            // 找出价值最高的插屏广告（仅限 price > 0）
-//            LaughTaleInterstitialAdapter bestAdapter = null;
-//            double maxPrice = 0;
-//
-//            for (LaughTaleInterstitialAdapter adapter : LaughTale_interAdapterList) {
-//                double price = adapter.LaughTaleGetADPrice();
-//                if (price > maxPrice) {
-//                    maxPrice = price;
-//                    bestAdapter = adapter;
-//                }
-//            }
-//
-//            if (bestAdapter != null) {
-//                bestAdapter.LaughTaleShowInterstitialAd();
-//            }
-            // 找出价值最高的广告（包括插屏和全屏原生，仅限 price > 0）
-            Object bestAdapter = null;
+            // 找出价值最高的插屏广告（仅限 price > 0）
+            LaughTaleInterstitialAdapter bestAdapter = null;
             double maxPrice = 0;
-            String adapterType = ""; // 用于记录是哪种类型的广告
 
-            // 检查插屏广告
             for (LaughTaleInterstitialAdapter adapter : LaughTale_interAdapterList) {
                 double price = adapter.LaughTaleGetADPrice();
                 if (price > maxPrice) {
                     maxPrice = price;
                     bestAdapter = adapter;
-                    adapterType = "interstitial";
                 }
             }
 
-            // 检查全屏原生广告
-            for (LaughTaleFullNativeAdapter adapter : LaughTale_fullNativeAdapterList) {
-                double price = adapter.LaughTaleGetADPrice();
-                if (LaughTaleToolsManager.instance().LaughTale_isTestFullNative){
-                    maxPrice = price;
-                    bestAdapter = adapter;
-                    adapterType = "fullNative";
-                }else {
-                    if (price > maxPrice) {
-                        maxPrice = price;
-                        bestAdapter = adapter;
-                        adapterType = "fullNative";
-                    }
-                }
-
-            }
-
-            // 根据类型展示广告
             if (bestAdapter != null) {
-                if (adapterType.equals("interstitial")) {
-                    ((LaughTaleInterstitialAdapter)bestAdapter).LaughTaleShowInterstitialAd();
-                } else if (adapterType.equals("fullNative")) {
-                    LaughTaleHideBannerView();
-                    ((LaughTaleFullNativeAdapter)bestAdapter).LaughTaleShowNativeAd();
-                }
+                bestAdapter.LaughTaleShowInterstitialAd();
             }
         }
     }
@@ -502,10 +449,11 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
 
     public void LaughTaleOnNativeAdClosed(){
         LaughTaleShowBannerView();
+        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_CLOSE");
     }
 
     public void LaughTaleOnNativeAdDisplayed(){
-
+        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_OPEN");
     }
 
     public void LaughTaleOnNativeAdClick(){
@@ -565,57 +513,6 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===LaughTaleHideBannerView");
 //        LaughTale_collapsibleBannerAdapter.LaughTaleHideBannerView();
     }
-    //////////////////////////////////////////////////////////////////////FullNative////////////////////////////////////////////////////////////////////////////////
-
-    public void LaughTaleOnFullNativeAdClosed(){
-        LaughTaleShowBannerView();
-    }
-    public void LaughTaleOnFullNativeAdDisplayed(){
-
-    }
-    public void LaughTaleOnFullNativeAdClick(){
-
-    }
-
-    private void LaughTaleSmartShowFullNativeView(){
-        try {
-            LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("collapsibleBanner_should_show",null);
-        }catch (Exception e){
-        }
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===LaughTaleSmartShowCollapsibleBannerView");
-        //用折叠native
-        if (LaughTaleIsFullNativeReady()){
-            try {
-                LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("collapsibleBanner_show",null);
-            }catch (Exception e){
-            }
-            //先关闭当前的
-            for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
-                if (adapter.LaughTale_isOpen){
-                    adapter.LaughTaleAutoHideNativeAd();
-                }
-            }
-            // 选出价值最高的广告进行展示（price > 0）
-            LaughTaleNativeAdapter bestAdapter = null;
-            double maxPrice = 0;
-            for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-                double price = adapter.LaughTaleGetADPrice();
-                if (price > maxPrice) {
-                    maxPrice = price;
-                    bestAdapter = adapter;
-                }
-            }
-
-            // 展示最贵的
-            if (bestAdapter != null) {
-                LaughTaleHideBannerView();
-                boolean modMode = LaughTaleBankManager.instance().getIsOldUser();
-                bestAdapter.LaughTaleShowNativeAd(modMode);
-//          startTimer(); // 如果你需要控制生命周期，可以解开
-            }
-        }
-    }
-
 
 
     //////////////////////////////////////////////////////////////////////Splash////////////////////////////////////////////////////////////////////////////////
@@ -637,11 +534,6 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             }
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase","showSplashADWithLifeTime");
             for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
-                if (adapter.LaughTale_isOpen){
-                    adapter.LaughTaleAutoHideNativeAd();
-                }
-            }
-            for (LaughTaleFullNativeAdapter adapter : LaughTale_fullNativeAdapterList){
                 if (adapter.LaughTale_isOpen){
                     adapter.LaughTaleAutoHideNativeAd();
                 }

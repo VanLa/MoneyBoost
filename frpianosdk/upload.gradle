@@ -7,14 +7,14 @@ apply plugin: 'maven-publish'
 ////地址
 //def NEXUS_REPOSITORY_URL="https://gitee.com/buckingham-palace/frmusic-sdkandroid/tree/master/maven2"
 
-afterEvaluate {z
+afterEvaluate {
     publishing {
         //发布的 jar 包配置
         publications {
             release(MavenPublication) {
                 groupId = 'com.dream'
                 artifactId = 'laughtale'
-                version = '1.0.3.8'
+                version = '1.0.5'
                 //aar 文件
                 def projectName = project.getName()
                 artifact "build/outputs/aar/${projectName}-release.aar"
