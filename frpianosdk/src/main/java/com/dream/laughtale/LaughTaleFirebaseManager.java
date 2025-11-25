@@ -3,10 +3,21 @@ package com.dream.laughtale;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.alibaba.sdk.android.oss.ClientException;
+import com.alibaba.sdk.android.oss.OSSClient;
+import com.alibaba.sdk.android.oss.ServiceException;
+import com.alibaba.sdk.android.oss.callback.OSSCompletedCallback;
+import com.alibaba.sdk.android.oss.common.auth.OSSPlainTextAKSKCredentialProvider;
+import com.alibaba.sdk.android.oss.model.GetObjectRequest;
+import com.alibaba.sdk.android.oss.model.GetObjectResult;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.analytics.FirebaseAnalytics;
@@ -32,12 +43,12 @@ public class LaughTaleFirebaseManager {
     private FirebaseRemoteConfig LaughTaleFirebaseRemoteConfig;
     private FirebaseAnalytics LaughTaleFirebaseAnalytics;
     private Context mContext;
-//    private String LaughTale_resource_dic = "";
-//    private String LaughTale_resource_root = "";
-
-//    private String LaughTale_Endpoint = "https://moncheyplantgame.top";
-//    private String LaughTale_AccessKeyId = "REDACTED_ALIBABA_ACCESS_KEY_ID";
-//    private String LaughTale_AccessKeySecret = "REDACTED_ALIBABA_ACCESS_KEY_SECRET";
+    private String LaughTale_resource_dic = "";
+    private String LaughTale_resource_root = "";
+    private OSSClient oss;
+    private String LaughTale_Endpoint = "https://musemania.top";
+    private String LaughTale_AccessKeyId = "REDACTED_ALIBABA_ACCESS_KEY_ID";
+    private String LaughTale_AccessKeySecret = "REDACTED_ALIBABA_ACCESS_KEY_SECRET";
 
     public String LaughTale_cp_config = "";
 
@@ -77,6 +88,104 @@ public class LaughTaleFirebaseManager {
         LaughTale_taichiSharedPreferencesEditor = LaughTale_taichiPref.edit();
         //交叉推广
         LaughTaleFetchCPRemoteJson(context);
+    }
+
+    public void LaughTaleInitStorage(Context context){
+        mContext = context;
+        OSSPlainTextAKSKCredentialProvider provider = new OSSPlainTextAKSKCredentialProvider(LaughTale_AccessKeyId,LaughTale_AccessKeySecret);
+        oss = new OSSClient(mContext,LaughTale_Endpoint,provider);
+    }
+
+    public void LaughTaleGetStorageFireWithFilePath(String fileName,String fileSuf,StorageLoadListener listener){
+        File finalFile = new File(mContext.getExternalCacheDir(),fileName+"."+fileSuf);
+        try {
+            finalFile.createNewFile();
+            try {
+                // 创建一个 FileOutputStream 实例，第二个参数为 false 表示不追加内容
+                FileOutputStream fos = new FileOutputStream(finalFile, false);
+                // 关闭 FileOutputStream
+                fos.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            String pathName = fileName;
+            if (LaughTale_resource_dic.equals("")){
+                try {
+                    ApplicationInfo appInfo = mContext.getPackageManager()
+                            .getApplicationInfo(mContext.getPackageName(),
+                                    PackageManager.GET_META_DATA);
+                    LaughTale_resource_root = appInfo.metaData.getString("LaughTale_RESOURCE_PROJECT") + "/";
+                    LaughTale_resource_dic = appInfo.metaData.getString("LaughTale_RESOURCE_ROOT") + "/";
+                }catch (Exception e){
+                }
+            }
+            pathName = LaughTale_resource_root + LaughTale_resource_dic + pathName;
+
+            GetObjectRequest get = new GetObjectRequest("musemania-casual",pathName+"."+fileSuf);
+            oss.asyncGetObject(get, new OSSCompletedCallback<GetObjectRequest, GetObjectResult>() {
+                @Override
+                public void onSuccess(GetObjectRequest request, GetObjectResult result) {
+                    // 开始读取数据。
+                    long length = result.getContentLength();
+                    if (length > 0) {
+                        byte[] buffer = new byte[(int) length];
+                        int readCount = 0;
+                        while (readCount < length) {
+                            try{
+                                readCount += result.getObjectContent().read(buffer, readCount, (int) length - readCount);
+                            }catch (Exception e){
+                            }
+                        }
+                        // 将下载后的文件存放在指定的本地路径，例如D:\\localpath\\exampleobject.jpg。
+                        try {
+                            FileOutputStream fout = new FileOutputStream(finalFile);
+                            fout.write(buffer);
+                            fout.close();
+                            listener.onLoadSuccess(finalFile.getPath());
+                        } catch (Exception e) {
+                        }
+                    }
+                }
+
+                @Override
+                public void onFailure(GetObjectRequest request, ClientException clientException, ServiceException serviceException) {
+                    // 请求异常。
+                    if (clientException != null) {
+                        // 本地异常，如网络异常等。
+                        clientException.printStackTrace();
+                    }
+                    if (serviceException != null) {
+                        // 服务异常。
+                        Log.e("ErrorCode", serviceException.getErrorCode());
+                        Log.e("RequestId", serviceException.getRequestId());
+                        Log.e("HostId", serviceException.getHostId());
+                        Log.e("RawMessage", serviceException.getRawMessage());
+                    }
+                    if(fileSuf.equals("ogg") == false){
+                        LaughTaleCopyAssetGetFilePath(fileName+"."+fileSuf);
+                        File cacheFile = new File(mContext.getExternalCacheDir(),fileName+"."+fileSuf);
+                        try {
+                            if (cacheFile.exists() && LaughTaleGetFileSize(cacheFile)>0){
+                                listener.onLoadSuccess(cacheFile.getPath());
+                            }else {
+                                listener.onLoadFailure("=====GetObjectFailure:"+fileName);
+                            }
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            });
+        }catch (IOException ex){
+            LaughTaleCopyAssetGetFilePath(fileName+"."+fileSuf);
+            File cacheFile = new File(mContext.getExternalCacheDir(),fileName+"."+fileSuf);
+            if (cacheFile == null){
+                return;
+            }
+            if (cacheFile.exists()){
+                listener.onLoadSuccess(cacheFile.getPath());
+            }
+        }
     }
 
     public void LaughTaleSetGDPRConsent(){
@@ -121,7 +230,6 @@ public class LaughTaleFirebaseManager {
         }catch (Exception e){
         }
     }
-
 
     private static long LaughTaleGetFileSize(File file) throws Exception
     {
@@ -188,50 +296,6 @@ public class LaughTaleFirebaseManager {
 
         }
     }
-
-//    private com.posthog.android.Properties jsonToProperties(String jsonString) throws JSONException {
-//        com.posthog.android.Properties retMap = new com.posthog.android.Properties();
-//        JSONObject json = toJsonObject(jsonString);
-//        if(json != JSONObject.NULL) {
-//            retMap = toProperties(json);
-//        }
-//        return retMap;
-//    }
-//
-//    private com.posthog.android.Properties toProperties(JSONObject object) throws JSONException {
-//        com.posthog.android.Properties properties = new com.posthog.android.Properties();
-//        Iterator<String> keysItr = object.keys();
-//        while(keysItr.hasNext()) {
-//            String key = keysItr.next();
-//            Object value = object.get(key);
-//
-//            if(value instanceof JSONArray) {
-//                value = toList((JSONArray) value);
-//            }
-//
-//            else if(value instanceof JSONObject) {
-//                value = toProperties((JSONObject) value);
-//            }
-//            properties.putValue(key, value);
-//        }
-//        return properties;
-//    }
-//
-//    private List<Object> toList(JSONArray array) throws JSONException {
-//        List<Object> list = new ArrayList<Object>();
-//        for(int i = 0; i < array.length(); i++) {
-//            Object value = array.get(i);
-//            if(value instanceof JSONArray) {
-//                value = toList((JSONArray) value);
-//            }
-//
-//            else if(value instanceof JSONObject) {
-//                value = toProperties((JSONObject) value);
-//            }
-//            list.add(value);
-//        }
-//        return list;
-//    }
 
     public static Bundle LaughTaleJsonStringToBundle(String jsonString){
         try {

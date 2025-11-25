@@ -2,13 +2,17 @@ package com.dream.laughtale;
 
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.RelativeLayout;
+import android.widget.TextView;
 
 import com.applovin.mediation.MaxAd;
 import com.applovin.mediation.MaxAdFormat;
@@ -21,200 +25,228 @@ import com.applovin.mediation.nativeAds.MaxNativeAdViewBinder;
 
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueListener {
-    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();  // 创建一个共享的调度线程池
+
+    // --- 调度与广告相关 ---
+    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private MaxNativeAdLoader LaughTale_nativeAdLoader;
-    private MaxNativeAdView   LaughTale_nativeAdView;
+    private MaxNativeAdView LaughTale_nativeAdView;
     private MaxAd LaughTale_nativeAd;
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     private int LaughTale_nativeRetryAttempt;
     public LaughTaleNativeListener LaughTale_nativeListener;
     private double LaughTale_adPrice = 0;
+
+    // --- 视图与状态 ---
     private View adView;
     private LinearLayout LaughTale_root;
     public boolean LaughTale_isOpen = false;
+    private boolean LaughTale_isMetaMode = false;
 
-    public void LaughTaleInitNativeAdapter(){
+    // --- Meta 倒计时 ---
+    private final Handler metaHandler = new Handler(Looper.getMainLooper());
+    private Runnable metaTick;
+    private boolean isMetaCounting = false;
+    private int delayTime;
+    private TextView delayView;
+    private View controlBtn;
+
+    // --- 动画避免叠加 ---
+    private ValueAnimator scaleAnimator;
+
+    public void LaughTaleInitNativeAdapter() {
         LinearLayout linearLayout = new LinearLayout(LaughTale_activity);
         linearLayout.setOrientation(LinearLayout.VERTICAL);
         this.LaughTale_root = linearLayout;
 
         LayoutInflater from = LayoutInflater.from(LaughTale_activity);
         this.adView = from.inflate(R.layout.laughtale_collapsible_native_half_style, (ViewGroup) null);
-        MaxNativeAdViewBinder binder = new MaxNativeAdViewBinder.Builder( this.adView )
-                .setTitleTextViewId( R.id.laughtale_inters_title )
-                .setBodyTextViewId( R.id.laughtale_inters_text )
-                .setIconImageViewId( R.id.laughtale_inters_icon_img )
-                .setMediaContentViewGroupId( R.id.laughtale_media_content )
-                .setCallToActionButtonId( R.id.laughtale_inters_click_btn )
+
+        MaxNativeAdViewBinder binder = new MaxNativeAdViewBinder.Builder(this.adView)
+                .setTitleTextViewId(R.id.laughtale_inters_title)
+                .setBodyTextViewId(R.id.laughtale_inters_text)
+                .setIconImageViewId(R.id.laughtale_inters_icon_img)
+                .setMediaContentViewGroupId(R.id.laughtale_media_content)
+                .setCallToActionButtonId(R.id.laughtale_inters_click_btn)
                 .build();
-        LaughTale_nativeAdView = new MaxNativeAdView( binder, LaughTale_activity );
-        LaughTale_nativeAdLoader = new MaxNativeAdLoader( LaughTale_ad_unit, LaughTale_activity );
-        LaughTale_nativeAdLoader.setRevenueListener( this );
-        LaughTale_nativeAdLoader.setNativeAdListener( new MaxNativeAdListener()
-        {
+
+        LaughTale_nativeAdView = new MaxNativeAdView(binder, LaughTale_activity);
+        LaughTale_nativeAdLoader = new MaxNativeAdLoader(LaughTale_ad_unit, LaughTale_activity);
+        LaughTale_nativeAdLoader.setRevenueListener(this);
+        LaughTale_nativeAdLoader.setNativeAdListener(new MaxNativeAdListener() {
             @Override
-            public void onNativeAdLoaded(@Nullable final MaxNativeAdView nativeAdView, final MaxAd ad)
-            {
-                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========","NativeLoaded");
-                // Cleanup any pre-existing native ad to prevent memory leaks.
-                if ( LaughTale_nativeAd != null )
-                {
-                    LaughTale_nativeAdLoader.destroy( LaughTale_nativeAd );
+            public void onNativeAdLoaded(@Nullable final MaxNativeAdView nativeAdView, final MaxAd ad) {
+                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "NativeLoaded");
+
+                // 清理上一个广告，避免泄漏
+                if (LaughTale_nativeAd != null) {
+                    LaughTale_nativeAdLoader.destroy(LaughTale_nativeAd);
                 }
                 LaughTale_nativeRetryAttempt = 0;
-                // Save ad for cleanup.
+
+                // 保存引用
                 LaughTale_nativeAd = ad;
                 LaughTale_adPrice = ad.getRevenue();
-                if (LaughTale_adPrice == 0){
+                if (LaughTale_adPrice == 0) {
                     LaughTale_adPrice = 0.02;
                 }
+
+                // 判断 Meta 模式（包含 50% 随机）
+                String lowerCase = ad.getNetworkName() != null ? ad.getNetworkName().toLowerCase() : "";
+                boolean randomMeta = false;
+                if (LaughTaleToolsManager.instance().LaughTale_isTestMetaNative) {
+                    Random random = new Random();
+                    randomMeta = random.nextBoolean(); // 关键：赋值给变量
+                }
+                LaughTale_isMetaMode = lowerCase.contains("facebook") || lowerCase.contains("meta") || randomMeta;
             }
 
             @Override
-            public void onNativeAdLoadFailed(final String adUnitId, final MaxError error)
-            {
-                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========","LOADNativeFailed" + error.getMessage());
+            public void onNativeAdLoadFailed(final String adUnitId, final MaxError error) {
+                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADNativeFailed " + error.getMessage());
                 LaughTale_nativeRetryAttempt++;
                 long delay = (long) Math.pow(2, Math.min(6, LaughTale_nativeRetryAttempt));
                 scheduler.schedule(LaughTaleNativeAdapter.this::LaughTaleLoadNativeAdView, delay, TimeUnit.SECONDS);
             }
 
             @Override
-            public void onNativeAdClicked(final MaxAd ad)
-            {
-                if (null != LaughTale_nativeListener){
+            public void onNativeAdClicked(final MaxAd ad) {
+                if (LaughTale_nativeListener != null) {
                     LaughTale_nativeListener.LaughTaleOnNativeAdClick();
                 }
             }
 
             @Override
-            public void onNativeAdExpired(final MaxAd ad)
-            {
+            public void onNativeAdExpired(final MaxAd ad) { }
+        });
 
-            }
-        } );
-
+        // 关闭按钮：常规
         View findViewById = this.adView.findViewById(R.id.laughtale_close_btn);
-        findViewById.setOnClickListener(new View.OnClickListener() { // from class: com.b2x.max.NativeIntersAd.2
-            @Override // android.view.View.OnClickListener
-            public final void onClick(View view) {
-                LaughTaleHideNativeAd(view);
+        findViewById.setOnClickListener(v -> LaughTaleHideNativeAd(v));
+
+        // 关闭按钮：MOD
+        View findViewById2 = this.adView.findViewById(R.id.laughtale_mod_close_btn);
+        findViewById2.setOnClickListener(v -> {
+            findViewById2.setVisibility(View.GONE);
+            ViewGroup parentViewGroup = (ViewGroup) LaughTale_root.getParent();
+            if (parentViewGroup != null) {
+                parentViewGroup.removeView(LaughTale_root);
+            }
+            if (LaughTale_nativeListener != null) {
+                LaughTale_nativeListener.LaughTaleOnNativeAdClosed();
             }
         });
 
-        View findViewById2 = this.adView.findViewById(R.id.laughtale_mod_close_btn);
-        findViewById2.setOnClickListener(new View.OnClickListener() { // from class: com.b2x.max.NativeIntersAd.2
-            @Override // android.view.View.OnClickListener
-            public final void onClick(View view) {
-                findViewById2.setVisibility(View.GONE);
-                ViewGroup parentViewGroup = (ViewGroup) LaughTale_root.getParent();
-                if (parentViewGroup != null){
-                    parentViewGroup.removeView(LaughTale_root);
-                }
-                if (null != LaughTale_nativeListener){
-                    LaughTale_nativeListener.LaughTaleOnNativeAdClosed();
-                }
-            }
-        });
+        // 关闭按钮：Meta
+        View findViewById3 = this.adView.findViewById(R.id.laughtale_meta_close_btn);
+        findViewById3.setOnClickListener(v -> LaughTaleHideNativeAd(v));
+        this.controlBtn = findViewById3;
+
+        // 倒计时 Text
+        this.delayView = this.adView.findViewById(R.id.laughtale_meta_delay_time);
     }
 
     private void startExpandAnimation() {
-        RelativeLayout closeArea = this.adView.findViewById(R.id.close_area);  // 获取 close_area
-        LaughTale_activity.runOnUiThread(() -> {
-            closeArea.postDelayed(() -> {
-                closeArea.setVisibility(View.VISIBLE);
-            }, 1000L);
-        });
-
-
+        LinearLayout closeArea = this.adView.findViewById(R.id.close_area);
+        LaughTale_activity.runOnUiThread(() ->
+                closeArea.postDelayed(() -> closeArea.setVisibility(View.VISIBLE), 1000L)
+        );
     }
 
     private void startCollapseAnimation() {
-        RelativeLayout closeArea = this.adView.findViewById(R.id.close_area);  // 获取 close_area
-        closeArea.setVisibility(View.GONE);  // 动画结束后隐藏 close_area
+        LinearLayout closeArea = this.adView.findViewById(R.id.close_area);
+        closeArea.setVisibility(View.GONE);
         ViewGroup parentViewGroup = (ViewGroup) LaughTale_root.getParent();
-        if (parentViewGroup != null){
+        if (parentViewGroup != null) {
             parentViewGroup.removeView(LaughTale_root);
         }
-        if (null != LaughTale_nativeListener){
+        if (LaughTale_nativeListener != null) {
             LaughTale_nativeListener.LaughTaleOnNativeAdClosed();
         }
     }
 
-    // 持续的放大和缩小动画
+    // 避免叠加：保存引用并在下一次前 cancel
     private void startScaleAnimation() {
-        final View adContentView = this.adView.findViewById(R.id.laughtale_inters_click_btn);  // 获取广告的内容视图（或根据需求选择不同的视图）
+        final View adContentView = this.adView.findViewById(R.id.laughtale_inters_click_btn);
+        if (scaleAnimator != null) scaleAnimator.cancel();
 
-        // 创建一个 ValueAnimator 让视图的 scaleX 和 scaleY 在 0.9 到 1.1 之间来回变化
-        ValueAnimator scaleAnimator = ValueAnimator.ofFloat(1.0f, 1.1f, 1.0f); // 放大到 1.1，再缩小回 1.0
-        scaleAnimator.setDuration(1000);  // 每个循环的动画时长为 1 秒
-        scaleAnimator.setRepeatMode(ValueAnimator.RESTART);  // 设置重复模式为 RESTART，表示每次从头开始
-        scaleAnimator.setRepeatCount(ValueAnimator.INFINITE);  // 无限循环
-
-        // 设置动画更新监听器
-        scaleAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                float animatedValue = (float) animation.getAnimatedValue();
-                // 动态设置视图的缩放比例
-                adContentView.setScaleX(animatedValue);
-                adContentView.setScaleY(animatedValue);
-            }
+        scaleAnimator = ValueAnimator.ofFloat(1.0f, 1.1f, 1.0f);
+        scaleAnimator.setDuration(1000);
+        scaleAnimator.setRepeatMode(ValueAnimator.RESTART);
+        scaleAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        scaleAnimator.addUpdateListener(a -> {
+            float v = (float) a.getAnimatedValue();
+            adContentView.setScaleX(v);
+            adContentView.setScaleY(v);
         });
-
-        // 启动动画
         scaleAnimator.start();
     }
 
-
-    public void LaughTaleLoadNativeAdView(){
-        LaughTale_nativeAdLoader.loadAd( LaughTale_nativeAdView );
+    public void LaughTaleLoadNativeAdView() {
+        LaughTale_nativeAdLoader.loadAd(LaughTale_nativeAdView);
     }
 
-    public double LaughTaleGetADPrice(){
+    public double LaughTaleGetADPrice() {
         return LaughTale_adPrice;
     }
 
-    public void LaughTaleShowNativeAd(boolean isModMode){
-        LaughTale_activity.runOnUiThread(new Runnable() {
-            public void run() {
-                LaughTale_isOpen = true;
-                LaughTale_root.setVisibility(View.VISIBLE);
-                LaughTale_adPrice = 0;
+    public void LaughTaleShowNativeAd(boolean isModMode) {
+        LaughTale_activity.runOnUiThread(() -> {
+            LaughTale_isOpen = true;
+            LaughTale_root.setVisibility(View.VISIBLE);
+            LaughTale_adPrice = 0;
 
-                ViewGroup parentViewGroup = (ViewGroup) LaughTale_root.getParent();
-                if (parentViewGroup != null){
-                    parentViewGroup.removeView(LaughTale_root);
-                }
+            // 防叠加：先从旧父容器移除
+            ViewGroup parentViewGroup = (ViewGroup) LaughTale_root.getParent();
+            if (parentViewGroup != null) {
+                parentViewGroup.removeView(LaughTale_root);
+            }
 
-                // 设置父布局的LayoutParams
-                FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
+            // 父布局入场
+            FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
 
-                // 设置子视图的布局
-                FrameLayout.LayoutParams layoutParams1 = new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-                layoutParams1.gravity = Gravity.BOTTOM;  // 只需要设置底部对齐
+            // 子视图：底部对齐
+            FrameLayout.LayoutParams layoutParams1 = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+            layoutParams1.gravity = Gravity.BOTTOM;
 
-                LaughTale_activity.addContentView(LaughTale_root,layoutParams);
-                LaughTale_root.removeAllViews();
-                LaughTale_root.setGravity(Gravity.BOTTOM);
-                LaughTale_root.bringToFront();
-                LaughTale_root.addView(LaughTale_nativeAdView,layoutParams1);
+            LaughTale_activity.addContentView(LaughTale_root, layoutParams);
+            LaughTale_root.removeAllViews();
+            LaughTale_root.setGravity(Gravity.BOTTOM);
+            LaughTale_root.bringToFront();
+            LaughTale_root.addView(LaughTale_nativeAdView, layoutParams1);
 
-                if (null != LaughTale_nativeListener){
-                    LaughTale_nativeListener.LaughTaleOnNativeAdDisplayed();
-                }
-                if (isModMode == false){
+            if (LaughTale_nativeListener != null) {
+                LaughTale_nativeListener.LaughTaleOnNativeAdDisplayed();
+            }
+
+            // 缩放动画避免叠加
+            startScaleAnimation();
+
+            if (LaughTale_isMetaMode) {
+                // Meta 模式：展示关闭区域 & 开始倒计时
+                LinearLayout closeArea = adView.findViewById(R.id.meta_close_area);
+                closeArea.setVisibility(View.VISIBLE);
+
+                // 统一重置 UI
+                delayTime = 3;
+                delayView.setVisibility(View.VISIBLE);
+                delayView.setText(delayTime + "s");
+                controlBtn.setVisibility(View.GONE);
+
+                startMetaCountdown(); // 稳定倒计时
+            } else {
+                // 非 Meta
+                if (!isModMode) {
                     startExpandAnimation();
-                    startScaleAnimation();
-                }else {
+                } else {
                     View closeBtn = adView.findViewById(R.id.laughtale_mod_close_btn);
                     closeBtn.setVisibility(View.VISIBLE);
                 }
@@ -222,34 +254,105 @@ public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueList
         });
     }
 
-    public void LaughTaleHideNativeAd(View view){
+    public void LaughTaleHideNativeAd(View view) {
         LaughTaleHideView();
     }
 
-    public void LaughTaleAutoHideNativeAd(){
+    public void LaughTaleAutoHideNativeAd() {
         LaughTaleHideView();
     }
 
-    private void LaughTaleHideView(){
-        LaughTale_activity.runOnUiThread(new Runnable() {
-            public void run() {
-                LaughTale_isOpen = false;
+    private void LaughTaleHideView() {
+        LaughTale_activity.runOnUiThread(() -> {
+            LaughTale_isOpen = false;
+
+            // 停止倒计时与动画（先停，再移除视图）
+            if (scaleAnimator != null) {
+                scaleAnimator.cancel();
+                scaleAnimator = null;
+            }
+            stopMetaCountdown();
+
+            if (LaughTale_isMetaMode) {
+                LinearLayout closeArea = adView.findViewById(R.id.meta_close_area);
+                closeArea.setVisibility(View.GONE);
+                // 不在 hide 时改“3s”，避免与下次 show 冲突
+                controlBtn.setVisibility(View.GONE);
+
+                ViewGroup parentViewGroup = (ViewGroup) LaughTale_root.getParent();
+                if (parentViewGroup != null) {
+                    parentViewGroup.removeView(LaughTale_root);
+                }
+                if (LaughTale_nativeListener != null) {
+                    LaughTale_nativeListener.LaughTaleOnNativeAdClosed();
+                }
+            } else {
                 startCollapseAnimation();
             }
         });
+
+        // 提前预加载下一条
         LaughTaleLoadNativeAdView();
     }
 
+    // --- Meta 倒计时：统一入口 ---
+    private void startMetaCountdown() {
+        stopMetaCountdown(); // 先清旧的，避免叠加
+
+        isMetaCounting = true;
+        metaTick = new Runnable() {
+            @Override
+            public void run() {
+                if (!isMetaCounting) return;
+
+                delayTime--;
+                if (delayTime <= 0) {
+                    delayView.setVisibility(View.GONE);
+                    controlBtn.setVisibility(View.VISIBLE);
+                    Animation fadeIn = AnimationUtils.loadAnimation(LaughTale_activity, R.anim.laughtale_fade_in);
+                    controlBtn.startAnimation(fadeIn);
+
+                    isMetaCounting = false; // 结束
+                    metaTick = null;
+                } else {
+                    delayView.setText(delayTime + "s");
+                    metaHandler.postDelayed(this, 1000L);
+                }
+            }
+        };
+        metaHandler.postDelayed(metaTick, 1000L);
+    }
+
+    private void stopMetaCountdown() {
+        isMetaCounting = false;
+        if (metaTick != null) {
+            metaHandler.removeCallbacks(metaTick);
+            metaTick = null;
+        }
+    }
 
     @Override
     public void onAdRevenuePaid(MaxAd maxAd) {
-        double revenue = maxAd.getRevenue(); // In USD
-        String networkName = maxAd.getNetworkName(); // Display name of the network that showed the ad (e.g. "AdColony")
-        String adUnitId = maxAd.getAdUnitId(); // The MAX Ad Unit ID
-        MaxAdFormat adFormat = maxAd.getFormat(); // The ad format of the ad (e.g. BANNER, MREC, INTERSTITIAL, REWARDED)
-        LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseRevenue(revenue,adFormat.toString(),networkName,adUnitId);
-        //上报Bank 收入数据
-//        LaughTaleBankManager.instance().updateAdStats("native",revenue*1000);
+        double revenue = maxAd.getRevenue(); // USD
+        String networkName = maxAd.getNetworkName();
+        String adUnitId = maxAd.getAdUnitId();
+        MaxAdFormat adFormat = maxAd.getFormat();
+        LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseRevenue(revenue, adFormat.toString(), networkName, adUnitId);
+        // LaughTaleBankManager.instance().updateAdStats("native", revenue * 1000);
     }
 
+    @Override
+    protected void onDestroy() {
+        // 安全清理：避免 Activity 销毁后仍有回调
+        stopMetaCountdown();
+        if (scaleAnimator != null) {
+            scaleAnimator.cancel();
+            scaleAnimator = null;
+        }
+        if (LaughTale_nativeAdLoader != null && LaughTale_nativeAd != null) {
+            LaughTale_nativeAdLoader.destroy(LaughTale_nativeAd);
+            LaughTale_nativeAd = null;
+        }
+        super.onDestroy();
+    }
 }

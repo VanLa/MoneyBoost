@@ -34,6 +34,7 @@ public class LaughTaleBankManager {
     private static final String USER_DAY_PREFS_NAME = "UserDayPreferences";
     private static final String LAST_OPEN_DATE_KEY = "LastOpenDate";
     private static final String USER_DAY_COUNT_KEY = "UserDayCount";
+    private static final String LAUNCH_COUNT_KEY = "LaunchCount";
 
     private static final String ADJUST_CONFIG_PREFS_NAME = "AdjustConfigPrefs";
     private static final String THRESHOLD_KEY = "Threshold";
@@ -45,6 +46,7 @@ public class LaughTaleBankManager {
     private static final double THRESHOLD_ECPM = 1.0; // Default threshold for adjusting the template
 
     private int LaughTale_userDayCount = 0;
+    private int LaughTale_launchCount = 0; // 新增：启动次数
     private float mShowRate = 1.0f;
     private float mThreshold = 0.2f;
     private float mAdjustPercentage = 0.8f;
@@ -63,11 +65,25 @@ public class LaughTaleBankManager {
         preferences = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         userDayPreferences = mContext.getSharedPreferences(USER_DAY_PREFS_NAME, Context.MODE_PRIVATE);
 
+        // 增加启动次数
+        increaseLaunchCount();
         // Load adjustConfig from local cache
         loadAdjustConfig();
         // Load mShowRate from local cache
         loadShowRate();
         getUserDay();
+    }
+
+    // 新增：增加启动次数
+    private void increaseLaunchCount() {
+        LaughTale_launchCount = userDayPreferences.getInt(LAUNCH_COUNT_KEY, 0) + 1;
+
+        SharedPreferences.Editor editor = userDayPreferences.edit();
+        editor.putInt(LAUNCH_COUNT_KEY, LaughTale_launchCount);
+        editor.apply();
+
+        // 打印日志
+        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleBankManager", "=== Launch count increased: " + LaughTale_launchCount);
     }
 
     // 从本地缓存加载 adjustConfig 参数
@@ -136,7 +152,7 @@ public class LaughTaleBankManager {
     }
 
     public boolean getIsOldUser(){
-        if (LaughTale_userDayCount >= 2) {
+        if (LaughTale_launchCount >= 2) {
             return true;
         }else {
             return false;

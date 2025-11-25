@@ -23,6 +23,7 @@ import org.json.JSONObject;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
@@ -59,6 +60,10 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
 
     private boolean LaughTale_needPopAD = true;
 
+    private boolean LaughTale_isNativeClick = false;
+
+    private boolean LaughTale_isInPlaying = false;
+
     public interface ADInitListener {
         void onAdInitSuccess();
     }
@@ -78,6 +83,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     public void LaughTaleInit(Context context,Activity activity,ADInitListener initListener){
         this.LaughTale_activity = activity;
         LaughTaleGetUserNoPopAd();
+        LaughTaleBankManager.instance().LaughTaleInitBankManager(activity);
 
         String interKey = "";
         String rewardKey = "";
@@ -205,33 +211,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
         }
         //Firbase
         LaughTaleFirebaseManager.instance().LaughTaleSetGDPRConsent();
-        LaughTaleBankManager.instance().LaughTaleInitBankManager(activity);
         AppLovinPrivacySettings.setHasUserConsent(consent, activity);
-
-//        AppLovinSdkInitializationConfiguration initConfig = AppLovinSdkInitializationConfiguration.builder( sdkKey )
-//                .setMediationProvider( AppLovinMediationProvider.MAX )
-//                .build();
-//
-//        AppLovinSdk.getInstance( LaughTale_activity ).initialize( initConfig, new AppLovinSdk.SdkInitializationListener()
-//        {
-//            @Override
-//            public void onSdkInitialized(final AppLovinSdkConfiguration sdkConfig)
-//            {
-//                // Start loading ads
-//                initListener.onAdInitSuccess();
-//                LaughTale_isInitSuccess = true;
-//                LaughTaleLoadRewardAd();
-//                LaughTaleLoadInterstitialAd();
-//                LaughTaleLoadSplashAD();
-//                LaughTaleLoadMRECBannerView();
-//                LaughTaleLoadBannerView();
-//                LaughTaleLoadNativeView();
-//                if (LaughTaleToolsManager.instance().LaughTale_isDebug) {
-//                    AppLovinSdk.getInstance(LaughTale_activity).showMediationDebugger();
-//                }
-//            }
-//        } );
-
         AppLovinSdk.getInstance(LaughTale_activity).setMediationProvider("max");
         AppLovinSdk.initializeSdk(LaughTale_activity, new AppLovinSdk.SdkInitializationListener() {
             @Override
@@ -448,65 +428,115 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     }
 
     public void LaughTaleOnNativeAdClosed(){
+        LaughTale_isNativeClick = false;
         LaughTaleShowBannerView();
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_CLOSE");
     }
 
     public void LaughTaleOnNativeAdDisplayed(){
+        LaughTale_isNativeClick = false;
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_OPEN");
     }
 
     public void LaughTaleOnNativeAdClick(){
+        LaughTale_isNativeClick = true;
     }
 
-    private void LaughTaleSmartShowCollapsibleBannerView(){
+    private void LaughTaleSmartShowCollapsibleBannerView(boolean needHighValue){
         try {
             LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("collapsibleBanner_should_show",null);
         }catch (Exception e){
         }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===LaughTaleSmartShowCollapsibleBannerView");
-        //用折叠native
-        if (LaughTaleIsNativeReady()){
-            try {
-                LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("collapsibleBanner_show",null);
-            }catch (Exception e){
-            }
-            //先关闭当前的
-            for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
-                if (adapter.LaughTale_isOpen){
-                    adapter.LaughTaleAutoHideNativeAd();
+        boolean isOldUser = LaughTaleBankManager.instance().getIsOldUser();
+        if (isOldUser){
+            //老用户考虑是否要比价
+            if (LaughTaleIsNativeReady() || LaughTaleIsIntertitialADReady("collapsibleBanner")){
+                //先关闭当前的
+                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
+                    if (adapter.LaughTale_isOpen){
+                        adapter.LaughTaleAutoHideNativeAd();
+                    }
                 }
-            }
-            // 选出价值最高的广告进行展示（price > 0）
-            LaughTaleNativeAdapter bestAdapter = null;
-            double maxPrice = 0;
-            for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-                double price = adapter.LaughTaleGetADPrice();
-                if (price > maxPrice) {
-                    maxPrice = price;
-                    bestAdapter = adapter;
-                }
-            }
+                // 选出价值最高的Native
+                LaughTaleNativeAdapter bestNativeAdapter = null;
+                double maxNativePrice = 0.0;
 
-            // 展示最贵的
-            if (bestAdapter != null) {
-                LaughTaleHideBannerView();
-                boolean modMode = LaughTaleBankManager.instance().getIsOldUser();
-                bestAdapter.LaughTaleShowNativeAd(modMode);
-//          startTimer(); // 如果你需要控制生命周期，可以解开
+                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+                    double price = adapter.LaughTaleGetADPrice();
+                    if (price > maxNativePrice) {
+                        maxNativePrice = price;
+                        bestNativeAdapter = adapter;
+                    }
+                }
+                if (needHighValue){
+                    //需要比价inter
+                    LaughTaleInterstitialAdapter bestInterAdapter = null;
+                    double maxInterPrice = 0.0;
+                    for (LaughTaleInterstitialAdapter adapter : LaughTale_interAdapterList) {
+                        double price = adapter.LaughTaleGetADPrice();
+                        if (price > maxInterPrice) {
+                            maxInterPrice = price;
+                            bestInterAdapter = adapter;
+                        }
+                    }
+                    //测试代码
+                    if (LaughTaleToolsManager.instance().LaughTale_isTestOldUserInter) {
+                        boolean randomInter = false;
+                        Random random = new Random();
+                        randomInter = random.nextBoolean(); // 关键：赋值给变量
+                        if (bestNativeAdapter !=null && randomInter){
+                            LaughTaleHideBannerView();
+                            bestNativeAdapter.LaughTaleShowNativeAd(false);
+                        }else if (bestInterAdapter != null){
+                            bestInterAdapter.LaughTaleShowInterstitialAd();
+                        }
+                    }else {
+                        // 老用户展示价格最贵的
+                        if (bestNativeAdapter != null && maxNativePrice >= maxInterPrice) {
+                            LaughTaleHideBannerView();
+                            bestNativeAdapter.LaughTaleShowNativeAd(false);
+                        }else if (bestInterAdapter != null){
+                            bestInterAdapter.LaughTaleShowInterstitialAd();
+                        }
+                    }
+                }else {
+                    if (bestNativeAdapter != null) {
+                        LaughTaleHideBannerView();
+                        bestNativeAdapter.LaughTaleShowNativeAd(false);
+                    }
+                }
+            }
+        }else {
+            //新用户只考虑native
+            if (LaughTaleIsNativeReady()){
+                //先关闭当前的
+                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
+                    if (adapter.LaughTale_isOpen){
+                        adapter.LaughTaleAutoHideNativeAd();
+                    }
+                }
+                // 选出价值最高的Native
+                LaughTaleNativeAdapter bestNativeAdapter = null;
+                double maxNativePrice = 0.0;
+
+                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+                    double price = adapter.LaughTaleGetADPrice();
+                    if (price > maxNativePrice) {
+                        maxNativePrice = price;
+                        bestNativeAdapter = adapter;
+                    }
+                }
+                if (bestNativeAdapter != null) {
+                    LaughTaleHideBannerView();
+                    bestNativeAdapter.LaughTaleShowNativeAd(false);
+                }
             }
         }
     }
 
-//    private void startTimer() {
-//        if (countDownTimer != null){
-//            countDownTimer.cancel(); // 取消之前的计时器（如果有）
-//            countDownTimer.start(); // 启动计时器
-//        }
-//    }
-
-    public void LaughTaleShowCollapsibleBannerView(){
-        LaughTaleSmartShowCollapsibleBannerView();
+    public void LaughTaleShowCollapsibleBannerView(boolean needHighValue){
+        LaughTaleSmartShowCollapsibleBannerView(needHighValue);
     }
 
     public void LaughTaleHideCollapsibleBannerView(){
@@ -538,7 +568,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                     adapter.LaughTaleAutoHideNativeAd();
                 }
             }
-            if (LaughTaleIsSplashADReady()){
+            if (LaughTaleIsSplashADReady() && LaughTale_isNativeClick == false && LaughTale_isInPlaying == false){
                 LaughTale_splashAdapter.LaughTaleShowSplashAd("background");
             }
         }
@@ -590,6 +620,10 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     @Override
     public void LaughTaleOnSplashAdDisplayed() {
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_SPLASH_OPEN");
+    }
+
+    public void LaughTaleReportIsPlaying(boolean isPlaying){
+        LaughTale_isInPlaying = isPlaying;
     }
     //////////////////////////////////////////////////////////////////////Unity交互////////////////////////////////////////////////////////////////////////////////
 

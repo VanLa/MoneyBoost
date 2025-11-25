@@ -8,21 +8,53 @@
     android:background="@drawable/laughtale_rounded_top_bg">
 
     <!-- close_area 保持在顶部，并且默认隐藏 -->
-    <RelativeLayout
+    <LinearLayout
         android:id="@+id/close_area"
         android:layout_width="match_parent"
         android:layout_height="33dp"
-        android:visibility="gone"
-        android:gravity="top|left">
+        android:gravity="bottom"
+        android:visibility="gone">
         <Button
             android:id="@+id/laughtale_close_btn"
             android:layout_width="20dp"
             android:layout_height="20dp"
-            android:layout_alignParentStart="true"
-            android:layout_marginTop="9dp"
+            android:layout_marginBottom="0dp"
             android:layout_marginStart="16dp"
             android:background="@drawable/laughtale_ic_arrow_down" />
-    </RelativeLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/meta_close_area"
+        android:layout_width="match_parent"
+        android:layout_height="75dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/laughtale_meta_close_btn"
+            android:layout_width="25dp"
+            android:layout_height="25dp"
+            android:layout_marginStart="16dp"
+            android:background="@drawable/laughtale_ic_arrow_down" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/laughtale_meta_delay_time"
+            android:layout_width="35dp"
+            android:layout_height="25dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/laughtale_back_time"
+            android:gravity="center"
+            android:text="1s"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold" />
+    </LinearLayout>
+
 
     <!-- content_area 保持在底部 -->
     <LinearLayout

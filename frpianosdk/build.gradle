@@ -4,11 +4,10 @@ apply from: 'upload.gradle'
 
 android {
     compileSdkVersion 34
-    buildToolsVersion '30.0.3'
 
     defaultConfig {
-        minSdkVersion 22
-        targetSdkVersion 34
+        minSdkVersion 23
+        targetSdkVersion 35
         versionCode 1
         versionName "1.0"
 
@@ -37,17 +36,14 @@ dependencies {
     implementation 'com.google.firebase:firebase-crashlytics-ndk:18.3.7'
     implementation 'com.google.firebase:firebase-config:21.2.1'
 
-//    implementation 'com.aliyun.dpa:oss-android-sdk:2.9.13'
+    implementation 'com.aliyun.dpa:oss-android-sdk:2.9.13'
 
     implementation("com.google.android.play:review:2.0.1")
     // For Kotlin users also import the Kotlin extensions library for Play In-App Review:
 //    implementation("com.google.android.play:review-ktx:2.0.1")
     implementation 'com.google.android.ump:user-messaging-platform:2.1.0'
 
-//    implementation 'com.google.android.gms:play-services-ads:23.3.0'
     implementation 'com.applovin:applovin-sdk:13.1.0'
-//    implementation 'com.applovin.mediation:fyber-adapter:+'
-//    implementation 'com.applovin.mediation:vungle-adapter:+'
     implementation 'com.applovin.mediation:google-ad-manager-adapter:+'
     implementation 'com.applovin.mediation:google-adapter:+'
     implementation 'com.applovin.mediation:facebook-adapter:+'

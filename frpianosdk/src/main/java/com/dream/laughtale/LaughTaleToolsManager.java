@@ -19,6 +19,8 @@ import com.google.android.play.core.review.ReviewInfo;
 import com.google.android.play.core.review.ReviewManager;
 import com.google.android.play.core.review.ReviewManagerFactory;
 
+import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.util.List;
@@ -28,7 +30,9 @@ public class LaughTaleToolsManager {
 
     public boolean LaughTale_isDebug = false;
 
-    public boolean LaughTale_isTestFullNative = false;
+    public boolean LaughTale_isTestMetaNative = false;
+
+    public boolean LaughTale_isTestOldUserInter = false;
 
     public static LaughTaleToolsManager instance(){
         if (null == instance){
@@ -89,11 +93,12 @@ public class LaughTaleToolsManager {
         try {
             // 打点（可选）
             try {
-                LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("click_promotion", null);
+                JSONObject object = new JSONObject();
+                object.put("app_bundle",appPackageName);
+                LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("click_promotion", object.toString());
             } catch (Exception e) {
                 // 可忽略
             }
-
             // 检查是否安装了目标 App
             PackageManager pm = activity.getPackageManager();
             Intent launchIntent = pm.getLaunchIntentForPackage(appPackageName);
