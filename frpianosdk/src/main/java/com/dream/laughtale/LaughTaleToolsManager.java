@@ -29,11 +29,8 @@ public class LaughTaleToolsManager {
     public static LaughTaleToolsManager instance;
 
     public boolean LaughTale_isDebug = false;
-
     public boolean LaughTale_isTestMetaNative = false;
-
-    public boolean LaughTale_isTestOldUserInter = false;
-
+    public double LaughTale_isTestInterNativeBidder = 1.0;
     public static LaughTaleToolsManager instance(){
         if (null == instance){
             instance = new LaughTaleToolsManager();

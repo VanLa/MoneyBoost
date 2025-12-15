@@ -51,6 +51,9 @@ public class LaughTaleFirebaseManager {
     private String LaughTale_AccessKeySecret = "REDACTED_ALIBABA_ACCESS_KEY_SECRET";
 
     public String LaughTale_cp_config = "";
+    public double LaughTale_inter_price_multiple = 2.3;
+
+//    public double LaughTale_high_price_p = 4.0;
 
     private SharedPreferences LaughTale_taichiPref;
     private SharedPreferences.Editor LaughTale_taichiSharedPreferencesEditor;
@@ -86,8 +89,9 @@ public class LaughTaleFirebaseManager {
 
         LaughTale_taichiPref = context.getApplicationContext().getSharedPreferences("TaichiTroasCache",0);
         LaughTale_taichiSharedPreferencesEditor = LaughTale_taichiPref.edit();
-        //交叉推广
-        LaughTaleFetchCPRemoteJson(context);
+
+        //获取firebase
+        LaughTaleFetchRemoteConfig(context);
     }
 
     public void LaughTaleInitStorage(Context context){
@@ -213,7 +217,7 @@ public class LaughTaleFirebaseManager {
         }
     }
 
-    private void LaughTaleFetchCPRemoteJson(Context context){
+    private void LaughTaleFetchRemoteConfig(Context context){
         try {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseCPConfig===:","LaughTaleFetchCPRemoteJson");
             LaughTaleFirebaseRemoteConfig.fetchAndActivate()
@@ -224,6 +228,10 @@ public class LaughTaleFirebaseManager {
                                 String json = LaughTaleFirebaseRemoteConfig.getString("cp_config");
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseCPConfig===:",json);
                                 LaughTale_cp_config = json;
+                                LaughTale_inter_price_multiple = LaughTaleFirebaseRemoteConfig.getDouble("inter_price_multiple");
+                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===inter_price_multiple===:",LaughTale_inter_price_multiple+"");
+//                                LaughTale_high_price_p = LaughTaleFirebaseRemoteConfig.getDouble("high_price_p");
+//                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===high_price_p===:",LaughTale_high_price_p+"");
                             }
                         }
                     });

@@ -37,20 +37,20 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
 
     private Activity LaughTale_activity;
 
-    private List<LaughTaleInterstitialAdapter> LaughTale_interAdapterList = new ArrayList();
+    private LaughTaleInterstitialAdapter LaughTale_interAdapter;
 
-    private List<LaughTaleRewardVideoAdapter> LaughTale_rewardAdapterList = new ArrayList();
+    private LaughTaleRewardVideoAdapter LaughTale_rewardAdapter;
 
     private LaughTaleSplashAdapter LaughTale_splashAdapter;
 
-    private List<LaughTaleMRECBannerAdapter> LaughTale_mrecAdapterList = new ArrayList();
+    private LaughTaleMRECBannerAdapter LaughTale_mrecAdapter;
 
-    private List<LaughTaleBannerAdapter> LaughTale_bannerAdapterList = new ArrayList();
+    private LaughTaleBannerAdapter LaughTale_bannerAdapter;
 
     private List<LaughTaleNativeAdapter> LaughTale_nativeAdapterList = new ArrayList();
 
-    // 广告闪屏显示间隔时间, 间隔内不出现广告 ,默认3
-    private long LaughTale_mSplashADInterval = 1000 * 3;
+    // 广告闪屏显示间隔时间, 间隔内不出现广告 ,默认5
+    private long LaughTale_mSplashADInterval = 1000 * 5;
     // 上次闪屏显示广告的时间
     private long LaughTale_mSplashLastADTime = 0;
 
@@ -102,7 +102,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             bannerKey = appInfo.metaData.getString("LaughTale_BANNER_ID");
             splashKey = appInfo.metaData.getString("LaughTale_SPLASH_ID");
             mrecKey = appInfo.metaData.getString("LaughTale_MREC_ID");
-            sdkKey = appInfo.metaData.getString("LaughTale_SDK_Key");
+//            sdkKey = appInfo.metaData.getString("LaughTale_SDK_Key");
         }catch (Exception e){
         }
 
@@ -116,35 +116,22 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             LaughTale_nativeAdapterList.add(adapter);
         }
 
-        String[] LaughTale_bannerIdList = bannerKey.split(";");
-        for (String str : LaughTale_bannerIdList) {
-            LaughTaleBannerAdapter adapter = new LaughTaleBannerAdapter();
-            adapter.LaughTale_activity = activity;
-            adapter.LaughTale_ad_unit = str;
-            adapter.LaughTaleInitBannerAdapter();
-            LaughTale_bannerAdapterList.add(adapter);
-        }
+        LaughTale_bannerAdapter = new LaughTaleBannerAdapter();
+        LaughTale_bannerAdapter.LaughTale_activity = activity;
+        LaughTale_bannerAdapter.LaughTale_ad_unit = bannerKey;
+        LaughTale_bannerAdapter.LaughTaleInitBannerAdapter();
 
+        LaughTale_interAdapter = new LaughTaleInterstitialAdapter();
+        LaughTale_interAdapter.LaughTale_activity = activity;
+        LaughTale_interAdapter.LaughTale_ad_unit = interKey;
+        LaughTale_interAdapter.LaughTale_InterstitialListener = this;
+        LaughTale_interAdapter.LaughTaleInitInterstitialAdapter();
 
-        String[] LaughTale_interIdList = interKey.split(";");
-        for (String str : LaughTale_interIdList){
-            LaughTaleInterstitialAdapter adapter = new LaughTaleInterstitialAdapter();
-            adapter.LaughTale_activity = activity;
-            adapter.LaughTale_ad_unit = str;
-            adapter.LaughTale_InterstitialListener = this;
-            adapter.LaughTaleInitInterstitialAdapter();
-            LaughTale_interAdapterList.add(adapter);
-        }
-
-        String[] LaughTale_rewardIdList = rewardKey.split(";");
-        for (String str : LaughTale_rewardIdList) {
-            LaughTaleRewardVideoAdapter adapter = new LaughTaleRewardVideoAdapter();
-            adapter.LaughTale_activity = activity;
-            adapter.LaughTale_ad_unit = str;
-            adapter.LaughTale_rewardVideoListener = this;
-            adapter.LaughTaleInitRewardVideoAdapter();
-            LaughTale_rewardAdapterList.add(adapter);
-        }
+        LaughTale_rewardAdapter = new LaughTaleRewardVideoAdapter();
+        LaughTale_rewardAdapter.LaughTale_activity = activity;
+        LaughTale_rewardAdapter.LaughTale_ad_unit = rewardKey;
+        LaughTale_rewardAdapter.LaughTale_rewardVideoListener = this;
+        LaughTale_rewardAdapter.LaughTaleInitRewardVideoAdapter();
 
         LaughTale_splashAdapter = new LaughTaleSplashAdapter();
         LaughTale_splashAdapter.LaughTale_ad_unit = splashKey;
@@ -152,14 +139,10 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
         LaughTale_splashAdapter.LaughTale_splashListener = this;
         LaughTale_splashAdapter.LaughTaleInitSplashAdapter();
 
-        String[] LaughTale_mrecIdList = mrecKey.split(";");
-        for (String str : LaughTale_mrecIdList) {
-            LaughTaleMRECBannerAdapter adapter = new LaughTaleMRECBannerAdapter();
-            adapter.LaughTale_activity = activity;
-            adapter.LaughTale_ad_unit = str;
-            adapter.LaughTaleInitBannerAdapter();
-            LaughTale_mrecAdapterList.add(adapter);
-        }
+        LaughTale_mrecAdapter = new LaughTaleMRECBannerAdapter();
+        LaughTale_mrecAdapter.LaughTale_activity = activity;
+        LaughTale_mrecAdapter.LaughTale_ad_unit = mrecKey;
+        LaughTale_mrecAdapter.LaughTaleInitBannerAdapter();
 
         try {
             ConsentRequestParameters params = new ConsentRequestParameters
@@ -236,17 +219,13 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
 
 
     private void LaughTaleLoadInterstitialAd(){
-        for (LaughTaleInterstitialAdapter adapter : LaughTale_interAdapterList) {
-            adapter.LaughTaleLoadInterstitialAd();
-        }
+        LaughTale_interAdapter.LaughTaleLoadInterstitialAd();
     }
 
     ///unity用
     public boolean LaughTaleIsIntertitialADReady(String scene){
-        for (LaughTaleInterstitialAdapter adapter : LaughTale_interAdapterList) {
-            if (adapter.LaughTaleGetADPrice() > 0) {
-                return true;
-            }
+        if (LaughTale_interAdapter.LaughTaleGetADPrice() > 0) {
+            return true;
         }
         return false;
     }
@@ -259,37 +238,20 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
         }catch (Exception e){
 
         }
-        for (LaughTaleInterstitialAdapter adapter : LaughTale_interAdapterList) {
-            if (adapter.LaughTaleGetADPrice() > 0) {
-                return true;
-            }
+        if (LaughTale_interAdapter.LaughTaleGetADPrice() > 0) {
+            return true;
         }
         return false;
     }
 
     public void LaughTaleShowInterstitialUnity(String scene) {
-        if (LaughTaleIsIntertitialADReadyLog(scene) || LaughTaleIsFullNativeReady()) {
+        if (LaughTaleIsIntertitialADReadyLog(scene)) {
             try {
                 JSONObject object = new JSONObject();
                 object.put("scene", scene);
                 LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("inter_show", object.toString());
             } catch (Exception e) { }
-
-            // 找出价值最高的插屏广告（仅限 price > 0）
-            LaughTaleInterstitialAdapter bestAdapter = null;
-            double maxPrice = 0;
-
-            for (LaughTaleInterstitialAdapter adapter : LaughTale_interAdapterList) {
-                double price = adapter.LaughTaleGetADPrice();
-                if (price > maxPrice) {
-                    maxPrice = price;
-                    bestAdapter = adapter;
-                }
-            }
-
-            if (bestAdapter != null) {
-                bestAdapter.LaughTaleShowInterstitialAd();
-            }
+            LaughTale_interAdapter.LaughTaleShowInterstitialAd();
         }
     }
 
@@ -307,9 +269,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     //////////////////////////////////////////////////////////////////////RewardedVideo////////////////////////////////////////////////////////////////////////////////
 
     private void LaughTaleLoadRewardAd(){
-        for (LaughTaleRewardVideoAdapter adapter : LaughTale_rewardAdapterList) {
-            adapter.LaughTaleLoadRewardVideoAd();
-        }
+        LaughTale_rewardAdapter.LaughTaleLoadRewardVideoAd();
     }
 
     public boolean LaughTaleIsRewardADReady(String scene){
@@ -319,11 +279,9 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("reward_should_show",object.toString());
         }catch (Exception e){
         }
-        for (LaughTaleRewardVideoAdapter adapter : LaughTale_rewardAdapterList) {
-            if (adapter.LaughTaleGetADPrice() > 0){
-                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===IsRewardADReady");
-                return true;
-            }
+        if (LaughTale_rewardAdapter.LaughTaleGetADPrice() > 0){
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===IsRewardADReady");
+            return true;
         }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===IsRewardADNotReady");
         return false;
@@ -336,11 +294,8 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("reward_show",object.toString());
         }catch (Exception e){
         }
-        for (LaughTaleRewardVideoAdapter adapter : LaughTale_rewardAdapterList) {
-            if (adapter.LaughTaleGetADPrice() > 0) {
-                adapter.LaughTaleShowRewardVideoAd();
-                return;
-            }
+        if (LaughTale_rewardAdapter.LaughTaleGetADPrice() > 0) {
+            LaughTale_rewardAdapter.LaughTaleShowRewardVideoAd();
         }
     }
 
@@ -362,31 +317,21 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     //////////////////////////////////////////////////////////////////////Banner////////////////////////////////////////////////////////////////////////////////
 
     private void LaughTaleLoadBannerView(){
-        for (LaughTaleBannerAdapter adapter : LaughTale_bannerAdapterList) {
-            adapter.LaughTaleLoadBannerView();
-        }
+        LaughTale_bannerAdapter.LaughTaleLoadBannerView();
     }
 
     public void LaughTaleShowBannerView(){
-        for (LaughTaleBannerAdapter adapter : LaughTale_bannerAdapterList) {
-            adapter.LaughTaleShowBannerView();
-        }
+        LaughTale_bannerAdapter.LaughTaleShowBannerView();
     }
 
     public void LaughTaleHideBannerView(){
-        for (LaughTaleBannerAdapter adapter : LaughTale_bannerAdapterList) {
-            if (adapter.LaughTale_IsShow){
-                adapter.LaughTaleHideBannerView();
-            }
-        }
+        LaughTale_bannerAdapter.LaughTaleHideBannerView();
     }
 
     //////////////////////////////////////////////////////////////////////MREC////////////////////////////////////////////////////////////////////////////////
 
     private void LaughTaleLoadMRECBannerView(){
-        for (LaughTaleMRECBannerAdapter adapter : LaughTale_mrecAdapterList) {
-            adapter.LaughTaleLoadMRECView();
-        }
+        LaughTale_mrecAdapter.LaughTaleLoadMRECView();
     }
 
     private void LaughTaleShowMRECBannerView(int type , boolean needFix){
@@ -394,29 +339,20 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             Executors.newSingleThreadScheduledExecutor()
                     .schedule(() -> LaughTaleHideMRECBannerView(), 1500, TimeUnit.MILLISECONDS);
         }
-        for (LaughTaleMRECBannerAdapter adapter : LaughTale_mrecAdapterList) {
-            if (adapter.LaughTale_isReady){
-                adapter.LaughTaleShowMRECView(type);
-                return;
-            }
-        }
+        LaughTale_mrecAdapter.LaughTaleShowMRECView(type);
     }
 
     private void LaughTaleHideMRECBannerView(){
-        for (LaughTaleMRECBannerAdapter adapter : LaughTale_mrecAdapterList) {
-            if (adapter.LaughTale_isOpen){
-                adapter.LaughTaleHideMRECView();
-            }
-        }
+        LaughTale_mrecAdapter.LaughTaleHideMRECView();
     }
+
+    //////////////////////////////////////////////////////////////////////Native////////////////////////////////////////////////////////////////////////////////
 
     private void LaughTaleLoadNativeView(){
         for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
             adapter.LaughTaleLoadNativeAdView();
         }
     }
-
-    //////////////////////////////////////////////////////////////////////Native////////////////////////////////////////////////////////////////////////////////
 
     private boolean LaughTaleIsNativeReady(){
         for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
@@ -448,13 +384,12 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
         }catch (Exception e){
         }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===LaughTaleSmartShowCollapsibleBannerView");
-        boolean isOldUser = LaughTaleBankManager.instance().getIsOldUser();
-        if (isOldUser){
-            //老用户考虑是否要比价
-            if (LaughTaleIsNativeReady() || LaughTaleIsIntertitialADReady("collapsibleBanner")){
+        if (needHighValue){
+            //考虑是否要比价
+            if (LaughTaleIsNativeReady() || LaughTaleIsIntertitialADReady("collapsibleBanner")) {
                 //先关闭当前的
-                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
-                    if (adapter.LaughTale_isOpen){
+                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+                    if (adapter.LaughTale_isOpen) {
                         adapter.LaughTaleAutoHideNativeAd();
                     }
                 }
@@ -469,46 +404,20 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                         bestNativeAdapter = adapter;
                     }
                 }
-                if (needHighValue){
-                    //需要比价inter
-                    LaughTaleInterstitialAdapter bestInterAdapter = null;
-                    double maxInterPrice = 0.0;
-                    for (LaughTaleInterstitialAdapter adapter : LaughTale_interAdapterList) {
-                        double price = adapter.LaughTaleGetADPrice();
-                        if (price > maxInterPrice) {
-                            maxInterPrice = price;
-                            bestInterAdapter = adapter;
-                        }
-                    }
-                    //测试代码
-                    if (LaughTaleToolsManager.instance().LaughTale_isTestOldUserInter) {
-                        boolean randomInter = false;
-                        Random random = new Random();
-                        randomInter = random.nextBoolean(); // 关键：赋值给变量
-                        if (bestNativeAdapter !=null && randomInter){
-                            LaughTaleHideBannerView();
-                            bestNativeAdapter.LaughTaleShowNativeAd(false);
-                        }else if (bestInterAdapter != null){
-                            bestInterAdapter.LaughTaleShowInterstitialAd();
-                        }
-                    }else {
-                        // 老用户展示价格最贵的
-                        if (bestNativeAdapter != null && maxNativePrice >= maxInterPrice) {
-                            LaughTaleHideBannerView();
-                            bestNativeAdapter.LaughTaleShowNativeAd(false);
-                        }else if (bestInterAdapter != null){
-                            bestInterAdapter.LaughTaleShowInterstitialAd();
-                        }
-                    }
-                }else {
-                    if (bestNativeAdapter != null) {
-                        LaughTaleHideBannerView();
-                        bestNativeAdapter.LaughTaleShowNativeAd(false);
-                    }
+
+                //需要比价inter
+                double interPrice = LaughTale_interAdapter.LaughTaleGetADPrice();
+                // 老用户展示价格最贵的
+                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===interPrice:"+interPrice* LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder+"===nativePrice:"+maxNativePrice+"====Multiple:"+LaughTaleFirebaseManager.instance().LaughTale_inter_price_multiple);
+                if (bestNativeAdapter != null && interPrice * LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder > maxNativePrice * LaughTaleFirebaseManager.instance().LaughTale_inter_price_multiple ) {
+                    LaughTale_interAdapter.LaughTaleShowInterstitialAd();
+                } else if (bestNativeAdapter != null) {
+                    LaughTaleHideBannerView();
+                    bestNativeAdapter.LaughTaleShowNativeAd(false);
                 }
             }
         }else {
-            //新用户只考虑native
+            //有些点位只考虑native
             if (LaughTaleIsNativeReady()){
                 //先关闭当前的
                 for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
@@ -547,15 +456,6 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
 
     //////////////////////////////////////////////////////////////////////Splash////////////////////////////////////////////////////////////////////////////////
 
-    private boolean LaughTaleIsFullNativeReady(){
-        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
-            if (adapter.LaughTaleGetADPrice() > 0){
-                return true;
-            }
-        }
-        return false;
-    }
-
     public void LaughTaleShowSplashADWithLifeTime(){
         if (LaughTale_needPopAD){
             if (LaughTale_sessionLaunchCnt == 0){
@@ -565,10 +465,13 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase","showSplashADWithLifeTime");
             for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
                 if (adapter.LaughTale_isOpen){
-                    adapter.LaughTaleAutoHideNativeAd();
+                    if (LaughTale_isNativeClick == true) {
+                        adapter.LaughTaleAutoHideNativeAd();
+                    }
+                    return;
                 }
             }
-            if (LaughTaleIsSplashADReady() && LaughTale_isNativeClick == false && LaughTale_isInPlaying == false){
+            if (LaughTaleIsSplashADReady()&& LaughTale_isInPlaying == false){
                 LaughTale_splashAdapter.LaughTaleShowSplashAd("background");
             }
         }
@@ -662,5 +565,4 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             LaughTale_needPopAD = true;
         }
     }
-
 }

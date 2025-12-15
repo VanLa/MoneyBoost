@@ -22,8 +22,6 @@ public class LaughTaleBannerAdapter extends Activity implements MaxAdViewAdListe
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     private MaxAdView LaughTale_adView;
-    public boolean LaughTale_isReady = false;
-    public Boolean LaughTale_IsShow = false;
 
     public void LaughTaleInitBannerAdapter() {
         this.LaughTale_adView = new MaxAdView(LaughTale_ad_unit,LaughTale_activity);
@@ -44,14 +42,11 @@ public class LaughTaleBannerAdapter extends Activity implements MaxAdViewAdListe
     }
 
     public void LaughTaleLoadBannerView(){
-        if (LaughTale_isReady == false){
-            LaughTale_adView.loadAd();
-        }
+        LaughTale_adView.loadAd();
     }
 
     public void LaughTaleShowBannerView() {
         if (null != LaughTaleBannerAdapter.this.LaughTale_adView){
-            LaughTale_IsShow = true;
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerShouldShow");
             this.LaughTale_activity.runOnUiThread(new Runnable() {
                 public void run() {
@@ -59,17 +54,11 @@ public class LaughTaleBannerAdapter extends Activity implements MaxAdViewAdListe
                 }
             });
             LaughTale_adView.startAutoRefresh();
-            if (LaughTale_isReady == false){
-                LaughTale_adView.loadAd();
-            }else {
-                LaughTale_isReady = false;
-            }
         }
     }
 
     public void LaughTaleHideBannerView() {
         if (null != LaughTaleBannerAdapter.this.LaughTale_adView){
-            LaughTale_IsShow = false;
             this.LaughTale_activity.runOnUiThread(new Runnable() {
                 public void run() {
                     LaughTale_adView.setVisibility(View.GONE);
@@ -89,7 +78,6 @@ public class LaughTaleBannerAdapter extends Activity implements MaxAdViewAdListe
     }
 
     public void onAdLoaded(MaxAd maxAd) {
-        LaughTale_isReady = true;
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerLoaded:"+maxAd.getNetworkName());
     }
 

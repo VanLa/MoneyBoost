@@ -22,9 +22,6 @@ public class LaughTaleMRECBannerAdapter extends Activity implements MaxAdViewAdL
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     private MaxAdView LaughTale_adView;
-    public boolean LaughTale_isReady = false;
-    public boolean LaughTale_isOpen = false;
-    public boolean LaughTale_isSmallDevice = false;
 
     public void LaughTaleInitBannerAdapter() {
         this.LaughTale_adView = new MaxAdView(this.LaughTale_ad_unit,MaxAdFormat.MREC,LaughTale_activity);
@@ -49,14 +46,11 @@ public class LaughTaleMRECBannerAdapter extends Activity implements MaxAdViewAdL
     }
 
     public void LaughTaleLoadMRECView(){
-        if (LaughTale_isReady == false){
-            LaughTale_adView.loadAd();
-        }
+        LaughTale_adView.loadAd();
     }
 
     public void LaughTaleShowMRECView(int type) {
         if (null != LaughTaleMRECBannerAdapter.this.LaughTale_adView){
-            LaughTale_isOpen = true;
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerShouldShow");
             this.LaughTale_activity.runOnUiThread(new Runnable() {
                 public void run() {
@@ -92,16 +86,10 @@ public class LaughTaleMRECBannerAdapter extends Activity implements MaxAdViewAdL
                 }
             });
             LaughTale_adView.startAutoRefresh();
-            if (LaughTale_isReady == false) {
-                LaughTale_adView.loadAd();
-            } else {
-                LaughTale_isReady = false;
-            }
         }
     }
 
     public void LaughTaleHideMRECView() {
-        LaughTale_isOpen = false;
         if (null != LaughTaleMRECBannerAdapter.this.LaughTale_adView){
             this.LaughTale_activity.runOnUiThread(new Runnable() {
                 public void run() {
@@ -127,9 +115,6 @@ public class LaughTaleMRECBannerAdapter extends Activity implements MaxAdViewAdL
     }
 
     public void onAdLoaded(MaxAd maxAd) {
-        if (LaughTale_isOpen == false){
-            LaughTale_isReady = true;
-        }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerLoaded:"+maxAd.getNetworkName());
     }
 

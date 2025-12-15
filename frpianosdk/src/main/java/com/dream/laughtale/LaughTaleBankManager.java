@@ -152,7 +152,7 @@ public class LaughTaleBankManager {
     }
 
     public boolean getIsOldUser(){
-        if (LaughTale_launchCount >= 2) {
+        if (LaughTale_userDayCount >= 2) {
             return true;
         }else {
             return false;
