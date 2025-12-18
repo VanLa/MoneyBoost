@@ -54,6 +54,8 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     // 上次闪屏显示广告的时间
     private long LaughTale_mSplashLastADTime = 0;
 
+    private long LaughTale_mSmartInterLastADTime = 0;
+
     private long LaughTale_sessionLaunchCnt = 0;
 
     private boolean LaughTale_isInitSuccess = false;
@@ -379,68 +381,74 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     }
 
     private void LaughTaleSmartShowCollapsibleBannerView(boolean needHighValue){
-        try {
-            LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("collapsibleBanner_should_show",null);
-        }catch (Exception e){
-        }
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===LaughTaleSmartShowCollapsibleBannerView");
-        if (needHighValue){
-            //考虑是否要比价
-            if (LaughTaleIsNativeReady() || LaughTaleIsIntertitialADReady("collapsibleBanner")) {
-                //先关闭当前的
-                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-                    if (adapter.LaughTale_isOpen) {
-                        adapter.LaughTaleAutoHideNativeAd();
+        long timeDifference = System.currentTimeMillis() - LaughTale_mSmartInterLastADTime;
+        if (timeDifference > LaughTaleFirebaseManager.instance().LaughTale_cd_time * 1000){
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===TimeDifferenceCanShowAD:"+timeDifference+"");
+            try {
+                LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("collapsibleBanner_should_show",null);
+            }catch (Exception e){
+            }
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===LaughTaleSmartShowCollapsibleBannerView");
+            if (needHighValue){
+                //考虑是否要比价
+                if (LaughTaleIsNativeReady() || LaughTaleIsIntertitialADReady("collapsibleBanner")) {
+                    //先关闭当前的
+                    for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+                        if (adapter.LaughTale_isOpen) {
+                            adapter.LaughTaleAutoHideNativeAd();
+                        }
+                    }
+                    // 选出价值最高的Native
+                    LaughTaleNativeAdapter bestNativeAdapter = null;
+                    double maxNativePrice = 0.0;
+
+                    for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+                        double price = adapter.LaughTaleGetADPrice();
+                        if (price > maxNativePrice) {
+                            maxNativePrice = price;
+                            bestNativeAdapter = adapter;
+                        }
+                    }
+
+                    //需要比价inter
+                    double interPrice = LaughTale_interAdapter.LaughTaleGetADPrice();
+                    // 老用户展示价格最贵的
+                    LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===interPrice:"+interPrice* LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder+"===nativePrice:"+maxNativePrice+"====Multiple:"+LaughTaleFirebaseManager.instance().LaughTale_p_value);
+                    if (bestNativeAdapter != null && interPrice * LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder > maxNativePrice * LaughTaleFirebaseManager.instance().LaughTale_p_value ) {
+                        LaughTale_interAdapter.LaughTaleShowInterstitialAd();
+                    } else if (bestNativeAdapter != null) {
+                        LaughTaleHideBannerView();
+                        bestNativeAdapter.LaughTaleShowNativeAd(false);
                     }
                 }
-                // 选出价值最高的Native
-                LaughTaleNativeAdapter bestNativeAdapter = null;
-                double maxNativePrice = 0.0;
-
-                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-                    double price = adapter.LaughTaleGetADPrice();
-                    if (price > maxNativePrice) {
-                        maxNativePrice = price;
-                        bestNativeAdapter = adapter;
+            }else {
+                //有些点位只考虑native
+                if (LaughTaleIsNativeReady()){
+                    //先关闭当前的
+                    for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
+                        if (adapter.LaughTale_isOpen){
+                            adapter.LaughTaleAutoHideNativeAd();
+                        }
                     }
-                }
+                    // 选出价值最高的Native
+                    LaughTaleNativeAdapter bestNativeAdapter = null;
+                    double maxNativePrice = 0.0;
 
-                //需要比价inter
-                double interPrice = LaughTale_interAdapter.LaughTaleGetADPrice();
-                // 老用户展示价格最贵的
-                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===interPrice:"+interPrice* LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder+"===nativePrice:"+maxNativePrice+"====Multiple:"+LaughTaleFirebaseManager.instance().LaughTale_inter_price_multiple);
-                if (bestNativeAdapter != null && interPrice * LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder > maxNativePrice * LaughTaleFirebaseManager.instance().LaughTale_inter_price_multiple ) {
-                    LaughTale_interAdapter.LaughTaleShowInterstitialAd();
-                } else if (bestNativeAdapter != null) {
-                    LaughTaleHideBannerView();
-                    bestNativeAdapter.LaughTaleShowNativeAd(false);
+                    for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+                        double price = adapter.LaughTaleGetADPrice();
+                        if (price > maxNativePrice) {
+                            maxNativePrice = price;
+                            bestNativeAdapter = adapter;
+                        }
+                    }
+                    if (bestNativeAdapter != null) {
+                        LaughTaleHideBannerView();
+                        bestNativeAdapter.LaughTaleShowNativeAd(false);
+                    }
                 }
             }
         }else {
-            //有些点位只考虑native
-            if (LaughTaleIsNativeReady()){
-                //先关闭当前的
-                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
-                    if (adapter.LaughTale_isOpen){
-                        adapter.LaughTaleAutoHideNativeAd();
-                    }
-                }
-                // 选出价值最高的Native
-                LaughTaleNativeAdapter bestNativeAdapter = null;
-                double maxNativePrice = 0.0;
-
-                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-                    double price = adapter.LaughTaleGetADPrice();
-                    if (price > maxNativePrice) {
-                        maxNativePrice = price;
-                        bestNativeAdapter = adapter;
-                    }
-                }
-                if (bestNativeAdapter != null) {
-                    LaughTaleHideBannerView();
-                    bestNativeAdapter.LaughTaleShowNativeAd(false);
-                }
-            }
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===TimeDifferenceCan'tShowAD:"+timeDifference+"");
         }
     }
 

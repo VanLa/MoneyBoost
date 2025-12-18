@@ -6,24 +6,6 @@ allprojects {
                     details.requested.name.contains('measurement')) {
                 details.useVersion '21.2.2'
             }
-            if (details.requested.group == 'com.applovin' && details.requested.name == 'applovin-sdk') {
-                details.useVersion '13.1.0'
-            }
-            if (details.requested.group == 'com.applovin.mediation' && details.requested.name == 'google-adapter') {
-                details.useVersion '24.5.0.0'
-            }
-            if (details.requested.group == 'com.applovin.mediation' && details.requested.name == 'google-ad-manager-adapter') {
-                details.useVersion '24.5.0.0'
-            }
-            if (details.requested.group == 'com.applovin.mediation' && details.requested.name == 'bytedance-adapter') {
-                details.useVersion '7.6.0.2.0'
-            }
-            if (details.requested.group == 'com.applovin.mediation' && details.requested.name == 'bytedance-adapter') {
-                details.useVersion '7.6.0.2.0'
-            }
-            if (details.requested.group == 'com.applovin.mediation' && details.requested.name == 'facebook-adapter') {
-                details.useVersion '6.20.0.0'
-            }
         }
     }
 

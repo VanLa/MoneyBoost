@@ -51,7 +51,9 @@ public class LaughTaleFirebaseManager {
     private String LaughTale_AccessKeySecret = "REDACTED_ALIBABA_ACCESS_KEY_SECRET";
 
     public String LaughTale_cp_config = "";
-    public double LaughTale_inter_price_multiple = 2.3;
+    public double LaughTale_p_value = 2.3;
+
+    public long LaughTale_cd_time = 0;
 
 //    public double LaughTale_high_price_p = 4.0;
 
@@ -219,19 +221,19 @@ public class LaughTaleFirebaseManager {
 
     private void LaughTaleFetchRemoteConfig(Context context){
         try {
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseCPConfig===:","LaughTaleFetchCPRemoteJson");
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","LaughTaleFetchCPRemoteJson");
             LaughTaleFirebaseRemoteConfig.fetchAndActivate()
                     .addOnCompleteListener((Activity) context, new OnCompleteListener<Boolean>() {
                         @Override
                         public void onComplete(@NonNull Task<Boolean> task) {
                             if (task.isSuccessful()) {
                                 String json = LaughTaleFirebaseRemoteConfig.getString("cp_config");
-                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseCPConfig===:",json);
+                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:",json);
                                 LaughTale_cp_config = json;
-                                LaughTale_inter_price_multiple = LaughTaleFirebaseRemoteConfig.getDouble("inter_price_multiple");
-                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===inter_price_multiple===:",LaughTale_inter_price_multiple+"");
-//                                LaughTale_high_price_p = LaughTaleFirebaseRemoteConfig.getDouble("high_price_p");
-//                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===high_price_p===:",LaughTale_high_price_p+"");
+                                LaughTale_p_value = LaughTaleFirebaseRemoteConfig.getDouble("inter_price_multiple");
+                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===inter_price_multiple===:"+LaughTale_p_value+"");
+                                LaughTale_cd_time = LaughTaleFirebaseRemoteConfig.getLong("ad_cd_time");
+                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===ad_cd_time===:"+LaughTale_cd_time+"");
                             }
                         }
                     });
