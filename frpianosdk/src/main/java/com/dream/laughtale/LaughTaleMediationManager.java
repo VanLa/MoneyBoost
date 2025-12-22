@@ -415,9 +415,11 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                     // 老用户展示价格最贵的
                     LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===interPrice:"+interPrice* LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder+"===nativePrice:"+maxNativePrice+"====Multiple:"+LaughTaleFirebaseManager.instance().LaughTale_p_value);
                     if (bestNativeAdapter != null && interPrice * LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder > maxNativePrice * LaughTaleFirebaseManager.instance().LaughTale_p_value ) {
+                        LaughTale_mSmartInterLastADTime = System.currentTimeMillis();
                         LaughTale_interAdapter.LaughTaleShowInterstitialAd();
                     } else if (bestNativeAdapter != null) {
                         LaughTaleHideBannerView();
+                        LaughTale_mSmartInterLastADTime = System.currentTimeMillis();
                         bestNativeAdapter.LaughTaleShowNativeAd(false);
                     }
                 }
@@ -443,6 +445,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                     }
                     if (bestNativeAdapter != null) {
                         LaughTaleHideBannerView();
+                        LaughTale_mSmartInterLastADTime = System.currentTimeMillis();
                         bestNativeAdapter.LaughTaleShowNativeAd(false);
                     }
                 }
