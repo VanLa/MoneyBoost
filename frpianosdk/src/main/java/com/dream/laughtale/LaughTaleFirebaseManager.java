@@ -52,10 +52,8 @@ public class LaughTaleFirebaseManager {
 
     public String LaughTale_cp_config = "";
     public double LaughTale_p_value = 2.3;
-
     public long LaughTale_cd_time = 0;
-
-//    public double LaughTale_high_price_p = 4.0;
+    public double LaughTale_high_price_p = 999.0;
 
     private SharedPreferences LaughTale_taichiPref;
     private SharedPreferences.Editor LaughTale_taichiSharedPreferencesEditor;
@@ -234,6 +232,8 @@ public class LaughTaleFirebaseManager {
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===inter_price_multiple===:"+LaughTale_p_value+"");
                                 LaughTale_cd_time = LaughTaleFirebaseRemoteConfig.getLong("ad_cd_time");
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===ad_cd_time===:"+LaughTale_cd_time+"");
+                                LaughTale_high_price_p = LaughTaleFirebaseRemoteConfig.getDouble("high_price_p");
+                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===high_price_p===:"+LaughTale_high_price_p+"");
                             }
                         }
                     });

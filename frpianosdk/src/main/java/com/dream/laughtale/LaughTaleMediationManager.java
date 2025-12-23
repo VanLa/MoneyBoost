@@ -391,7 +391,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===LaughTaleSmartShowCollapsibleBannerView");
             if (needHighValue){
                 //考虑是否要比价
-                if (LaughTaleIsNativeReady() || LaughTaleIsIntertitialADReady("collapsibleBanner")) {
+                if (LaughTaleIsNativeReady()) {
                     //先关闭当前的
                     for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
                         if (adapter.LaughTale_isOpen) {
@@ -424,7 +424,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                     }
                 }
             }else {
-                //有些点位只考虑native
+                //对inter要求比较高的点位
                 if (LaughTaleIsNativeReady()){
                     //先关闭当前的
                     for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
@@ -443,7 +443,15 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                             bestNativeAdapter = adapter;
                         }
                     }
-                    if (bestNativeAdapter != null) {
+
+                    //需要比价inter
+                    double interPrice = LaughTale_interAdapter.LaughTaleGetADPrice();
+                    // 老用户展示价格最贵的
+                    LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===interPrice:"+interPrice* LaughTaleToolsManager.instance().LaughTale_isTestHighInterNativeBidder+"===nativePrice:"+maxNativePrice+"====HighMultiple:"+LaughTaleFirebaseManager.instance().LaughTale_high_price_p);
+                    if (bestNativeAdapter != null && interPrice * LaughTaleToolsManager.instance().LaughTale_isTestHighInterNativeBidder > maxNativePrice * LaughTaleFirebaseManager.instance().LaughTale_high_price_p ) {
+                        LaughTale_mSmartInterLastADTime = System.currentTimeMillis();
+                        LaughTale_interAdapter.LaughTaleShowInterstitialAd();
+                    } else if (bestNativeAdapter != null) {
                         LaughTaleHideBannerView();
                         LaughTale_mSmartInterLastADTime = System.currentTimeMillis();
                         bestNativeAdapter.LaughTaleShowNativeAd(false);
