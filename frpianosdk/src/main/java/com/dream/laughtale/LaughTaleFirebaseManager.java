@@ -51,8 +51,8 @@ public class LaughTaleFirebaseManager {
     private String LaughTale_AccessKeySecret = "REDACTED_ALIBABA_ACCESS_KEY_SECRET";
 
     public String LaughTale_cp_config = "";
-    public double LaughTale_p_value = 2.3;
-    public long LaughTale_cd_time = 0;
+    public double LaughTale_p_weekday = 3.5;
+    public double LaughTale_p_weekend = 7.0;
     public double LaughTale_high_price_p = 999.0;
 
     private SharedPreferences LaughTale_taichiPref;
@@ -228,10 +228,10 @@ public class LaughTaleFirebaseManager {
                                 String json = LaughTaleFirebaseRemoteConfig.getString("cp_config");
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:",json);
                                 LaughTale_cp_config = json;
-                                LaughTale_p_value = LaughTaleFirebaseRemoteConfig.getDouble("inter_price_multiple");
-                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===inter_price_multiple===:"+LaughTale_p_value+"");
-                                LaughTale_cd_time = LaughTaleFirebaseRemoteConfig.getLong("ad_cd_time");
-                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===ad_cd_time===:"+LaughTale_cd_time+"");
+                                LaughTale_p_weekend = LaughTaleFirebaseRemoteConfig.getDouble("p_value_weekend");
+                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekend===:"+LaughTale_p_weekend+"");
+                                LaughTale_p_weekday = LaughTaleFirebaseRemoteConfig.getDouble("p_value_weekday");
+                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekday===:"+LaughTale_p_weekday+"");
                                 LaughTale_high_price_p = LaughTaleFirebaseRemoteConfig.getDouble("high_price_p");
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===high_price_p===:"+LaughTale_high_price_p+"");
                             }
