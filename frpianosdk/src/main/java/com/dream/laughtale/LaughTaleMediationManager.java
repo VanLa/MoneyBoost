@@ -56,8 +56,6 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     // 上次闪屏显示广告的时间
     private long LaughTale_mSplashLastADTime = 0;
 
-    private long LaughTale_mSmartInterLastADTime = 0;
-
     private long LaughTale_sessionLaunchCnt = 0;
 
     private boolean LaughTale_isInitSuccess = false;
@@ -416,7 +414,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===LaughTaleSmartShowCollapsibleBannerView");
         if (needHighValue){
             //考虑是否要比价
-            if (LaughTaleIsNativeReady()) {
+            if (LaughTaleIsNativeReady()||LaughTaleIsIntertitialADReady("collapse")) {
                 //先关闭当前的
                 for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
                     if (adapter.LaughTale_isOpen) {
@@ -437,12 +435,10 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                 //需要比价inter
                 double interPrice = LaughTale_interAdapter.LaughTaleGetADPrice();
                 if (bestNativeAdapter != null && interPrice * LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder > maxNativePrice * getPValueByTime() ) {
-                    LaughTale_mSmartInterLastADTime = System.currentTimeMillis();
                     LaughTale_interAdapter.LaughTaleShowInterstitialAd();
                 } else if (bestNativeAdapter != null) {
                     LaughTaleHideBannerView();
-                    LaughTale_mSmartInterLastADTime = System.currentTimeMillis();
-                    bestNativeAdapter.LaughTaleShowNativeAd(false);
+                    bestNativeAdapter.LaughTaleShowNativeAd();
                 }
             }
         }else {
@@ -457,7 +453,6 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                 // 选出价值最高的Native
                 LaughTaleNativeAdapter bestNativeAdapter = null;
                 double maxNativePrice = 0.0;
-
                 for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
                     double price = adapter.LaughTaleGetADPrice();
                     if (price > maxNativePrice) {
@@ -465,16 +460,9 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                         bestNativeAdapter = adapter;
                     }
                 }
-
-                //需要比价inter
-                double interPrice = LaughTale_interAdapter.LaughTaleGetADPrice();
-                if (bestNativeAdapter != null && interPrice * LaughTaleToolsManager.instance().LaughTale_isTestHighInterNativeBidder > maxNativePrice * LaughTaleFirebaseManager.instance().LaughTale_high_price_p ) {
-                    LaughTale_mSmartInterLastADTime = System.currentTimeMillis();
-                    LaughTale_interAdapter.LaughTaleShowInterstitialAd();
-                } else if (bestNativeAdapter != null) {
+                if (bestNativeAdapter != null){
                     LaughTaleHideBannerView();
-                    LaughTale_mSmartInterLastADTime = System.currentTimeMillis();
-                    bestNativeAdapter.LaughTaleShowNativeAd(false);
+                    bestNativeAdapter.LaughTaleShowNativeAd();
                 }
             }
         }
