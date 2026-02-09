@@ -53,6 +53,7 @@ public class LaughTaleFirebaseManager {
     public String LaughTale_cp_config = "";
     public double LaughTale_p_weekday = 3.5;
     public double LaughTale_p_weekend = 7.0;
+    public double LaughTale_close_width = 25.0;
 
     private SharedPreferences LaughTale_taichiPref;
     private SharedPreferences.Editor LaughTale_taichiSharedPreferencesEditor;
@@ -231,6 +232,8 @@ public class LaughTaleFirebaseManager {
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekend===:"+LaughTale_p_weekend+"");
                                 LaughTale_p_weekday = LaughTaleFirebaseRemoteConfig.getDouble("p_value_weekday");
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekday===:"+LaughTale_p_weekday+"");
+                                LaughTale_close_width = LaughTaleFirebaseRemoteConfig.getDouble("close_width");
+                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===close_width===:"+LaughTale_close_width+"");
                             }
                         }
                     });

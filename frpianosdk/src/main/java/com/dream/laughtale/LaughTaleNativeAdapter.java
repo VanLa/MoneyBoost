@@ -237,6 +237,18 @@ public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueList
                 parentViewGroup.removeView(LaughTale_root);
             }
 
+            // 1. 获取关闭按钮实例
+            View closeBtn = LaughTale_nativeAdView.findViewById(R.id.close_btn);
+            // 2. 将 DP 转换为 PX (假设 width 是你的变量名)
+            float density = LaughTale_activity.getResources().getDisplayMetrics().density;
+            int sizeInPx = (int) (LaughTaleFirebaseManager.instance().LaughTale_close_width * density + 0.5f);
+
+            // 3. 更新布局参数
+            ViewGroup.LayoutParams params = closeBtn.getLayoutParams();
+            params.width = sizeInPx;
+            params.height = sizeInPx;
+            closeBtn.setLayoutParams(params);
+
             // 父布局入场
             FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
