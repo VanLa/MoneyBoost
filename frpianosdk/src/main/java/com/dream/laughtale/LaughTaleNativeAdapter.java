@@ -4,6 +4,7 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
@@ -16,6 +17,7 @@ import android.view.animation.AnimationUtils;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import com.applovin.mediation.MaxAd;
@@ -26,6 +28,7 @@ import com.applovin.mediation.nativeAds.MaxNativeAdListener;
 import com.applovin.mediation.nativeAds.MaxNativeAdLoader;
 import com.applovin.mediation.nativeAds.MaxNativeAdView;
 import com.applovin.mediation.nativeAds.MaxNativeAdViewBinder;
+import com.applovin.sdk.AppLovinSdkUtils;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -46,13 +49,108 @@ public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueList
     private int LaughTale_nativeRetryAttempt;
     public LaughTaleNativeListener LaughTale_nativeListener;
     private double LaughTale_adPrice = 0;
-
-    // --- 视图与状态 ---
+    private CloseStyle closeStyle;
+    private View controlBtn;
+    private LinearLayout viewLayout;
+    private LinearLayout titleLayout;
+    private FrameLayout topLayout;
+    private FrameLayout mediaLayout;
+    private TextView clickBtnText;
+    private RelativeLayout bodyLayout;
+    private FrameLayout bottomLayout;
+    private FrameLayout buttonLayout;
+    private int delayTime;
+    private TextView delayView;
     private View adView;
     private LinearLayout LaughTale_root;
     public boolean LaughTale_isOpen = false;
-    private AnimatorSet pulseSet;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    public class CloseStyle {
+        int delayTime;
+    }
+
+    // 1. 数值配置类：将 Meta 和默认配置封装
+    private static class LayoutConfig {
+        float closeS, bottomM, mediaH, titleH, bodyH, btnH, bottomH;
+        int delayShow;
+
+        // 构造函数
+        LayoutConfig(float cS, float bM, float mH, float tH, float bH, float btnH, float botH, int dS) {
+            this.closeS = cS; this.bottomM = bM; this.mediaH = mH;
+            this.titleH = tH; this.bodyH = bH; this.btnH = btnH;
+            this.bottomH = botH; this.delayShow = dS;
+        }
+    }
+
+    // 预设两套配置：Meta 微调版 vs 默认还原版
+    private final LayoutConfig META_CONFIG = new LayoutConfig(20f, 20f, 220f, 70f, 60f, 85f, 5f, 1);
+    private final LayoutConfig DEFAULT_CONFIG = new LayoutConfig(25f, 10f, 230f, 80f, 45f, 78f, 1f, 1);
+
+    private void initViewReferences(View root) {
+        // 在这里统一获取引用，避免 Resize 时重复寻找
+        this.viewLayout =(LinearLayout) root.findViewById(R.id.native_layout); // 对应你 XML 里的容器
+        this.mediaLayout = (FrameLayout) root.findViewById(R.id.media_layout);
+        this.titleLayout =(LinearLayout) root.findViewById(R.id.title_layout);
+        this.bodyLayout = (RelativeLayout) root.findViewById(R.id.body_text_layout);
+        this.buttonLayout = (FrameLayout) root.findViewById(R.id.cta_button_layout);
+        this.bottomLayout = (FrameLayout) root.findViewById(R.id.bottom_layout);
+        this.topLayout = (FrameLayout) root.findViewById(R.id.top_layout);
+        this.clickBtnText = (TextView) root.findViewById(R.id.xa_inters_click_btn);
+    }
+
+    // 2. 核心重构：统一的尺寸调整方法
+    private void applyLayout(boolean isMeta) {
+        LayoutConfig config = isMeta ? META_CONFIG : DEFAULT_CONFIG;
+
+        // 批量更新高度
+        updateViewHeight(mediaLayout, config.mediaH);
+        updateViewHeight(titleLayout, config.titleH);
+        updateViewHeight(bodyLayout, config.bodyH);
+        updateViewHeight(buttonLayout, config.btnH);
+        updateViewHeight(bottomLayout, config.bottomH);
+
+        // 计算并设置总高度 (各部分之和 + margin)
+        float totalH = config.mediaH + config.titleH + config.bodyH + config.btnH + config.bottomH + config.bottomM;
+        updateViewHeight(viewLayout, totalH);
+
+        // 按钮文字大小微调
+        if (clickBtnText != null) {
+            clickBtnText.setTextSize(config.btnH / 3.0f);
+        }
+
+        // 在 applyLayout 方法内的 topLayout 处理块中修改：
+        if (topLayout != null) {
+            float topH = isMeta ? (2.0f * config.bottomM + config.closeS) : Math.max(27f, (2.0f * config.bottomM + config.closeS));
+            LinearLayout.LayoutParams tLp = (LinearLayout.LayoutParams) topLayout.getLayoutParams();
+            tLp.height = dp2px(LaughTale_activity, topH);
+
+            // 核心修改：非 Meta 时确保 margin 归零，防止布局污染
+            tLp.bottomMargin = isMeta ? (dp2px(LaughTale_activity, 2.0f * config.bottomM) * (-1)) : 0;
+
+            topLayout.setLayoutParams(tLp);
+        }
+
+        // 关闭按钮与倒计时位置
+        updateViewSize(controlBtn, config.closeS, config.closeS, config.bottomM);
+
+        float delayW = isMeta ? (1.5f * config.closeS) : (10.0f + Math.max(25f, config.closeS));
+        updateViewSize(delayView, delayW, Math.max(25f, config.closeS), config.bottomM);
+
+        // 显隐逻辑
+        if (config.delayShow <= 0) {
+            if (delayView != null) delayView.setVisibility(View.GONE);
+            if (controlBtn != null) controlBtn.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void InitViewStyle(){
+        if (this.closeStyle == null){
+            this.closeStyle = new CloseStyle();
+        }
+        this.closeStyle.delayTime = 3;
+        setNativeClose();
+    }
 
     public void LaughTaleInitNativeAdapter() {
         LinearLayout linearLayout = new LinearLayout(LaughTale_activity);
@@ -60,17 +158,15 @@ public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueList
         this.LaughTale_root = linearLayout;
 
         LayoutInflater from = LayoutInflater.from(LaughTale_activity);
-        this.adView = from.inflate(R.layout.laughtale_collapse_native_ad_layout, (ViewGroup) null);
-
+        this.adView = from.inflate(R.layout.laughtale_max_native, (ViewGroup) null);
+        initViewReferences(this.adView);
+        InitViewStyle();
         MaxNativeAdViewBinder binder = new MaxNativeAdViewBinder.Builder(this.adView)
-                .setTitleTextViewId(R.id.title_text_view)
-                .setBodyTextViewId(R.id.body_text_view)
-                .setStarRatingContentViewGroupId(R.id.star_rating_view)
-                .setAdvertiserTextViewId(R.id.advertiser_text_view)
-                .setIconImageViewId(R.id.icon_image_view)
-                .setOptionsContentViewGroupId(R.id.ad_options_view)
-                .setMediaContentViewGroupId(R.id.media_view)
-                .setCallToActionButtonId(R.id.cta_button)
+                .setTitleTextViewId(R.id.xa_inters_title)
+                .setBodyTextViewId(R.id.xa_inters_desc)
+                .setIconImageViewId(R.id.xa_inters_icon_img)
+                .setMediaContentViewGroupId(R.id.xa_media_content)
+                .setCallToActionButtonId(R.id.xa_inters_click_btn)
                 .build();
 
         LaughTale_nativeAdView = new MaxNativeAdView(binder, LaughTale_activity);
@@ -108,9 +204,6 @@ public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueList
 
             @Override
             public void onNativeAdClicked(final MaxAd ad) {
-                if (LaughTale_nativeListener != null) {
-                    LaughTale_nativeListener.LaughTaleOnNativeAdClick();
-                }
             }
 
             @Override
@@ -118,103 +211,27 @@ public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueList
         });
 
         // 关闭按钮：常规
-        View findViewById = this.adView.findViewById(R.id.close_btn);
+        View findViewById = this.adView.findViewById(R.id.b2x_inters_close_left);
         findViewById.setOnClickListener(v -> LaughTaleHideNativeAd(v));
-
     }
 
-    private void startExpandAnimation() {
-        // 强制先让 View 不可见，防止闪现
-        LaughTale_nativeAdView.setAlpha(0f);
-
-        LaughTale_nativeAdView.post(() -> {
-            int height = LaughTale_nativeAdView.getHeight();
-            if (height == 0) height = 1000; // 保底高度
-
-            LaughTale_nativeAdView.setTranslationY(height);
-            LaughTale_nativeAdView.setAlpha(1.0f); // 准备好了，显示并开始动画
-
-            LaughTale_nativeAdView.animate()
-                    .translationY(0)
-                    .setDuration(250)
-                    .setInterpolator(new OvershootInterpolator(0.8f)) // 0.8f 控制回弹力度，更接近竞品
-                    .withStartAction(() -> LaughTale_nativeAdView.setLayerType(View.LAYER_TYPE_HARDWARE, null)) // 开启 GPU 加速
-                    .withEndAction(() -> {
-                        LaughTale_nativeAdView.setLayerType(View.LAYER_TYPE_NONE, null); // 结束后释放内存
-                    })
-                    .start();
-        });
-
-        // 关闭按钮逻辑：使用 XML 里的 ID
-        final View closeBtn = this.adView.findViewById(R.id.close_btn);
-        if (closeBtn != null) {
-            closeBtn.setVisibility(View.GONE);
-            closeBtn.setAlpha(0f);
-            // --- 商业优化 2: 缩短按钮出现延迟至 1.5s ---
-            mainHandler.postDelayed(() -> {
-                if (LaughTale_isOpen && closeBtn != null) {
-                    closeBtn.setVisibility(View.VISIBLE);
-                    closeBtn.animate()
-                            .alpha(1.0f)
-                            .scaleX(1.0f)
-                            .scaleY(1.0f)
-                            .setDuration(300)
-                            .setInterpolator(new OvershootInterpolator(1.5f)) // 明显的Q弹入场
-                            .start();
+    private void startCountdown() {
+        mainHandler.removeCallbacksAndMessages(null); // 清除之前的任务
+        Runnable counter = new Runnable() {
+            @Override
+            public void run() {
+                if (!LaughTale_isOpen) return;
+                if (delayTime <= 0) {
+                    delayView.setVisibility(View.GONE);
+                    controlBtn.setVisibility(View.VISIBLE);
+                } else {
+                    delayView.setText(delayTime + "s");
+                    delayTime--;
+                    mainHandler.postDelayed(this, 1000L);
                 }
-            }, 1500);
-        }
-    }
-
-    private void startCollapseAnimation() {
-        if (LaughTale_nativeAdView == null) return;
-
-        int height = LaughTale_nativeAdView.getHeight();
-
-        // 执行向下折叠收起的动画
-        LaughTale_nativeAdView.animate()
-                .translationY(height) // 移动到屏幕下方
-                .setDuration(200)
-                .withStartAction(() -> LaughTale_nativeAdView.setLayerType(View.LAYER_TYPE_HARDWARE, null)) // 开启 GPU 加速
-                .setInterpolator(new AccelerateDecelerateInterpolator())
-                .withEndAction(() -> {
-                    LaughTale_nativeAdView.setLayerType(View.LAYER_TYPE_NONE, null); // 结束后释放内存
-                    // 动画结束后，执行原本的清理逻辑
-                    ViewGroup parentViewGroup = (ViewGroup) LaughTale_root.getParent();
-                    if (parentViewGroup != null) {
-                        parentViewGroup.removeView(LaughTale_root);
-                    }
-                    // 恢复位置偏移，方便下次展示
-                    LaughTale_nativeAdView.setTranslationY(0);
-
-                    if (LaughTale_nativeListener != null) {
-                        LaughTale_nativeListener.LaughTaleOnNativeAdClosed();
-                    }
-                })
-                .start();
-    }
-
-    // 避免叠加：保存引用并在下一次前 cancel
-    private void startScaleAnimation() {
-        final View adContentView = this.adView.findViewById(R.id.cta_button);
-        if (adContentView == null) return;
-        adContentView.setLayerType(View.LAYER_TYPE_HARDWARE, null); // 持续加速
-        // 如果已经在跑，先停掉旧的
-        if (pulseSet != null) {
-            pulseSet.cancel();
-        }
-
-        ObjectAnimator scaleX = ObjectAnimator.ofFloat(adContentView, "scaleX", 1.0f, 1.1f, 1.0f);
-        ObjectAnimator scaleY = ObjectAnimator.ofFloat(adContentView, "scaleY", 1.0f, 1.1f, 1.0f);
-
-        scaleX.setRepeatCount(ValueAnimator.INFINITE);
-        scaleY.setRepeatCount(ValueAnimator.INFINITE);
-
-        pulseSet = new AnimatorSet();
-        pulseSet.playTogether(scaleX, scaleY);
-        pulseSet.setDuration(1000);
-        pulseSet.setInterpolator(new AccelerateDecelerateInterpolator());
-        pulseSet.start();
+            }
+        };
+        mainHandler.post(counter);
     }
 
     public void LaughTaleLoadNativeAdView() {
@@ -227,52 +244,50 @@ public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueList
 
     public void LaughTaleShowNativeAd() {
         LaughTale_activity.runOnUiThread(() -> {
+            applyLayout(IsMeta());
             LaughTale_isOpen = true;
             LaughTale_root.setVisibility(View.VISIBLE);
             LaughTale_adPrice = 0;
+            delayTime = closeStyle.delayTime;
+            startCountdown();
 
-            // 防叠加：先从旧父容器移除
             ViewGroup parentViewGroup = (ViewGroup) LaughTale_root.getParent();
-            if (parentViewGroup != null) {
+            if (parentViewGroup != null){
                 parentViewGroup.removeView(LaughTale_root);
             }
-
-            // 1. 获取关闭按钮实例
-            View closeBtn = LaughTale_nativeAdView.findViewById(R.id.close_btn);
-            // 2. 将 DP 转换为 PX (假设 width 是你的变量名)
-            float density = LaughTale_activity.getResources().getDisplayMetrics().density;
-            int sizeInPx = (int) (LaughTaleFirebaseManager.instance().LaughTale_close_width * density + 0.5f);
-
-            // 3. 更新布局参数
-            ViewGroup.LayoutParams params = closeBtn.getLayoutParams();
-            params.width = sizeInPx;
-            params.height = sizeInPx;
-            closeBtn.setLayoutParams(params);
-
-            // 父布局入场
-            FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
-
-            // 子视图：底部对齐
-            FrameLayout.LayoutParams layoutParams1 = new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-            layoutParams1.gravity = Gravity.BOTTOM;
-
-            LaughTale_activity.addContentView(LaughTale_root, layoutParams);
+            int heightDp = MaxAdFormat.BANNER.getAdaptiveSize(LaughTale_activity).getHeight();
+            int heightPx = AppLovinSdkUtils.dpToPx(LaughTale_activity, heightDp) + 5;
+            LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(-1, -1);
+            layoutParams.setMargins(0,0,0,heightPx);
+            LinearLayout.LayoutParams layoutParams1 = new LinearLayout.LayoutParams(-1, -1);
+            LaughTale_activity.addContentView(LaughTale_root,layoutParams);
             LaughTale_root.removeAllViews();
-            LaughTale_root.setGravity(Gravity.BOTTOM);
+            LaughTale_root.setGravity(16);
+            LaughTale_root.setClickable(true);
             LaughTale_root.bringToFront();
-            LaughTale_root.addView(LaughTale_nativeAdView, layoutParams1);
+            LaughTale_root.addView(LaughTale_nativeAdView,layoutParams1);
 
             if (LaughTale_nativeListener != null) {
                 LaughTale_nativeListener.LaughTaleOnNativeAdDisplayed();
             }
 
-            // 缩放动画避免叠加
-            startScaleAnimation();
-            startExpandAnimation();
-
         });
+    }
+
+    private void setNativeClose() {
+        View findViewById = this.adView.findViewById(R.id.b2x_inters_close_left);
+        findViewById.setVisibility(View.GONE);
+        this.controlBtn = findViewById;
+        this.controlBtn.setOnClickListener(new View.OnClickListener() { // from class: com.b2x.max.NativeIntersAd.2
+            @Override // android.view.View.OnClickListener
+            public final void onClick(View view) {
+                LaughTaleHideNativeAd(view);
+            }
+        });
+        TextView textView = (TextView) this.adView.findViewById(R.id.delay_time);
+        this.delayView = textView;
+        this.delayView.setVisibility(View.VISIBLE);
+        textView.setText(this.closeStyle.delayTime + "s");
     }
 
     public void LaughTaleHideNativeAd(View view) {
@@ -287,20 +302,14 @@ public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueList
         LaughTale_activity.runOnUiThread(() -> {
             if (!LaughTale_isOpen) return; // 如果已经是在关闭过程中，直接拦截
             LaughTale_isOpen = false;
-
-            // --- 核心优化：停止呼吸动画 ---
-            if (pulseSet != null) {
-                pulseSet.cancel(); // 立即停止
-                pulseSet = null;   // 释放引用
-
-                // 恢复按钮状态，防止下次显示时按钮停留在“放大”或“缩小”的状态
-                View ctaButton = this.adView.findViewById(R.id.cta_button);
-                if (ctaButton != null) {
-                    ctaButton.setScaleX(1.0f);
-                    ctaButton.setScaleY(1.0f);
-                }
+            ViewGroup parentViewGroup = (ViewGroup) LaughTale_root.getParent();
+            if (parentViewGroup != null){
+                parentViewGroup.removeView(LaughTale_root);
             }
-            startCollapseAnimation();
+            if (null != LaughTale_nativeListener){
+                LaughTale_nativeListener.LaughTaleOnNativeAdClosed();
+            }
+            InitViewStyle();
             // 建议：在动画开始后再触发加载，或者给一个微小的延迟
             // 避免加载广告的网络/IO请求抢占 UI 动画的 CPU 资源
             mainHandler.postDelayed(this::LaughTaleLoadNativeAdView, 500);
@@ -317,22 +326,51 @@ public class LaughTaleNativeAdapter extends Activity implements MaxAdRevenueList
         // LaughTaleBankManager.instance().updateAdStats("native", revenue * 1000);
     }
 
-    @Override
-    protected void onDestroy() {
-        mainHandler.removeCallbacksAndMessages(null);
-        if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdownNow(); // 立即停止所有重试任务
+    public boolean IsMeta() {
+        // --- 1. 测试逻辑：优先级最高 ---
+        if (LaughTaleToolsManager.instance().LaughTale_isTestMetaNative) {
+            boolean isSimulatedMeta = Math.random() < 0.5;
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("TEST_MODE", "模拟悬浮状态: " + isSimulatedMeta);
+            return isSimulatedMeta;
         }
-        // 2. 核心优化：彻底销毁动画引用
-        if (pulseSet != null) {
-            pulseSet.removeAllListeners(); // 移除监听器
-            pulseSet.cancel();             // 取消动画
-            pulseSet = null;               // 设为空，方便 GC
+
+        // --- 2. 安全检查 ---
+        if (LaughTale_nativeAd == null || LaughTale_nativeAd.getNetworkName() == null) {
+            // 默认返回 true，因为你希望除了 Google 系以外都用这种逻辑
+            return true;
         }
-        if (LaughTale_nativeAdLoader != null && LaughTale_nativeAd != null) {
-            LaughTale_nativeAdLoader.destroy(LaughTale_nativeAd);
-            LaughTale_nativeAd = null;
+        // --- 3. 核心过滤逻辑 ---
+        String networkName = LaughTale_nativeAd.getNetworkName().toLowerCase();
+
+        // 如果包含 admob 或 google (包含 Google Ad Manager)，则返回 false（使用标准布局）
+        if (networkName.contains("admob") || networkName.contains("google")) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("LayoutStyle", "识别为 Google 系，使用标准布局");
+            return false;
         }
-        super.onDestroy();
+
+        // 其他所有平台（Meta, AppLovin, Mintegral, Pangle 等）全部返回 true（使用负 Margin 悬浮布局）
+        return true;
+    }
+
+    private int dp2px(Context context, float f) {
+        return (int) ((f * context.getResources().getDisplayMetrics().density) + 0.5f);
+    }
+
+    // 工具方法：设置高度
+    private void updateViewHeight(View view, float dp) {
+        if (view == null) return;
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        lp.height = dp2px(LaughTale_activity, dp);
+        view.setLayoutParams(lp);
+    }
+
+    // 工具方法：设置大小与 Margin
+    private void updateViewSize(View view, float wDp, float hDp, float marginBDp) {
+        if (view == null) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) view.getLayoutParams();
+        lp.width = dp2px(LaughTale_activity, wDp);
+        lp.height = dp2px(LaughTale_activity, hDp);
+        lp.bottomMargin = dp2px(LaughTale_activity, marginBDp);
+        view.setLayoutParams(lp);
     }
 }

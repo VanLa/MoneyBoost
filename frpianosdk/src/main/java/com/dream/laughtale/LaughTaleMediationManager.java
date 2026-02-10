@@ -62,8 +62,6 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
 
     private boolean LaughTale_needPopAD = true;
 
-    private boolean LaughTale_isNativeClick = false;
-
     private boolean LaughTale_isInPlaying = false;
 
     public interface ADInitListener {
@@ -366,20 +364,12 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     }
 
     public void LaughTaleOnNativeAdClosed(){
-        LaughTale_isNativeClick = false;
-        LaughTaleShowBannerView();
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_CLOSE");
     }
 
     public void LaughTaleOnNativeAdDisplayed(){
-        LaughTale_isNativeClick = false;
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_OPEN");
     }
-
-    public void LaughTaleOnNativeAdClick(){
-        LaughTale_isNativeClick = true;
-    }
-
     /**
      * 按 UTC 时间判断是否为周二、周三、周四
      */
@@ -437,7 +427,6 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                 if (bestNativeAdapter != null && interPrice * LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder > maxNativePrice * getPValueByTime() ) {
                     LaughTale_interAdapter.LaughTaleShowInterstitialAd();
                 } else if (bestNativeAdapter != null) {
-                    LaughTaleHideBannerView();
                     bestNativeAdapter.LaughTaleShowNativeAd();
                 }
             }
@@ -461,7 +450,6 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
                     }
                 }
                 if (bestNativeAdapter != null){
-                    LaughTaleHideBannerView();
                     bestNativeAdapter.LaughTaleShowNativeAd();
                 }
             }
@@ -489,10 +477,7 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase","showSplashADWithLifeTime");
             for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
                 if (adapter.LaughTale_isOpen){
-                    if (LaughTale_isNativeClick == true) {
-                        adapter.LaughTaleAutoHideNativeAd();
-                    }
-                    return;
+                    adapter.LaughTaleAutoHideNativeAd();
                 }
             }
             if (LaughTaleIsSplashADReady()&& LaughTale_isInPlaying == false){
