@@ -17,7 +17,7 @@ import com.applovin.mediation.MaxError;
 import com.applovin.mediation.ads.MaxAdView;
 import com.applovin.sdk.AppLovinSdkUtils;
 
-public class LaughTaleBannerAdapter extends Activity implements MaxAdViewAdListener, MaxAdRevenueListener{
+public class LaughTaleBannerAdapter implements MaxAdViewAdListener, MaxAdRevenueListener{
 
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
@@ -42,11 +42,20 @@ public class LaughTaleBannerAdapter extends Activity implements MaxAdViewAdListe
     }
 
     public void LaughTaleLoadBannerView(){
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_adView == null) {
+            return;
+        }
         LaughTale_adView.loadAd();
     }
 
     public void LaughTaleShowBannerView() {
         if (null != LaughTaleBannerAdapter.this.LaughTale_adView){
+            if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+                return;
+            }
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerShouldShow");
             this.LaughTale_activity.runOnUiThread(new Runnable() {
                 public void run() {
@@ -59,6 +68,9 @@ public class LaughTaleBannerAdapter extends Activity implements MaxAdViewAdListe
 
     public void LaughTaleHideBannerView() {
         if (null != LaughTaleBannerAdapter.this.LaughTale_adView){
+            if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+                return;
+            }
             this.LaughTale_activity.runOnUiThread(new Runnable() {
                 public void run() {
                     LaughTale_adView.setVisibility(View.GONE);

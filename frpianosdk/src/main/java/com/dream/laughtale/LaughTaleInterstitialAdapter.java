@@ -13,7 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class LaughTaleInterstitialAdapter extends Activity implements MaxAdListener, MaxAdRevenueListener {
+public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenueListener {
     private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();  // 创建一个共享的调度线程池
     private MaxInterstitialAd LaughTale_interstitialAd;
     private int LaughTale_interRetryAttempt;
@@ -29,6 +29,12 @@ public class LaughTaleInterstitialAdapter extends Activity implements MaxAdListe
     }
 
     public void LaughTaleLoadInterstitialAd(){
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_interstitialAd == null) {
+            return;
+        }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========","LOADINTER");
         LaughTale_interstitialAd.loadAd();
     }
@@ -38,6 +44,12 @@ public class LaughTaleInterstitialAdapter extends Activity implements MaxAdListe
     }
 
     public void LaughTaleShowInterstitialAd(){
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_interstitialAd == null) {
+            return;
+        }
         LaughTale_activity.runOnUiThread(new Runnable() {
             public void run() {
                 // 显示插页广告

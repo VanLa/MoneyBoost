@@ -3,6 +3,8 @@ package com.dream.laughtale;
 
 import android.app.Activity;
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.applovin.sdk.AppLovinPrivacySettings;
 import com.applovin.sdk.AppLovinSdk;
@@ -26,12 +28,10 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Random;
 import java.util.TimeZone;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 //import androidx.annotation.Nullable;
 
-public class LaughTaleMediationManager extends Activity implements LaughTaleInterstitialListener, LaughTaleRewardVideoListener, LaughTaleSplashListener, LaughTaleNativeListener {
+public class LaughTaleMediationManager implements LaughTaleInterstitialListener, LaughTaleRewardVideoListener, LaughTaleSplashListener, LaughTaleNativeListener {
 
     private ConsentInformation consentInformation;
     // Use an atomic boolean to initialize the Google Mobile Ads SDK and load ads once.
@@ -63,6 +63,14 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
     private boolean LaughTale_needPopAD = true;
 
     private boolean LaughTale_isInPlaying = false;
+
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mrecHideRunnable = new Runnable() {
+        @Override
+        public void run() {
+            LaughTaleHideMRECBannerView();
+        }
+    };
 
     public interface ADInitListener {
         void onAdInitSuccess();
@@ -336,8 +344,8 @@ public class LaughTaleMediationManager extends Activity implements LaughTaleInte
 
     private void LaughTaleShowMRECBannerView(int type , boolean needFix){
         if (type != 2 && needFix == false){
-            Executors.newSingleThreadScheduledExecutor()
-                    .schedule(() -> LaughTaleHideMRECBannerView(), 1500, TimeUnit.MILLISECONDS);
+            mainHandler.removeCallbacks(mrecHideRunnable);
+            mainHandler.postDelayed(mrecHideRunnable, 1500L);
         }
         LaughTale_mrecAdapter.LaughTaleShowMRECView(type);
     }

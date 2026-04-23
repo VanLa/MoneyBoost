@@ -32,6 +32,12 @@ public class LaughTaleSplashAdapter implements MaxAdListener {
     }
 
     public void LaughTaleLoadSplashAD(){
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_splashOpenAd == null) {
+            return;
+        }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("======","LOADSplash");
         LaughTale_splashOpenAd.loadAd();
     }
@@ -42,6 +48,12 @@ public class LaughTaleSplashAdapter implements MaxAdListener {
 
     public void LaughTaleShowSplashAd(String scene)
     {
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_splashOpenAd == null) {
+            return;
+        }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleSplashAdapter","showSplashAd");
         LaughTale_splashOpenAd.showAd();
         LaughTale_isReady = false;

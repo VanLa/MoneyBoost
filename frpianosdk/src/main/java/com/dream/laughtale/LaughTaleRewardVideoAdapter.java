@@ -14,7 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class LaughTaleRewardVideoAdapter extends Activity implements MaxRewardedAdListener, MaxAdRevenueListener {
+public class LaughTaleRewardVideoAdapter implements MaxRewardedAdListener, MaxAdRevenueListener {
     private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();  // 创建一个共享的调度线程池
     private MaxRewardedAd LaughTale_rewardedAd;
     private int LaughTale_rewardRetryAttempt;
@@ -30,11 +30,23 @@ public class LaughTaleRewardVideoAdapter extends Activity implements MaxRewarded
     }
 
     public void LaughTaleLoadRewardVideoAd() {
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_rewardedAd == null) {
+            return;
+        }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADREWARD");
         LaughTale_rewardedAd.loadAd();
     }
 
     public void LaughTaleShowRewardVideoAd() {
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_rewardedAd == null) {
+            return;
+        }
         if (LaughTale_rewardedAd.isReady()){
             LaughTale_activity.runOnUiThread(new Runnable() {
                 public void run() {
