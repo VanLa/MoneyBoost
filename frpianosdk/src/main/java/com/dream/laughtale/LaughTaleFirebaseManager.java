@@ -53,7 +53,6 @@ public class LaughTaleFirebaseManager {
     public String LaughTale_cp_config = "";
     public double LaughTale_p_weekday = 3.5;
     public double LaughTale_p_weekend = 7.0;
-    public double LaughTale_close_width = 25.0;
 
     private SharedPreferences LaughTale_taichiPref;
     private SharedPreferences.Editor LaughTale_taichiSharedPreferencesEditor;
@@ -192,11 +191,27 @@ public class LaughTaleFirebaseManager {
         }
     }
 
-    public void LaughTaleSetGDPRConsent(){
-        Map<FirebaseAnalytics.ConsentType, FirebaseAnalytics.ConsentStatus> consentMap = new EnumMap<>(FirebaseAnalytics.ConsentType.class);
-        consentMap.put(FirebaseAnalytics.ConsentType.ANALYTICS_STORAGE, FirebaseAnalytics.ConsentStatus.GRANTED);
-        consentMap.put(FirebaseAnalytics.ConsentType.AD_STORAGE, FirebaseAnalytics.ConsentStatus.GRANTED);
+    /**
+     * @param canRequestAds 是否允许请求广告（UMP canRequestAds）
+     * @param personalizedAllowed 是否允许个性化广告（NOT_REQUIRED 或 OBTAINED）
+     */
+    public void LaughTaleApplyConsentFromUmp(boolean canRequestAds, boolean personalizedAllowed) {
+        if (LaughTaleFirebaseAnalytics == null) {
+            return;
+        }
+        FirebaseAnalytics.ConsentStatus adStatus = canRequestAds
+                ? FirebaseAnalytics.ConsentStatus.GRANTED
+                : FirebaseAnalytics.ConsentStatus.DENIED;
+        FirebaseAnalytics.ConsentStatus personalizedStatus = personalizedAllowed
+                ? FirebaseAnalytics.ConsentStatus.GRANTED
+                : FirebaseAnalytics.ConsentStatus.DENIED;
+        Map<FirebaseAnalytics.ConsentType, FirebaseAnalytics.ConsentStatus> consentMap =
+                new EnumMap<>(FirebaseAnalytics.ConsentType.class);
+        consentMap.put(FirebaseAnalytics.ConsentType.AD_STORAGE, adStatus);
+        consentMap.put(FirebaseAnalytics.ConsentType.ANALYTICS_STORAGE, personalizedStatus);
         LaughTaleFirebaseAnalytics.setConsent(consentMap);
+        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase",
+                "ApplyConsentFromUmp canRequestAds=" + canRequestAds + " personalized=" + personalizedAllowed);
     }
 
     public void LaughTaleFetchFirebaseRemoteJson(Context context, String key, ConfigLoadListener listener){
@@ -232,8 +247,6 @@ public class LaughTaleFirebaseManager {
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekend===:"+LaughTale_p_weekend+"");
                                 LaughTale_p_weekday = LaughTaleFirebaseRemoteConfig.getDouble("p_value_weekday");
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekday===:"+LaughTale_p_weekday+"");
-                                LaughTale_close_width = LaughTaleFirebaseRemoteConfig.getDouble("close_width");
-                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===close_width===:"+LaughTale_close_width+"");
                             }
                         }
                     });
@@ -366,7 +379,7 @@ public class LaughTaleFirebaseManager {
         } else {
             LaughTale_taichiSharedPreferencesEditor.putFloat("TaichiTroasCache", currentTaichiTroasCache);//先存着直到超过0.01才发送
         }
-        LaughTale_taichiSharedPreferencesEditor.commit();
+        LaughTale_taichiSharedPreferencesEditor.apply();
     }
 
 }

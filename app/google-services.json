@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "802589644430",
+    "project_id": "testhop-dd54a",
+    "storage_bucket": "testhop-dd54a.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:802589644430:android:18ea85eb122852504a5bdf",
+        "android_client_info": {
+          "package_name": "com.hop.game.test"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBcX754tEl6PmsO95VohhNcMF9HLzyPqlM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

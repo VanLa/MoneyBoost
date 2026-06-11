@@ -22,6 +22,7 @@ public class LaughTaleBannerAdapter implements MaxAdViewAdListener, MaxAdRevenue
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     private MaxAdView LaughTale_adView;
+    private boolean LaughTale_isLoaded = false;
 
     public void LaughTaleInitBannerAdapter() {
         this.LaughTale_adView = new MaxAdView(LaughTale_ad_unit,LaughTale_activity);
@@ -34,6 +35,7 @@ public class LaughTaleBannerAdapter implements MaxAdViewAdListener, MaxAdRevenue
         frameLayout.gravity = Gravity.BOTTOM;
         this.LaughTale_adView.setLayoutParams(frameLayout);
         this.LaughTale_adView.setExtraParameter("adaptive_banner", "true");
+        this.LaughTale_adView.setExtraParameter("allow_pause_auto_refresh_immediately", "true");
         this.LaughTale_adView.setBackgroundColor(Color.TRANSPARENT);
         this.LaughTale_adView.setVisibility(View.GONE);
         ViewGroup rootView = (ViewGroup)this.LaughTale_activity.findViewById(android.R.id.content);
@@ -56,6 +58,9 @@ public class LaughTaleBannerAdapter implements MaxAdViewAdListener, MaxAdRevenue
                 return;
             }
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerShouldShow");
+            if (!LaughTale_isLoaded) {
+                LaughTaleLoadBannerView();
+            }
             this.LaughTale_activity.runOnUiThread(new Runnable() {
                 public void run() {
                     LaughTaleBannerAdapter.this.LaughTale_adView.setVisibility(View.VISIBLE);
@@ -76,7 +81,18 @@ public class LaughTaleBannerAdapter implements MaxAdViewAdListener, MaxAdRevenue
                 }
             });
             LaughTale_adView.stopAutoRefresh();
-            LaughTaleLoadBannerView();
+        }
+    }
+
+    public void LaughTalePauseAutoRefresh() {
+        if (LaughTale_adView != null && LaughTale_adView.getVisibility() == View.VISIBLE) {
+            LaughTale_adView.stopAutoRefresh();
+        }
+    }
+
+    public void LaughTaleResumeAutoRefresh() {
+        if (LaughTale_adView != null && LaughTale_adView.getVisibility() == View.VISIBLE) {
+            LaughTale_adView.startAutoRefresh();
         }
     }
 
@@ -89,7 +105,29 @@ public class LaughTaleBannerAdapter implements MaxAdViewAdListener, MaxAdRevenue
     }
 
     public void onAdLoaded(MaxAd maxAd) {
+        LaughTale_isLoaded = true;
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerLoaded:"+maxAd.getNetworkName());
+        if (LaughTale_adView == null || LaughTale_activity == null
+                || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        AppLovinSdkUtils.Size adSize = maxAd.getSize();
+        if (adSize == null) {
+            return;
+        }
+        final int heightPx = AppLovinSdkUtils.dpToPx(LaughTale_activity, adSize.getHeight());
+        LaughTale_activity.runOnUiThread(new Runnable() {
+            public void run() {
+                if (LaughTale_adView == null) {
+                    return;
+                }
+                ViewGroup.LayoutParams params = LaughTale_adView.getLayoutParams();
+                if (params != null && params.height != heightPx) {
+                    params.height = heightPx;
+                    LaughTale_adView.setLayoutParams(params);
+                }
+            }
+        });
     }
 
     public void onAdDisplayed(MaxAd maxAd) {
@@ -104,6 +142,7 @@ public class LaughTaleBannerAdapter implements MaxAdViewAdListener, MaxAdRevenue
     }
 
     public void onAdLoadFailed(String s, MaxError maxError) {
+        LaughTale_isLoaded = false;
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerLoadFailed"+maxError.getMessage());
     }
 

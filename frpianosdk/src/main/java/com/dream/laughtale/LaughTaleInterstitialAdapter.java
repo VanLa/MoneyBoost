@@ -16,6 +16,11 @@ public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenue
     public Activity LaughTale_activity;
     public LaughTaleInterstitialListener LaughTale_InterstitialListener;
     private double LaughTale_adPrice = 0;
+    private boolean LaughTale_isShowing = false;
+
+    public boolean LaughTaleIsShowing() {
+        return LaughTale_isShowing;
+    }
 
     public void LaughTaleInitInterstitialAdapter(){
         LaughTale_interstitialAd = new MaxInterstitialAd(LaughTale_ad_unit,LaughTale_activity);
@@ -67,6 +72,7 @@ public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenue
 
     @Override
     public void onAdDisplayed(MaxAd maxAd) {
+        LaughTale_isShowing = true;
         if (null != LaughTale_InterstitialListener){
             LaughTale_InterstitialListener.LaughTaleOnInterstitialAdDisplayed();
         }
@@ -74,6 +80,7 @@ public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenue
 
     @Override
     public void onAdHidden(MaxAd maxAd) {
+        LaughTale_isShowing = false;
         if (null != LaughTale_InterstitialListener){
             LaughTale_InterstitialListener.LaughTaleOnInterstitialAdClosed();
         }

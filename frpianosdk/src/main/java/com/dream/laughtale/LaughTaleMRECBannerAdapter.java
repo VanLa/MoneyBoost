@@ -1,6 +1,8 @@
 package com.dream.laughtale;
 
 import android.app.Activity;
+import android.os.Handler;
+import android.os.Looper;
 import android.graphics.Color;
 import android.view.Gravity;
 import android.view.View;
@@ -22,6 +24,25 @@ public class LaughTaleMRECBannerAdapter implements MaxAdViewAdListener, MaxAdRev
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     private MaxAdView LaughTale_adView;
+    private boolean LaughTale_isLoaded = false;
+    private static final long PREFETCH_DELAY_MS = 1000L;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Runnable prefetchRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (LaughTale_adView != null && LaughTale_adView.getVisibility() != View.VISIBLE) {
+                LaughTaleLoadMRECView();
+            }
+        }
+    };
+
+    public boolean LaughTaleIsLoaded() {
+        return LaughTale_isLoaded;
+    }
+
+    public boolean LaughTaleIsVisible() {
+        return LaughTale_adView != null && LaughTale_adView.getVisibility() == View.VISIBLE;
+    }
 
     public void LaughTaleInitBannerAdapter() {
         this.LaughTale_adView = new MaxAdView(this.LaughTale_ad_unit,MaxAdFormat.MREC,LaughTale_activity);
@@ -61,6 +82,10 @@ public class LaughTaleMRECBannerAdapter implements MaxAdViewAdListener, MaxAdRev
                 return;
             }
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerShouldShow");
+            mainHandler.removeCallbacks(prefetchRunnable);
+            if (!LaughTale_isLoaded) {
+                LaughTaleLoadMRECView();
+            }
             this.LaughTale_activity.runOnUiThread(new Runnable() {
                 public void run() {
                     // 如果 type == 3, 调整 LaughTale_adView 位置
@@ -114,7 +139,20 @@ public class LaughTaleMRECBannerAdapter implements MaxAdViewAdListener, MaxAdRev
                 }
             });
             LaughTale_adView.stopAutoRefresh();
-            LaughTaleLoadMRECView();
+            mainHandler.removeCallbacks(prefetchRunnable);
+            mainHandler.postDelayed(prefetchRunnable, PREFETCH_DELAY_MS);
+        }
+    }
+
+    public void LaughTalePauseAutoRefresh() {
+        if (LaughTale_adView != null && LaughTale_adView.getVisibility() == View.VISIBLE) {
+            LaughTale_adView.stopAutoRefresh();
+        }
+    }
+
+    public void LaughTaleResumeAutoRefresh() {
+        if (LaughTale_adView != null && LaughTale_adView.getVisibility() == View.VISIBLE) {
+            LaughTale_adView.startAutoRefresh();
         }
     }
 
@@ -127,6 +165,7 @@ public class LaughTaleMRECBannerAdapter implements MaxAdViewAdListener, MaxAdRev
     }
 
     public void onAdLoaded(MaxAd maxAd) {
+        LaughTale_isLoaded = true;
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerLoaded:"+maxAd.getNetworkName());
     }
 
@@ -141,6 +180,7 @@ public class LaughTaleMRECBannerAdapter implements MaxAdViewAdListener, MaxAdRev
     }
 
     public void onAdLoadFailed(String s, MaxError maxError) {
+        LaughTale_isLoaded = false;
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerLoadFailed"+maxError.getMessage());
     }
 

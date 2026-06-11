@@ -17,6 +17,11 @@ public class LaughTaleRewardVideoAdapter implements MaxRewardedAdListener, MaxAd
     public Activity LaughTale_activity;
     public LaughTaleRewardVideoListener LaughTale_rewardVideoListener;
     private double LaughTale_adPrice = 0;
+    private boolean LaughTale_isShowing = false;
+
+    public boolean LaughTaleIsShowing() {
+        return LaughTale_isShowing;
+    }
 
     public void LaughTaleInitRewardVideoAdapter() {
         LaughTale_rewardedAd = MaxRewardedAd.getInstance(LaughTale_ad_unit, LaughTale_activity);
@@ -75,6 +80,7 @@ public class LaughTaleRewardVideoAdapter implements MaxRewardedAdListener, MaxAd
 
     @Override
     public void onAdDisplayed(MaxAd maxAd) {
+        LaughTale_isShowing = true;
         if (null != LaughTale_rewardVideoListener) {
             LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdDisplayed();
         }
@@ -82,6 +88,7 @@ public class LaughTaleRewardVideoAdapter implements MaxRewardedAdListener, MaxAd
 
     @Override
     public void onAdHidden(MaxAd maxAd) {
+        LaughTale_isShowing = false;
         if (null != LaughTale_rewardVideoListener) {
             LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClosed();
         }
