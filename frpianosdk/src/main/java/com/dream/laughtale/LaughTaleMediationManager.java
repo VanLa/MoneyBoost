@@ -22,7 +22,8 @@ import android.util.Log;
 
 import org.json.JSONObject;
 
-import java.lang.reflect.Method;
+import android.content.SharedPreferences;
+
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
@@ -49,7 +50,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     private LaughTaleBannerAdapter LaughTale_bannerAdapter;
 
-    private List<LaughTaleNativeAdapter> LaughTale_nativeAdapterList = new ArrayList();
+    private final List<LaughTaleNativeAdapter> LaughTale_nativeAdapterList = new ArrayList<>();
 
     // 广告闪屏显示间隔时间, 间隔内不出现广告 ,默认5
     private long LaughTale_mSplashADInterval = 1000 * 5;
@@ -63,6 +64,11 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     private boolean LaughTale_needPopAD = true;
 
     private boolean LaughTale_isInPlaying = false;
+
+    /** 当前激励位用 Native 顶替展示时，Unity 仍走 LaughTale_REWARD_* 回调 */
+    private boolean LaughTale_showingRewardAsNative = false;
+
+    private SharedPreferences LaughTale_dataPrefs;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Runnable mrecHideRunnable = new Runnable() {
@@ -90,6 +96,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     public void LaughTaleInit(Context context,Activity activity,ADInitListener initListener){
         this.LaughTale_activity = activity;
+        LaughTale_dataPrefs = activity.getSharedPreferences("data", Activity.MODE_PRIVATE);
         LaughTaleGetUserNoPopAd();
         LaughTaleBankManager.instance().LaughTaleInitBankManager(activity);
 
@@ -287,8 +294,17 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("reward_should_show",object.toString());
         }catch (Exception e){
         }
-        if (LaughTale_rewardAdapter.LaughTaleGetADPrice() > 0){
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===IsRewardADReady");
+        double rewardPrice = LaughTale_rewardAdapter.LaughTaleGetADPrice();
+        LaughTaleNativeAdapter bestNativeForReady = LaughTaleGetBestNativeAdapter();
+        double bestNativePrice = bestNativeForReady != null ? bestNativeForReady.LaughTaleGetADPrice() : 0.0;
+        if (LaughTaleShouldShowNativeForReward(rewardPrice, bestNativePrice)) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
+                    "===IsRewardADReady(native) reward=" + rewardPrice + " native=" + bestNativePrice);
+            return true;
+        }
+        if (rewardPrice > 0){
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
+                    "===IsRewardADReady(reward) price=" + rewardPrice);
             return true;
         }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager","===IsRewardADNotReady");
@@ -302,7 +318,21 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("reward_show",object.toString());
         }catch (Exception e){
         }
-        if (LaughTale_rewardAdapter.LaughTaleGetADPrice() > 0) {
+        double rewardPrice = LaughTale_rewardAdapter.LaughTaleGetADPrice();
+        LaughTaleNativeAdapter bestNativeAdapter = LaughTaleGetBestNativeAdapter();
+        double bestNativePrice = bestNativeAdapter != null ? bestNativeAdapter.LaughTaleGetADPrice() : 0.0;
+
+        if (LaughTaleShouldShowNativeForReward(rewardPrice, bestNativePrice) && bestNativeAdapter != null) {
+            LaughTale_showingRewardAsNative = true;
+            LaughTaleCloseAllOpenNativeAds();
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
+                    "===ShowRewardAsNative reward=" + rewardPrice + " native=" + bestNativePrice);
+            bestNativeAdapter.LaughTaleShowNativeAd();
+            return;
+        }
+
+        LaughTale_showingRewardAsNative = false;
+        if (rewardPrice > 0) {
             LaughTale_rewardAdapter.LaughTaleShowRewardVideoAd();
         }
     }
@@ -371,11 +401,49 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         return false;
     }
 
+    private LaughTaleNativeAdapter LaughTaleGetBestNativeAdapter() {
+        LaughTaleNativeAdapter bestNativeAdapter = null;
+        double maxNativePrice = 0.0;
+        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+            double price = adapter.LaughTaleGetADPrice();
+            if (price > maxNativePrice) {
+                maxNativePrice = price;
+                bestNativeAdapter = adapter;
+            }
+        }
+        return bestNativeAdapter;
+    }
+
+    private void LaughTaleCloseAllOpenNativeAds() {
+        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+            if (adapter.LaughTale_isOpen) {
+                adapter.LaughTaleAutoHideNativeAd();
+            }
+        }
+    }
+
+    /** Native 出价高于激励视频时，用 Native 顶替激励位 */
+    private boolean LaughTaleShouldShowNativeForReward(double rewardPrice, double nativePrice) {
+        return nativePrice > rewardPrice && nativePrice > 0;
+    }
+
+    @Override
     public void LaughTaleOnNativeAdClosed(){
+        if (LaughTale_showingRewardAsNative) {
+            LaughTale_showingRewardAsNative = false;
+            LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_COMPLETE");
+            LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_CLOSE");
+            return;
+        }
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_CLOSE");
     }
 
+    @Override
     public void LaughTaleOnNativeAdDisplayed(){
+        if (LaughTale_showingRewardAsNative) {
+            LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_OPEN");
+            return;
+        }
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_OPEN");
     }
     /**
@@ -414,22 +482,9 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             //考虑是否要比价
             if (LaughTaleIsNativeReady()||LaughTaleIsIntertitialADReady("collapse")) {
                 //先关闭当前的
-                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-                    if (adapter.LaughTale_isOpen) {
-                        adapter.LaughTaleAutoHideNativeAd();
-                    }
-                }
-                // 选出价值最高的Native
-                LaughTaleNativeAdapter bestNativeAdapter = null;
-                double maxNativePrice = 0.0;
-
-                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-                    double price = adapter.LaughTaleGetADPrice();
-                    if (price > maxNativePrice) {
-                        maxNativePrice = price;
-                        bestNativeAdapter = adapter;
-                    }
-                }
+                LaughTaleCloseAllOpenNativeAds();
+                LaughTaleNativeAdapter bestNativeAdapter = LaughTaleGetBestNativeAdapter();
+                double maxNativePrice = bestNativeAdapter != null ? bestNativeAdapter.LaughTaleGetADPrice() : 0.0;
                 //需要比价inter
                 double interPrice = LaughTale_interAdapter.LaughTaleGetADPrice();
                 if (bestNativeAdapter != null && interPrice * LaughTaleToolsManager.instance().LaughTale_isTestInterNativeBidder > maxNativePrice * getPValueByTime() ) {
@@ -442,21 +497,8 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             //对inter要求比较高的点位
             if (LaughTaleIsNativeReady()){
                 //先关闭当前的
-                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
-                    if (adapter.LaughTale_isOpen){
-                        adapter.LaughTaleAutoHideNativeAd();
-                    }
-                }
-                // 选出价值最高的Native
-                LaughTaleNativeAdapter bestNativeAdapter = null;
-                double maxNativePrice = 0.0;
-                for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-                    double price = adapter.LaughTaleGetADPrice();
-                    if (price > maxNativePrice) {
-                        maxNativePrice = price;
-                        bestNativeAdapter = adapter;
-                    }
-                }
+                LaughTaleCloseAllOpenNativeAds();
+                LaughTaleNativeAdapter bestNativeAdapter = LaughTaleGetBestNativeAdapter();
                 if (bestNativeAdapter != null){
                     bestNativeAdapter.LaughTaleShowNativeAd();
                 }
@@ -483,11 +525,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                 return;
             }
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase","showSplashADWithLifeTime");
-            for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
-                if (adapter.LaughTale_isOpen){
-                    adapter.LaughTaleAutoHideNativeAd();
-                }
-            }
+            LaughTaleCloseAllOpenNativeAds();
             if (LaughTaleIsSplashADReady()&& LaughTale_isInPlaying == false){
                 LaughTale_splashAdapter.LaughTaleShowSplashAd("background");
             }
@@ -548,25 +586,18 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     //////////////////////////////////////////////////////////////////////Unity交互////////////////////////////////////////////////////////////////////////////////
 
     private void LaughTaleSendUnityMsg(String gamaObject, String methodName, String data) {
-        if (gamaObject.length() == 0 || methodName.length() == 0){
-            return;
-        }else {
-            try {
-                Class unityPlayerClass = Class.forName("com.unity3d.player.UnityPlayer");
-                Method initMethod = unityPlayerClass.getMethod("UnitySendMessage", String.class, String.class, String.class);
-                initMethod.invoke(null, gamaObject, methodName, data);
-            } catch (Exception e) {
-            }
-        }
+        LaughTaleUnityBridge.send(gamaObject, methodName, data);
     }
 
     //////////////////////////////////////////////////////////////////////tools////////////////////////////////////////////////////////////////////////////////
 
     public void LaughTaleSetUserNoPopAd(){
-        SharedPreferences sharedPreferences = LaughTale_activity.getSharedPreferences("data", LaughTale_activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putInt("noPop", 1);
-        editor.commit();
+        if (LaughTale_dataPrefs == null && LaughTale_activity != null) {
+            LaughTale_dataPrefs = LaughTale_activity.getSharedPreferences("data", Activity.MODE_PRIVATE);
+        }
+        if (LaughTale_dataPrefs != null) {
+            LaughTale_dataPrefs.edit().putInt("noPop", 1).apply();
+        }
         LaughTale_needPopAD = false;
         //关闭现在的广告
         LaughTaleHideBannerView();
@@ -574,8 +605,10 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     public void LaughTaleGetUserNoPopAd(){
-        SharedPreferences sharedPreferences = LaughTale_activity.getSharedPreferences("data", LaughTale_activity.MODE_PRIVATE);
-        int launch = sharedPreferences.getInt("noPop", 0);
+        if (LaughTale_dataPrefs == null && LaughTale_activity != null) {
+            LaughTale_dataPrefs = LaughTale_activity.getSharedPreferences("data", Activity.MODE_PRIVATE);
+        }
+        int launch = LaughTale_dataPrefs != null ? LaughTale_dataPrefs.getInt("noPop", 0) : 0;
         if (launch != 0){
             LaughTale_needPopAD = false;
         }else {

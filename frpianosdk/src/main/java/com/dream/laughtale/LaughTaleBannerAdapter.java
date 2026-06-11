@@ -33,7 +33,6 @@ public class LaughTaleBannerAdapter implements MaxAdViewAdListener, MaxAdRevenue
         FrameLayout.LayoutParams frameLayout = new FrameLayout.LayoutParams(width, heightPx);
         frameLayout.gravity = Gravity.BOTTOM;
         this.LaughTale_adView.setLayoutParams(frameLayout);
-        this.LaughTale_adView.getAdFormat().getAdaptiveSize(400, this.LaughTale_activity).getHeight();
         this.LaughTale_adView.setExtraParameter("adaptive_banner", "true");
         this.LaughTale_adView.setBackgroundColor(Color.TRANSPARENT);
         this.LaughTale_adView.setVisibility(View.GONE);

@@ -11,13 +11,7 @@ import com.applovin.mediation.MaxError;
 import com.applovin.mediation.ads.MaxAppOpenAd;
 
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-
-
 public class LaughTaleSplashAdapter implements MaxAdListener {
-    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();  // 创建一个共享的调度线程池
     private MaxAppOpenAd LaughTale_splashOpenAd;
     public Activity LaughTale_activity;
     public String LaughTale_ad_unit;
@@ -81,7 +75,8 @@ public class LaughTaleSplashAdapter implements MaxAdListener {
     public void onAdLoadFailed(@NonNull String s, @NonNull MaxError maxError) {
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========","LOADSplashFailed");
         LaughTale_splashRetryAttempt++;
-        scheduler.schedule(LaughTaleSplashAdapter.this::LaughTaleLoadSplashAD, (long) Math.pow( 2, Math.min(6, LaughTale_splashRetryAttempt)), TimeUnit.SECONDS);
+        LaughTaleAdRetryScheduler.scheduleSeconds(LaughTaleSplashAdapter.this::LaughTaleLoadSplashAD,
+                (long) Math.pow(2, Math.min(6, LaughTale_splashRetryAttempt)));
     }
 
     @Override

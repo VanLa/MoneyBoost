@@ -25,15 +25,9 @@ import com.applovin.sdk.AppLovinSdkUtils;
 
 import org.jetbrains.annotations.Nullable;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-
 public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
 
     // --- 调度与广告相关 ---
-    // 共享调度线程，避免每个 Native 实例创建独立线程
-    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private MaxNativeAdLoader LaughTale_nativeAdLoader;
     private MaxNativeAdView LaughTale_nativeAdView;
     private MaxAd LaughTale_nativeAd;
@@ -90,9 +84,9 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
         }
     }
 
-    // 预设两套配置：Meta 微调版 vs 默认还原版
-    private final LayoutConfig META_CONFIG = new LayoutConfig(20f, 20f, 220f, 70f, 60f, 85f, 5f, 1);
-    private final LayoutConfig DEFAULT_CONFIG = new LayoutConfig(25f, 10f, 230f, 80f, 45f, 78f, 1f, 1);
+    // 预设两套配置：Meta 微调版 vs 默认还原版（静态共享，避免每个 Native 实例各持一份）
+    private static final LayoutConfig META_CONFIG = new LayoutConfig(20f, 20f, 220f, 70f, 60f, 85f, 5f, 1);
+    private static final LayoutConfig DEFAULT_CONFIG = new LayoutConfig(25f, 10f, 230f, 80f, 45f, 78f, 1f, 1);
 
     private void initViewReferences(View root) {
         // 在这里统一获取引用，避免 Resize 时重复寻找
@@ -203,10 +197,10 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADNativeFailed " + error.getMessage());
                 LaughTale_nativeRetryAttempt++;
                 long delay = (long) Math.pow(2, Math.min(6, LaughTale_nativeRetryAttempt));
-                scheduler.schedule(() -> {
-                    if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) return; // 如果 Activity 已经销毁，不再执行
-                    mainHandler.post(() -> LaughTaleLoadNativeAdView());
-                }, delay, TimeUnit.SECONDS);
+                LaughTaleAdRetryScheduler.scheduleSeconds(() -> {
+                    if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) return;
+                    mainHandler.post(LaughTaleNativeAdapter.this::LaughTaleLoadNativeAdView);
+                }, delay);
             }
 
             @Override

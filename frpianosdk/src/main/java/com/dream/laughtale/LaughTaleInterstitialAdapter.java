@@ -9,12 +9,7 @@ import com.applovin.mediation.MaxAdRevenueListener;
 import com.applovin.mediation.MaxError;
 import com.applovin.mediation.ads.MaxInterstitialAd;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-
 public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenueListener {
-    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();  // 创建一个共享的调度线程池
     private MaxInterstitialAd LaughTale_interstitialAd;
     private int LaughTale_interRetryAttempt;
     public String LaughTale_ad_unit;
@@ -82,9 +77,6 @@ public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenue
         if (null != LaughTale_InterstitialListener){
             LaughTale_InterstitialListener.LaughTaleOnInterstitialAdClosed();
         }
-        if (maxAd != null){
-            maxAd = null;
-        }
         LaughTaleLoadInterstitialAd();
     }
 
@@ -98,7 +90,7 @@ public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenue
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========","LOADINTERFailed");
         LaughTale_interRetryAttempt++;
         long delay = (long) Math.pow(2, Math.min(6, LaughTale_interRetryAttempt));
-        scheduler.schedule(LaughTaleInterstitialAdapter.this::LaughTaleLoadInterstitialAd, delay, TimeUnit.SECONDS);
+        LaughTaleAdRetryScheduler.scheduleSeconds(LaughTaleInterstitialAdapter.this::LaughTaleLoadInterstitialAd, delay);
     }
 
     @Override

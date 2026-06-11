@@ -126,22 +126,28 @@ public class LaughTaleToolsManager {
      * RAM内存大小, 返回1GB/2GB/3GB/4GB/8G/16G
      * @return
      */
+    private static volatile String LaughTale_cachedTotalRam;
+
     public String LaughTaleGetTotalRam(){
+        if (LaughTale_cachedTotalRam != null) {
+            return LaughTale_cachedTotalRam;
+        }
         String path = "/proc/meminfo";
         String ramMemorySize = null;
-        int totalRam = 0 ;
-        try{
+        int totalRam = 0;
+        try {
             FileReader fileReader = new FileReader(path);
             BufferedReader br = new BufferedReader(fileReader, 4096);
             ramMemorySize = br.readLine().split("\\s+")[1];
             br.close();
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
-        if(ramMemorySize != null){
-            totalRam = (int)Math.ceil((Float.valueOf(Float.parseFloat(ramMemorySize) / (1024 * 1024)).doubleValue()));
+        if (ramMemorySize != null) {
+            totalRam = (int) Math.ceil((Float.parseFloat(ramMemorySize) / (1024 * 1024)));
         }
-        return totalRam + "GB";
+        LaughTale_cachedTotalRam = totalRam + "GB";
+        return LaughTale_cachedTotalRam;
     }
 
     public String LaughTaleGetIsNewUser(Context context){

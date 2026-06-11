@@ -10,12 +10,7 @@ import com.applovin.mediation.MaxReward;
 import com.applovin.mediation.MaxRewardedAdListener;
 import com.applovin.mediation.ads.MaxRewardedAd;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-
 public class LaughTaleRewardVideoAdapter implements MaxRewardedAdListener, MaxAdRevenueListener {
-    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();  // 创建一个共享的调度线程池
     private MaxRewardedAd LaughTale_rewardedAd;
     private int LaughTale_rewardRetryAttempt;
     public String LaughTale_ad_unit;
@@ -105,7 +100,7 @@ public class LaughTaleRewardVideoAdapter implements MaxRewardedAdListener, MaxAd
         // 使用不同的退避策略：低端设备用 4 的幂，高端设备用 2 的幂，最大延迟 64 秒
         long delay = (long) Math.pow(2, Math.min(6, LaughTale_rewardRetryAttempt));
 
-        scheduler.schedule(LaughTaleRewardVideoAdapter.this::LaughTaleLoadRewardVideoAd, delay, TimeUnit.SECONDS);
+        LaughTaleAdRetryScheduler.scheduleSeconds(LaughTaleRewardVideoAdapter.this::LaughTaleLoadRewardVideoAd, delay);
     }
 
     @Override
