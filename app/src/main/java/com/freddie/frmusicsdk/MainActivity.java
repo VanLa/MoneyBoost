@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Button;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -25,6 +26,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnMrec2;
     private Button btnMrec3;
     private Button btnMrec4;
+    private TextView tvAdLoadStatus;
     private int colorNotReady;
     private int colorShowing;
     private int colorReady;
@@ -52,6 +54,7 @@ public class MainActivity extends AppCompatActivity {
         btnMrec2 = findViewById(R.id.btn_mrec_2);
         btnMrec3 = findViewById(R.id.btn_mrec_3);
         btnMrec4 = findViewById(R.id.btn_mrec_4);
+        tvAdLoadStatus = findViewById(R.id.tv_ad_load_status);
 
         LaughTaleToolsManager.instance().LaughTale_isDebug = BuildConfig.DEBUG;
         LaughTaleFirebaseManager.instance().LaughTaleInitFirebaseAnalytics(this);
@@ -123,6 +126,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void refreshAdButtonStatus() {
+        refreshAdLoadStatus();
         updateAdButton(btnCollapsibleBanner,
                 mediationManager.LaughTaleDebugIsCollapsibleReady(),
                 mediationManager.LaughTaleDebugIsCollapsibleShowing());
@@ -153,5 +157,20 @@ public class MainActivity extends AppCompatActivity {
             color = colorReady;
         }
         button.setBackground(new ColorDrawable(color));
+    }
+
+    private void refreshAdLoadStatus() {
+        if (mediationManager == null || tvAdLoadStatus == null) {
+            return;
+        }
+        tvAdLoadStatus.setText(
+                "Native: " + loadStatusText(mediationManager.LaughTaleDebugIsNativeReady()) + "\n"
+                        + "Inter: " + loadStatusText(mediationManager.LaughTaleDebugIsInterReady()) + "\n"
+                        + "Rewarded: " + loadStatusText(mediationManager.LaughTaleDebugIsRewardVideoReady()) + "\n"
+                        + "Splash: " + loadStatusText(mediationManager.LaughTaleDebugIsSplashReady()));
+    }
+
+    private String loadStatusText(boolean ready) {
+        return ready ? "已加载" : "未加载";
     }
 }
