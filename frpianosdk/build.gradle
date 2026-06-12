@@ -43,7 +43,7 @@ dependencies {
     // --- 业务 / Play / 隐私
     implementation 'com.aliyun.dpa:oss-android-sdk:2.9.18'
     implementation 'com.google.android.play:review:2.0.2'
-    implementation 'com.google.android.ump:user-messaging-platform:2.2.0'
+    implementation 'com.google.android.ump:user-messaging-platform:4.0.0'
 
     // --- AppLovin MAX：SDK 版本按 Unity/发行业务要求锁定；Google 系适配器与 GMA 24.5.0 对齐，可单独升补丁以拿修复（仍兼容 MAX 13.1+）
     implementation 'com.applovin:applovin-sdk:13.1.0'

@@ -191,10 +191,6 @@ public class LaughTaleFirebaseManager {
         }
     }
 
-    /**
-     * @param canRequestAds 是否允许请求广告（UMP canRequestAds）
-     * @param personalizedAllowed 是否允许个性化广告（NOT_REQUIRED 或 OBTAINED）
-     */
     public void LaughTaleApplyConsentFromUmp(boolean canRequestAds, boolean personalizedAllowed) {
         if (LaughTaleFirebaseAnalytics == null) {
             return;
@@ -202,16 +198,18 @@ public class LaughTaleFirebaseManager {
         FirebaseAnalytics.ConsentStatus adStatus = canRequestAds
                 ? FirebaseAnalytics.ConsentStatus.GRANTED
                 : FirebaseAnalytics.ConsentStatus.DENIED;
-        FirebaseAnalytics.ConsentStatus personalizedStatus = personalizedAllowed
+        FirebaseAnalytics.ConsentStatus analyticsStatus = canRequestAds
                 ? FirebaseAnalytics.ConsentStatus.GRANTED
                 : FirebaseAnalytics.ConsentStatus.DENIED;
         Map<FirebaseAnalytics.ConsentType, FirebaseAnalytics.ConsentStatus> consentMap =
                 new EnumMap<>(FirebaseAnalytics.ConsentType.class);
         consentMap.put(FirebaseAnalytics.ConsentType.AD_STORAGE, adStatus);
-        consentMap.put(FirebaseAnalytics.ConsentType.ANALYTICS_STORAGE, personalizedStatus);
+        consentMap.put(FirebaseAnalytics.ConsentType.ANALYTICS_STORAGE, analyticsStatus);
         LaughTaleFirebaseAnalytics.setConsent(consentMap);
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase",
-                "ApplyConsentFromUmp canRequestAds=" + canRequestAds + " personalized=" + personalizedAllowed);
+                "ApplyConsentFromUmp canRequestAds=" + canRequestAds
+                        + " personalized=" + personalizedAllowed
+                        + " analytics=" + analyticsStatus);
     }
 
     public void LaughTaleFetchFirebaseRemoteJson(Context context, String key, ConfigLoadListener listener){
@@ -352,6 +350,15 @@ public class LaughTaleFirebaseManager {
     }
 
     public void LaughTaleLogFirebaseRevenue(Double revenue, String ad_format, String network_name, String unit_id){
+        if (revenue == null) {
+            return;
+        }
+        if (LaughTaleFirebaseAnalytics == null && mContext != null) {
+            LaughTaleFirebaseAnalytics = FirebaseAnalytics.getInstance(mContext);
+        }
+        if (LaughTaleFirebaseAnalytics == null) {
+            return;
+        }
         double currentImpressionRevenue = revenue;
         Bundle params = new Bundle();
         params.putString(FirebaseAnalytics.Param.AD_PLATFORM, "appLovin");
@@ -365,6 +372,9 @@ public class LaughTaleFirebaseManager {
         LaughTaleFirebaseAnalytics.logEvent(FirebaseAnalytics.Event.AD_IMPRESSION, params);
         //Taichi
         LaughTaleFirebaseAnalytics.logEvent("Ad_Impression_Revenue", params);// 给Taichi用
+        if (LaughTale_taichiPref == null || LaughTale_taichiSharedPreferencesEditor == null) {
+            return;
+        }
         float previousTaichiTroasCache = LaughTale_taichiPref.getFloat("TaichiTroasCache", 0); //App本地存储用于累计tROAS的缓存值,sharedPref只是作为事例，可以选择其它本地存储的方式
         float currentTaichiTroasCache = (float) (previousTaichiTroasCache +
                 currentImpressionRevenue);//累加tROAS的缓存值

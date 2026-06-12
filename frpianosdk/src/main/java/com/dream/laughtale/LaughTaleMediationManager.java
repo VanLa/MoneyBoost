@@ -62,6 +62,13 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     private boolean LaughTale_isInitSuccess = false;
     private boolean LaughTale_isInitializing = false;
 
+    private String LaughTale_interKey = "";
+    private String LaughTale_rewardKey = "";
+    private String LaughTale_splashKey = "";
+    private String LaughTale_mrecKey = "";
+    private String LaughTale_bannerKey = "";
+    private String LaughTale_nativeKey = "";
+
     private static final long LOAD_DELAY_BANNER_MS = 1500L;
     private static final long LOAD_DELAY_MREC_MS = 3000L;
     private static final long LOAD_DELAY_BANNER_LOW_END_MS = 2500L;
@@ -131,64 +138,20 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTaleGetUserNoPopAd();
         LaughTaleBankManager.instance().LaughTaleInitBankManager(activity);
 
-        String interKey = "";
-        String rewardKey = "";
-        String splashKey = "";
-        String mrecKey = "";
-        String bannerKey = "";
-        String nativeKey = "";
         String sdkKey = "";
         try {
             ApplicationInfo appInfo = activity.getPackageManager()
                     .getApplicationInfo(activity.getPackageName(),
                             PackageManager.GET_META_DATA);
-            interKey = appInfo.metaData.getString("LaughTale_INTERSTITIAL_ID");
-            rewardKey = appInfo.metaData.getString("LaughTale_REWARDED_ID");
-            nativeKey = appInfo.metaData.getString("LaughTale_NATIVE_ID");
-            bannerKey = appInfo.metaData.getString("LaughTale_BANNER_ID");
-            splashKey = appInfo.metaData.getString("LaughTale_SPLASH_ID");
-            mrecKey = appInfo.metaData.getString("LaughTale_MREC_ID");
+            LaughTale_interKey = appInfo.metaData.getString("LaughTale_INTERSTITIAL_ID");
+            LaughTale_rewardKey = appInfo.metaData.getString("LaughTale_REWARDED_ID");
+            LaughTale_nativeKey = appInfo.metaData.getString("LaughTale_NATIVE_ID");
+            LaughTale_bannerKey = appInfo.metaData.getString("LaughTale_BANNER_ID");
+            LaughTale_splashKey = appInfo.metaData.getString("LaughTale_SPLASH_ID");
+            LaughTale_mrecKey = appInfo.metaData.getString("LaughTale_MREC_ID");
 //            sdkKey = appInfo.metaData.getString("LaughTale_SDK_Key");
         }catch (Exception e){
         }
-
-        String[] LaughTale_nativeIdList = nativeKey.split(";");
-        for (String str : LaughTale_nativeIdList){
-            LaughTaleNativeAdapter adapter = new LaughTaleNativeAdapter();
-            adapter.LaughTale_activity = activity;
-            adapter.LaughTale_ad_unit = str;
-            adapter.LaughTale_nativeListener = this;
-            adapter.LaughTaleInitNativeAdapter();
-            LaughTale_nativeAdapterList.add(adapter);
-        }
-
-        LaughTale_bannerAdapter = new LaughTaleBannerAdapter();
-        LaughTale_bannerAdapter.LaughTale_activity = activity;
-        LaughTale_bannerAdapter.LaughTale_ad_unit = bannerKey;
-        LaughTale_bannerAdapter.LaughTaleInitBannerAdapter();
-
-        LaughTale_interAdapter = new LaughTaleInterstitialAdapter();
-        LaughTale_interAdapter.LaughTale_activity = activity;
-        LaughTale_interAdapter.LaughTale_ad_unit = interKey;
-        LaughTale_interAdapter.LaughTale_InterstitialListener = this;
-        LaughTale_interAdapter.LaughTaleInitInterstitialAdapter();
-
-        LaughTale_rewardAdapter = new LaughTaleRewardVideoAdapter();
-        LaughTale_rewardAdapter.LaughTale_activity = activity;
-        LaughTale_rewardAdapter.LaughTale_ad_unit = rewardKey;
-        LaughTale_rewardAdapter.LaughTale_rewardVideoListener = this;
-        LaughTale_rewardAdapter.LaughTaleInitRewardVideoAdapter();
-
-        LaughTale_splashAdapter = new LaughTaleSplashAdapter();
-        LaughTale_splashAdapter.LaughTale_ad_unit = splashKey;
-        LaughTale_splashAdapter.LaughTale_activity = activity;
-        LaughTale_splashAdapter.LaughTale_splashListener = this;
-        LaughTale_splashAdapter.LaughTaleInitSplashAdapter();
-
-        LaughTale_mrecAdapter = new LaughTaleMRECBannerAdapter();
-        LaughTale_mrecAdapter.LaughTale_activity = activity;
-        LaughTale_mrecAdapter.LaughTale_ad_unit = mrecKey;
-        LaughTale_mrecAdapter.LaughTaleInitBannerAdapter();
 
         try {
             ConsentRequestParameters params = new ConsentRequestParameters
@@ -226,8 +189,67 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         }
     }
 
+    private void LaughTaleInitAdAdapters(Activity activity) {
+        if (LaughTale_interAdapter != null) {
+            return;
+        }
+        String[] LaughTale_nativeIdList = LaughTale_nativeKey.split(";");
+        for (String str : LaughTale_nativeIdList){
+            LaughTaleNativeAdapter adapter = new LaughTaleNativeAdapter();
+            adapter.LaughTale_activity = activity;
+            adapter.LaughTale_ad_unit = str;
+            adapter.LaughTale_nativeListener = this;
+            adapter.LaughTaleInitNativeAdapter();
+            LaughTale_nativeAdapterList.add(adapter);
+        }
+
+        LaughTale_bannerAdapter = new LaughTaleBannerAdapter();
+        LaughTale_bannerAdapter.LaughTale_activity = activity;
+        LaughTale_bannerAdapter.LaughTale_ad_unit = LaughTale_bannerKey;
+        LaughTale_bannerAdapter.LaughTaleInitBannerAdapter();
+
+        LaughTale_interAdapter = new LaughTaleInterstitialAdapter();
+        LaughTale_interAdapter.LaughTale_activity = activity;
+        LaughTale_interAdapter.LaughTale_ad_unit = LaughTale_interKey;
+        LaughTale_interAdapter.LaughTale_InterstitialListener = this;
+        LaughTale_interAdapter.LaughTaleInitInterstitialAdapter();
+
+        LaughTale_rewardAdapter = new LaughTaleRewardVideoAdapter();
+        LaughTale_rewardAdapter.LaughTale_activity = activity;
+        LaughTale_rewardAdapter.LaughTale_ad_unit = LaughTale_rewardKey;
+        LaughTale_rewardAdapter.LaughTale_rewardVideoListener = this;
+        LaughTale_rewardAdapter.LaughTaleInitRewardVideoAdapter();
+
+        LaughTale_splashAdapter = new LaughTaleSplashAdapter();
+        LaughTale_splashAdapter.LaughTale_ad_unit = LaughTale_splashKey;
+        LaughTale_splashAdapter.LaughTale_activity = activity;
+        LaughTale_splashAdapter.LaughTale_splashListener = this;
+        LaughTale_splashAdapter.LaughTaleInitSplashAdapter();
+
+        LaughTale_mrecAdapter = new LaughTaleMRECBannerAdapter();
+        LaughTale_mrecAdapter.LaughTale_activity = activity;
+        LaughTale_mrecAdapter.LaughTale_ad_unit = LaughTale_mrecKey;
+        LaughTale_mrecAdapter.LaughTaleInitBannerAdapter();
+    }
+
     private boolean LaughTaleCanRequestAdsFromUmp() {
         return consentInformation == null || consentInformation.canRequestAds();
+    }
+
+    public boolean LaughTaleIsPrivacyOptionsRequired() {
+        return consentInformation != null
+                && consentInformation.getPrivacyOptionsRequirementStatus()
+                == ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED;
+    }
+
+    public void LaughTaleShowPrivacyOptionsForm(Activity activity) {
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            return;
+        }
+        UserMessagingPlatform.showPrivacyOptionsForm(
+                activity,
+                formError -> LaughTaleApplyPrivacySettings(activity, false)
+        );
     }
 
     /** 非 GDPR 或用户已明确同意个性化时为 true。 */
@@ -251,9 +273,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         int status = consentInformation != null
                 ? consentInformation.getConsentStatus()
                 : ConsentInformation.ConsentStatus.UNKNOWN;
-        boolean doNotSell = !umpPermissiveFallback
-                && status == ConsentInformation.ConsentStatus.REQUIRED
-                && !personalizedAllowed;
+        boolean doNotSell = false;
         AppLovinPrivacySettings.setDoNotSell(doNotSell, activity);
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====UMP",
                 "canRequestAds=" + canRequestAds
@@ -269,6 +289,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         }
         LaughTale_isInitializing = true;
         LaughTaleApplyPrivacySettings(activity, umpPermissiveFallback);
+        LaughTaleInitAdAdapters(activity);
         AppLovinSdk.getInstance(LaughTale_activity).setMediationProvider("max");
         AppLovinSdk.initializeSdk(LaughTale_activity, new AppLovinSdk.SdkInitializationListener() {
             @Override
@@ -302,11 +323,17 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
 
     private void LaughTaleLoadInterstitialAd(){
+        if (LaughTale_interAdapter == null) {
+            return;
+        }
         LaughTale_interAdapter.LaughTaleLoadInterstitialAd();
     }
 
     ///unity用
     public boolean LaughTaleIsIntertitialADReady(String scene){
+        if (LaughTale_interAdapter == null) {
+            return false;
+        }
         if (LaughTale_interAdapter.LaughTaleGetADPrice() > 0) {
             return true;
         }
@@ -321,7 +348,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         }catch (Exception e){
 
         }
-        if (LaughTale_interAdapter.LaughTaleGetADPrice() > 0) {
+        if (LaughTale_interAdapter != null && LaughTale_interAdapter.LaughTaleGetADPrice() > 0) {
             return true;
         }
         return false;
@@ -354,11 +381,14 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     //////////////////////////////////////////////////////////////////////RewardedVideo////////////////////////////////////////////////////////////////////////////////
 
     private void LaughTaleLoadRewardAd(){
+        if (LaughTale_rewardAdapter == null) {
+            return;
+        }
         LaughTale_rewardAdapter.LaughTaleLoadRewardVideoAd();
     }
 
     public boolean LaughTaleIsRewardADReady(String scene){
-        double rewardPrice = LaughTale_rewardAdapter.LaughTaleGetADPrice();
+        double rewardPrice = LaughTale_rewardAdapter != null ? LaughTale_rewardAdapter.LaughTaleGetADPrice() : 0.0;
         LaughTaleNativeAdapter bestNativeForReady = LaughTaleGetBestNativeAdapter();
         double bestNativePrice = bestNativeForReady != null ? bestNativeForReady.LaughTaleGetADPrice() : 0.0;
         boolean rewardReady = rewardPrice > 0;
@@ -389,6 +419,9 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     private void LaughTaleShowRewardVideoAdInternal() {
+        if (LaughTale_rewardAdapter == null) {
+            return;
+        }
         LaughTale_showingRewardAsNative = false;
         LaughTale_rewardAdapter.LaughTaleShowRewardVideoAd();
     }
@@ -429,7 +462,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("reward_show",object.toString());
         }catch (Exception e){
         }
-        double rewardPrice = LaughTale_rewardAdapter.LaughTaleGetADPrice();
+        double rewardPrice = LaughTale_rewardAdapter != null ? LaughTale_rewardAdapter.LaughTaleGetADPrice() : 0.0;
         LaughTaleNativeAdapter bestNativeAdapter = LaughTaleGetBestNativeAdapter();
         double bestNativePrice = bestNativeAdapter != null ? bestNativeAdapter.LaughTaleGetADPrice() : 0.0;
         LaughTaleDecideAndShowRewardAd(rewardPrice, bestNativeAdapter, bestNativePrice);
@@ -455,14 +488,23 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     //////////////////////////////////////////////////////////////////////Banner////////////////////////////////////////////////////////////////////////////////
 
     private void LaughTaleLoadBannerView(){
+        if (LaughTale_bannerAdapter == null) {
+            return;
+        }
         LaughTale_bannerAdapter.LaughTaleLoadBannerView();
     }
 
     public void LaughTaleShowBannerView(){
+        if (LaughTale_bannerAdapter == null) {
+            return;
+        }
         LaughTale_bannerAdapter.LaughTaleShowBannerView();
     }
 
     public void LaughTaleHideBannerView(){
+        if (LaughTale_bannerAdapter == null) {
+            return;
+        }
         LaughTale_bannerAdapter.LaughTaleHideBannerView();
     }
 
@@ -485,10 +527,16 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     //////////////////////////////////////////////////////////////////////MREC////////////////////////////////////////////////////////////////////////////////
 
     private void LaughTaleLoadMRECBannerView(){
+        if (LaughTale_mrecAdapter == null) {
+            return;
+        }
         LaughTale_mrecAdapter.LaughTaleLoadMRECView();
     }
 
     private void LaughTaleShowMRECBannerView(int type , boolean needFix){
+        if (LaughTale_mrecAdapter == null) {
+            return;
+        }
         if (type != 2 && needFix == false){
             mainHandler.removeCallbacks(mrecHideRunnable);
             mainHandler.postDelayed(mrecHideRunnable, 1500L);
@@ -497,6 +545,9 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     private void LaughTaleHideMRECBannerView(){
+        if (LaughTale_mrecAdapter == null) {
+            return;
+        }
         LaughTale_mrecAdapter.LaughTaleHideMRECView();
     }
 
@@ -674,7 +725,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                 LaughTaleCloseAllOpenNativeAds();
                 LaughTaleDecideAndShowCollapsibleAd(
                         LaughTaleGetBestNativeAdapter(),
-                        LaughTale_interAdapter.LaughTaleGetADPrice(),
+                        LaughTale_interAdapter != null ? LaughTale_interAdapter.LaughTaleGetADPrice() : 0.0,
                         true);
             }
         } else {
@@ -756,6 +807,9 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     private void LaughTaleLoadSplashAD(){
+        if (LaughTale_splashAdapter == null) {
+            return;
+        }
         LaughTale_splashAdapter.LaughTaleLoadSplashAD();
     }
 
