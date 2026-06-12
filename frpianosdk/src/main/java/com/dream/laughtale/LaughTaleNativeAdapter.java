@@ -118,6 +118,7 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
 
     public void LaughTaleShowNativeAd() {
         if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) return;
+        if (LaughTale_isOpen) return;
         if (LaughTale_nativeAdView == null || LaughTale_nativeAd == null || LaughTale_root == null) return;
         if (!LaughTaleCanShowNativeAd()) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "NativeShowSkipped not ready or expired");
@@ -125,13 +126,26 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
             return;
         }
         LaughTale_activity.runOnUiThread(() -> {
+            if (LaughTale_isOpen) return;
+            if (LaughTale_nativeAdView == null || LaughTale_root == null) return;
+
             LaughTale_isOpen = true;
             LaughTale_adPrice = 0;
             delayTime = 3;
+            if (delayView != null) {
+                delayView.setVisibility(View.VISIBLE);
+                delayView.setText(delayTime + "s");
+            }
+            if (controlBtn != null) {
+                controlBtn.setVisibility(View.GONE);
+            }
             if (countdownRunnable != null) {
                 mainHandler.removeCallbacks(countdownRunnable);
             }
             startCountdown();
+
+            detachFromParent(LaughTale_root);
+            detachFromParent(LaughTale_nativeAdView);
 
             LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT);
@@ -160,12 +174,20 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
             if (countdownRunnable != null) {
                 mainHandler.removeCallbacks(countdownRunnable);
             }
-            if (LaughTale_root != null && LaughTale_root.getParent() != null) {
-                ((ViewGroup) LaughTale_root.getParent()).removeView(LaughTale_root);
-            }
+            detachFromParent(LaughTale_root);
             LaughTale_isOpen = false;
             onNativeAdClosed(view != null);
         });
+    }
+
+    private void detachFromParent(View view) {
+        if (view == null) {
+            return;
+        }
+        ViewGroup parent = (ViewGroup) view.getParent();
+        if (parent != null) {
+            parent.removeView(view);
+        }
     }
 
     private void tryDestroyAd() {

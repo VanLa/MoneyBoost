@@ -14,7 +14,7 @@ afterEvaluate {
             release(MavenPublication) {
                 groupId = 'com.dream'
                 artifactId = 'laughtale'
-                version = '1.2.1.5'
+                version = '1.2.1.6'
                 //aar 文件
                 def projectName = project.getName()
                 artifact "build/outputs/aar/${projectName}-release.aar"

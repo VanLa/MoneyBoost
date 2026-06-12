@@ -83,6 +83,10 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     /** Native/Inter/Reward/Splash 展示期间隐藏 Banner，全部关闭后恢复 */
     private int LaughTale_fullscreenAdRefCount = 0;
 
+    /** Debug：Collapsible 交替展示，每类连续 2 次后再切换 */
+    private static final int LAUGHTALE_DEBUG_COLLAPSIBLE_EACH_COUNT = 2;
+    private int LaughTale_debugCollapsibleShowIndex = 0;
+
     private SharedPreferences LaughTale_dataPrefs;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -607,21 +611,13 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     private void LaughTaleDecideAndShowCollapsibleAd(LaughTaleNativeAdapter bestNativeAdapter, double interPrice, boolean useBidding) {
         boolean interReady = interPrice > 0;
-        boolean nativeReady = bestNativeAdapter != null;
-        double maxNativePrice = nativeReady ? bestNativeAdapter.LaughTaleGetADPrice() : 0.0;
+        boolean nativeReady = bestNativeAdapter != null && bestNativeAdapter.LaughTaleCanShowNativeAd();
         if (LaughTaleToolsManager.instance().LaughTale_isDebug) {
-            if (interReady && nativeReady) {
-                if (new Random().nextBoolean()) {
-                    LaughTale_interAdapter.LaughTaleShowInterstitialAd();
-                } else {
-                    bestNativeAdapter.LaughTaleShowNativeAd();
-                }
-            } else if (nativeReady) {
-                bestNativeAdapter.LaughTaleShowNativeAd();
-            } else if (interReady) {
-                LaughTale_interAdapter.LaughTaleShowInterstitialAd();
-            }
-        } else if (useBidding) {
+            LaughTaleDecideAndShowCollapsibleAdDebug(bestNativeAdapter, interReady, nativeReady);
+            return;
+        }
+        double maxNativePrice = nativeReady ? bestNativeAdapter.LaughTaleGetADPrice() : 0.0;
+        if (useBidding) {
             if (nativeReady && interReady && interPrice > maxNativePrice * getPValueByTime()) {
                 LaughTale_interAdapter.LaughTaleShowInterstitialAd();
             } else if (nativeReady) {
@@ -630,6 +626,37 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                 LaughTale_interAdapter.LaughTaleShowInterstitialAd();
             }
         } else if (nativeReady) {
+            bestNativeAdapter.LaughTaleShowNativeAd();
+        }
+    }
+
+    /**
+     * Debug：2 次 Native → 2 次 Inter 循环；当前类型未 ready 时 fallback 到另一类型。
+     */
+    private void LaughTaleDecideAndShowCollapsibleAdDebug(
+            LaughTaleNativeAdapter bestNativeAdapter, boolean interReady, boolean nativeReady) {
+        int cycleLength = LAUGHTALE_DEBUG_COLLAPSIBLE_EACH_COUNT * 2;
+        int phase = LaughTale_debugCollapsibleShowIndex % cycleLength;
+        LaughTale_debugCollapsibleShowIndex++;
+        boolean preferNative = phase < LAUGHTALE_DEBUG_COLLAPSIBLE_EACH_COUNT;
+
+        if (preferNative) {
+            if (nativeReady && bestNativeAdapter != null) {
+                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
+                        "===ShowCollapsibleNative(debug cycle " + (phase + 1) + "/" + cycleLength + ")");
+                bestNativeAdapter.LaughTaleShowNativeAd();
+            } else if (interReady) {
+                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
+                        "===ShowCollapsibleInter(debug fallback, native not ready, cycle " + (phase + 1) + "/" + cycleLength + ")");
+                LaughTale_interAdapter.LaughTaleShowInterstitialAd();
+            }
+        } else if (interReady) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
+                    "===ShowCollapsibleInter(debug cycle " + (phase + 1) + "/" + cycleLength + ")");
+            LaughTale_interAdapter.LaughTaleShowInterstitialAd();
+        } else if (nativeReady && bestNativeAdapter != null) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
+                    "===ShowCollapsibleNative(debug fallback, inter not ready, cycle " + (phase + 1) + "/" + cycleLength + ")");
             bestNativeAdapter.LaughTaleShowNativeAd();
         }
     }
@@ -651,11 +678,16 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                         true);
             }
         } else {
-            if (nativeReady) {
+            if (nativeReady || interReady) {
                 LaughTaleCloseAllOpenNativeAds();
-                LaughTaleNativeAdapter bestNativeAdapter = LaughTaleGetBestNativeAdapter();
-                if (bestNativeAdapter != null) {
-                    bestNativeAdapter.LaughTaleShowNativeAd();
+                if (LaughTaleToolsManager.instance().LaughTale_isDebug) {
+                    LaughTaleDecideAndShowCollapsibleAdDebug(
+                            LaughTaleGetBestNativeAdapter(), interReady, nativeReady);
+                } else if (nativeReady) {
+                    LaughTaleNativeAdapter bestNativeAdapter = LaughTaleGetBestNativeAdapter();
+                    if (bestNativeAdapter != null) {
+                        bestNativeAdapter.LaughTaleShowNativeAd();
+                    }
                 }
             }
         }
