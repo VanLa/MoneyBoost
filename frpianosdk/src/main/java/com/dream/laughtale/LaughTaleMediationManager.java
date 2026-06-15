@@ -90,8 +90,9 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     /** Native/Inter/Reward/Splash 展示期间隐藏 Banner，全部关闭后恢复 */
     private int LaughTale_fullscreenAdRefCount = 0;
 
-    /** Debug：Collapsible 交替展示，每类连续 2 次后再切换 */
-    private static final int LAUGHTALE_DEBUG_COLLAPSIBLE_EACH_COUNT = 2;
+    /** Debug：Collapsible 轮替，连续 4 次 Native 后 1 次 Inter */
+    private static final int LAUGHTALE_DEBUG_COLLAPSIBLE_NATIVE_COUNT = 4;
+    private static final int LAUGHTALE_DEBUG_COLLAPSIBLE_INTER_COUNT = 1;
     private int LaughTale_debugCollapsibleShowIndex = 0;
 
     private SharedPreferences LaughTale_dataPrefs;
@@ -682,14 +683,14 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     /**
-     * Debug：2 次 Native → 2 次 Inter 循环；当前类型未 ready 时 fallback 到另一类型。
+     * Debug：4 次 Native → 1 次 Inter 循环；当前类型未 ready 时 fallback 到另一类型。
      */
     private void LaughTaleDecideAndShowCollapsibleAdDebug(
             LaughTaleNativeAdapter bestNativeAdapter, boolean interReady, boolean nativeReady) {
-        int cycleLength = LAUGHTALE_DEBUG_COLLAPSIBLE_EACH_COUNT * 2;
+        int cycleLength = LAUGHTALE_DEBUG_COLLAPSIBLE_NATIVE_COUNT + LAUGHTALE_DEBUG_COLLAPSIBLE_INTER_COUNT;
         int phase = LaughTale_debugCollapsibleShowIndex % cycleLength;
         LaughTale_debugCollapsibleShowIndex++;
-        boolean preferNative = phase < LAUGHTALE_DEBUG_COLLAPSIBLE_EACH_COUNT;
+        boolean preferNative = phase < LAUGHTALE_DEBUG_COLLAPSIBLE_NATIVE_COUNT;
 
         if (preferNative) {
             if (nativeReady && bestNativeAdapter != null) {
