@@ -22,7 +22,6 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
-//import com.posthog.android.PostHog;
 //import com.posthog.android.Properties;
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONException;
@@ -51,8 +50,15 @@ public class LaughTaleFirebaseManager {
     private String LaughTale_AccessKeySecret = "REDACTED_ALIBABA_ACCESS_KEY_SECRET";
 
     public String LaughTale_cp_config = "";
-    public double LaughTale_p_weekday = 3.5;
-    public double LaughTale_p_weekend = 7.0;
+    public double LaughTale_p_weekday = 1.0;
+    public double LaughTale_p_weekend = 1.0;
+
+    /** Native 关闭钮尺寸 Remote Config 原始 JSON，key: native_close_size_config */
+    public String LaughTale_native_close_size_config = "";
+    public float LaughTale_native_close_size = LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_DP;
+    public float LaughTale_native_close_size_meta = LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_META_DP;
+
+    private static final String RC_KEY_NATIVE_CLOSE_SIZE_CONFIG = "native_close_size_config";
 
     private SharedPreferences LaughTale_taichiPref;
     private SharedPreferences.Editor LaughTale_taichiSharedPreferencesEditor;
@@ -89,8 +95,18 @@ public class LaughTaleFirebaseManager {
         LaughTale_taichiPref = context.getApplicationContext().getSharedPreferences("TaichiTroasCache",0);
         LaughTale_taichiSharedPreferencesEditor = LaughTale_taichiPref.edit();
 
+        LaughTaleSyncNativeLayoutFromPrefs();
         //获取firebase
         LaughTaleFetchRemoteConfig(context);
+    }
+
+    private void LaughTaleSyncNativeLayoutFromPrefs() {
+        if (mContext == null) {
+            return;
+        }
+        LaughTaleLayoutSize size = new LaughTaleLayoutSize(mContext);
+        LaughTale_native_close_size = size.closeSize;
+        LaughTale_native_close_size_meta = size.closeSizeMeta;
     }
 
     public void LaughTaleInitStorage(Context context){
@@ -245,11 +261,56 @@ public class LaughTaleFirebaseManager {
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekend===:"+LaughTale_p_weekend+"");
                                 LaughTale_p_weekday = LaughTaleFirebaseRemoteConfig.getDouble("p_value_weekday");
                                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekday===:"+LaughTale_p_weekday+"");
+                                LaughTaleApplyNativeLayoutRemoteConfig();
                             }
                         }
                     });
         }catch (Exception e){
         }
+    }
+
+    /**
+     * Remote Config key: native_close_size_config（String JSON）
+     * {"closeSize":20,"closeSize_0":25}
+     * 未配置或取不到时沿用 {@link LaughTaleLayoutSize} 写死默认值。
+     */
+    private void LaughTaleApplyNativeLayoutRemoteConfig() {
+        if (mContext == null) {
+            return;
+        }
+        String json = LaughTaleFirebaseRemoteConfig.getString(RC_KEY_NATIVE_CLOSE_SIZE_CONFIG);
+        if (json == null || json.trim().isEmpty()) {
+            LaughTaleSyncNativeLayoutFromPrefs();
+            return;
+        }
+        LaughTale_native_close_size_config = json;
+        try {
+            JSONObject object = new JSONObject(json);
+            float closeSize = LaughTaleParseLayoutSizeValue(
+                    object, "closeSize", LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_DP);
+            float closeSizeMeta = LaughTaleParseLayoutSizeValue(
+                    object, "closeSize_0", LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_META_DP);
+            LaughTale_native_close_size = closeSize;
+            LaughTale_native_close_size_meta = closeSizeMeta;
+            new LaughTaleLayoutSize(mContext).updateFromRemote(closeSize, closeSizeMeta);
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
+                    "===LaughTaleFirebaseRemoteConfig===",
+                    "===native_close_size_config=== " + json);
+        } catch (JSONException e) {
+            LaughTaleSyncNativeLayoutFromPrefs();
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
+                    "===LaughTaleFirebaseRemoteConfig===",
+                    "===native_close_size_config parse error=== " + e.getMessage());
+        }
+    }
+
+    private static float LaughTaleParseLayoutSizeValue(JSONObject object, String key, float defaultValue)
+            throws JSONException {
+        if (!object.has(key)) {
+            return defaultValue;
+        }
+        float value = (float) object.getDouble(key);
+        return value > 0f ? value : defaultValue;
     }
 
     private static long LaughTaleGetFileSize(File file) throws Exception

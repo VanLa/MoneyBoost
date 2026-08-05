@@ -1,25 +1,5 @@
 // Unity 2022.3.62f3c1：与附带 Gradle 7.5.1 配套使用 Android Gradle Plugin 7.4.2，勿在不了解 Unity/launcher 影响时单独升 AGP
 allprojects {
-    // play-services-measurement* 在 AGP7.4 + Unity launcher 上常出现 DexingWithClasspathTransform/mergeExtDex 失败，经验上 21.2.0 整条线最稳
-    // 将 21.3+ 与 22+ 全部对齐到 21.2.0（与 firebase-analytics:21.2.2 同代）
-    configurations.all {
-        resolutionStrategy.eachDependency { details ->
-            if (details.requested.group == 'com.google.android.gms' &&
-                    details.requested.name != null && details.requested.name.startsWith('play-services-measurement') &&
-                    details.requested.version != null) {
-                def v = details.requested.version
-                if (v.startsWith('22.')) {
-                    details.useVersion '21.2.0'
-                } else if (v.startsWith('21.3') || v.startsWith('21.4') || v.startsWith('21.5') || v.startsWith('21.6') || v.startsWith('21.7')) {
-                    details.useVersion '21.2.0'
-                } else if (v.startsWith('21.2') && v != '21.2.0') {
-                    // Analytics 21.2.2 会带 measurement 21.2.2；若 dex 仍失败可强制与 21.2.0 完全一致
-                    details.useVersion '21.2.0'
-                }
-            }
-        }
-    }
-
     buildscript {
         repositories {
             google()

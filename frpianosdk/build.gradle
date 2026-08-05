@@ -1,5 +1,5 @@
 // 构建约束：Unity 2022.3.62f3c1 配套使用 Gradle 7.5.1 + Android Gradle Plugin 7.4.x；请勿随意改 unityLibrary/launcher 的 Gradle 主版本
-// 以下依赖中仅 com.applovin:applovin-sdk 固定为 13.1.0，其余可随本文件维护
+// AppLovin MAX 版本在本文件写死；minSdk 24 + AGP 7.4.2 实测可编译
 apply plugin: 'com.android.library'
 
 apply from: 'upload.gradle'
@@ -8,7 +8,7 @@ android {
     compileSdkVersion 34
 
     defaultConfig {
-        minSdkVersion 23
+        minSdkVersion 24
         targetSdkVersion 35
         versionCode 1
         versionName "1.0"
@@ -32,10 +32,9 @@ android {
 }
 
 dependencies {
-    // --- Firebase（不用 BoM 33+ 以免 Analytics 22.x 拉 measurement 22+）
-    // Analytics 用 21.2.2 + 根工程将 measurement* 统锁 21.2.0：在 Unity+AGP7.4/部分 Windows 下 21.3+ 的 play-services-measurement-api 仍可能 mergeExtDex 失败；与 16KB 无关
+    // --- Firebase（对齐竞品 firebase-analytics 23.2.0）
     // Crashlytics 19.3+ 的 so 仍支持 16KB 页
-    implementation 'com.google.firebase:firebase-analytics:21.2.2'
+    implementation 'com.google.firebase:firebase-analytics:23.2.0'
     implementation 'com.google.firebase:firebase-crashlytics:19.3.0'
     implementation 'com.google.firebase:firebase-crashlytics-ndk:19.3.0'
     implementation 'com.google.firebase:firebase-config:22.0.1'
@@ -45,18 +44,18 @@ dependencies {
     implementation 'com.google.android.play:review:2.0.2'
     implementation 'com.google.android.ump:user-messaging-platform:4.0.0'
 
-    // --- AppLovin MAX：SDK 版本按 Unity/发行业务要求锁定；Google 系适配器与 GMA 24.5.0 对齐，可单独升补丁以拿修复（仍兼容 MAX 13.1+）
-    implementation 'com.applovin:applovin-sdk:13.1.0'
-    // Google Ad Manager 适配器 24.5.0.1 未发布至 Maven，与 AdMob 24.5.0.1 同 GMA 大版本
-    implementation 'com.applovin.mediation:google-ad-manager-adapter:24.5.0.0'
-    implementation 'com.applovin.mediation:google-adapter:24.5.0.1'
+    // --- AppLovin MAX（Gradle 7.5.1 / AGP 7.4.2 / minSdk 24）
+    // facebook-adapter 6.21 在 AGP 7.4.2 mergeExtDex 失败，锁定 6.20.0.0
+    implementation 'com.applovin:applovin-sdk:13.6.3'
+    implementation 'com.applovin.mediation:google-ad-manager-adapter:25.4.0.0'
+    implementation 'com.applovin.mediation:google-adapter:25.4.0.0'
     implementation 'com.applovin.mediation:facebook-adapter:6.20.0.0'
-    implementation 'com.applovin.mediation:mintegral-adapter:17.0.31.0'
-    implementation 'com.applovin.mediation:bytedance-adapter:7.6.0.2.0'
-    implementation 'com.applovin.mediation:unityads-adapter:4.16.2.0'
-    implementation 'com.applovin.mediation:vungle-adapter:7.6.1.0'
+    implementation 'com.applovin.mediation:mintegral-adapter:17.1.61.0'
+    implementation 'com.applovin.mediation:bytedance-adapter:8.1.0.4.0'
+    implementation 'com.applovin.mediation:unityads-adapter:4.19.0.0'
+    implementation 'com.applovin.mediation:vungle-adapter:7.7.4.0'
 
-    // --- AndroidX（与 compileSdk 34、Java 11、minSdk 23 兼容）
+    // --- AndroidX（与 compileSdk 34、Java 11、minSdk 24 兼容）
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.annotation:annotation:1.7.1'

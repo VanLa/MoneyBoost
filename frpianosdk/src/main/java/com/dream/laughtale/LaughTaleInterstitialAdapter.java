@@ -50,6 +50,10 @@ public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenue
         if (LaughTale_interstitialAd == null) {
             return;
         }
+        if (!LaughTale_interstitialAd.isReady()) {
+            LaughTaleLoadInterstitialAd();
+            return;
+        }
         LaughTale_activity.runOnUiThread(new Runnable() {
             public void run() {
                 // 显示插页广告
@@ -89,7 +93,9 @@ public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenue
 
     @Override
     public void onAdClicked(MaxAd maxAd) {
-
+        if (null != LaughTale_InterstitialListener) {
+            LaughTale_InterstitialListener.LaughTaleOnInterstitialAdClicked();
+        }
     }
 
     @Override

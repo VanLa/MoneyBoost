@@ -1,5 +1,6 @@
 package com.freddie.frmusicsdk;
 
+import android.content.Intent;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.Handler;
@@ -61,8 +62,8 @@ public class MainActivity extends AppCompatActivity {
 
         mediationManager = LaughTaleMediationManager.getInstance();
         mediationManager.LaughTaleInit(this, this, () -> {
-            mediationManager.LaughTaleShowBannerView();
             mediationManager.LaughTaleShowSplashADWithUnity("launch");
+            mediationManager.LaughTaleShowBannerView();
         });
 
         setupButtons();
@@ -70,10 +71,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+    }
+
+    @Override
     protected void onStart() {
         super.onStart();
         mediationManager.LaughTaleOnAppStart(this);
-        mediationManager.LaughTaleShowSplashADWithLifeTime();
         statusHandler.post(statusUpdater);
     }
 
@@ -98,7 +104,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        mediationManager.LaughTaleOnAppDestroy(this);
+        if (mediationManager != null) {
+            mediationManager.LaughTaleOnAppDestroy(this);
+        }
         super.onDestroy();
     }
 

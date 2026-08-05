@@ -4,4 +4,5 @@ public interface LaughTaleRewardVideoListener {
     void LaughTaleOnRewardVideoAdClosed();
     void LaughTaleOnRewardVideoAdDisplayed();
     void LaughTaleOnRewardVideoAdCompleted();
+    void LaughTaleOnRewardVideoAdClicked();
 }

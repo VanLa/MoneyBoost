@@ -6,9 +6,11 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
+import com.applovin.sdk.AppLovinMediationProvider;
 import com.applovin.sdk.AppLovinPrivacySettings;
 import com.applovin.sdk.AppLovinSdk;
 import com.applovin.sdk.AppLovinSdkConfiguration;
+import com.applovin.sdk.AppLovinSdkInitializationConfiguration;
 import com.google.android.ump.ConsentForm;
 import com.google.android.ump.ConsentInformation;
 import com.google.android.ump.ConsentRequestParameters;
@@ -22,15 +24,11 @@ import android.util.Log;
 
 import org.json.JSONObject;
 
-import android.content.SharedPreferences;
-
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Random;
 import java.util.TimeZone;
-
-//import androidx.annotation.Nullable;
 
 public class LaughTaleMediationManager implements LaughTaleInterstitialListener, LaughTaleRewardVideoListener, LaughTaleSplashListener, LaughTaleNativeListener {
 
@@ -52,8 +50,8 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     private final List<LaughTaleNativeAdapter> LaughTale_nativeAdapterList = new ArrayList<>();
 
-    // 广告闪屏显示间隔时间, 间隔内不出现广告 ,默认5
-    private long LaughTale_mSplashADInterval = 1000 * 5;
+    // 开屏 CD：距上次重置须满 30s；激励/插屏/Native 等全屏广告关闭后会重置
+    private long LaughTale_mSplashADInterval = 1000 * 30;
     // 上次闪屏显示广告的时间
     private long LaughTale_mSplashLastADTime = 0;
 
@@ -73,6 +71,8 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     private static final long LOAD_DELAY_MREC_MS = 3000L;
     private static final long LOAD_DELAY_BANNER_LOW_END_MS = 2500L;
     private static final long LOAD_DELAY_MREC_LOW_END_MS = 5000L;
+    private static final long AD_TICK_INTERVAL_MS = 5000L;
+    private static final long COLD_SPLASH_WAIT_TIMEOUT_MS = 10000L;
 
     private int LaughTale_cachedPValueDayOfYear = -1;
     private double LaughTale_cachedPValue = 0.0;
@@ -86,9 +86,41 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     /** 当前激励位用 Native 顶替展示时，Unity 仍走 LaughTale_REWARD_* 回调 */
     private boolean LaughTale_showingRewardAsNative = false;
+    private LaughTaleNativeAdapter LaughTale_rewardNativeAdapter = null;
+    /** REWARD_COMPLETE 已发给 Unity，避免重复 */
+    private boolean LaughTale_rewardCompleteDispatched = false;
+
+    /** 开屏 App Open 正在展示或 show 请求已发出 */
+    private boolean LaughTale_splashSessionActive = false;
+    /** 已向 Unity 发送 SPLASH_OPEN（展示失败时需配对 SPLASH_CLOSE） */
+    private boolean LaughTale_splashOpenDispatched = false;
+    /** 本进程冷启动开屏已处理（Unity 只应调一次；防止重复走冷启动流程） */
+    private boolean LaughTale_coldSplashHandled = false;
+    /** 冷启动开屏流程结束后，允许 SDK 在回前台触发热启动开屏 */
+    private boolean LaughTale_allowHotStartSplash = false;
+    /** 用户已切到后台（onStop），回前台时可尝试热启动开屏 */
+    private boolean LaughTale_wentToBackground = false;
+    /** 热启动开屏等待 App Open 加载中 */
+    private boolean LaughTale_hotStartSplashPending = false;
+    private static final String LAUGHTALE_HOT_START_SPLASH_SCENE = "background";
+
+    /** Collapsible 位正在播 Native */
+    private boolean LaughTale_showingCollapsibleAsNative = false;
+
+    private boolean LaughTale_rewardVideoInSession = false;
+    private boolean LaughTale_rewardCloseDispatched = false;
+    private boolean LaughTale_interstitialInSession = false;
+    private boolean LaughTale_interstitialCloseDispatched = false;
+    private boolean LaughTale_nativeCloseDispatched = false;
+
+    /** Unity 冷启动开屏请求中（ShowSplashADWithUnity） */
+    private boolean LaughTale_unityColdSplashPending = false;
+    private String LaughTale_unityColdSplashScene = "launch";
 
     /** Native/Inter/Reward/Splash 展示期间隐藏 Banner，全部关闭后恢复 */
     private int LaughTale_fullscreenAdRefCount = 0;
+    /** Unity 已调用 showBanner，后续由 SDK 自行管理 Banner 显示/隐藏 */
+    private boolean LaughTale_bannerEnabled = false;
 
     /** Debug：Collapsible 轮替，连续 4 次 Native 后 1 次 Inter */
     private static final int LAUGHTALE_DEBUG_COLLAPSIBLE_NATIVE_COUNT = 4;
@@ -102,6 +134,37 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         @Override
         public void run() {
             LaughTaleHideMRECBannerView();
+        }
+    };
+    private final Runnable coldSplashTimeoutRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!LaughTale_unityColdSplashPending) {
+                return;
+            }
+            LaughTale_unityColdSplashPending = false;
+            if (LaughTale_splashAdapter != null) {
+                LaughTale_splashAdapter.LaughTale_autoShow = false;
+            }
+            LaughTale_splashSessionActive = false;
+            LaughTale_coldSplashHandled = true;
+            LaughTale_allowHotStartSplash = true;
+        }
+    };
+    private final Runnable hotStartSplashTimeoutRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!LaughTale_hotStartSplashPending) {
+                return;
+            }
+            LaughTaleFinishHotStartSplashAttemptNotReady();
+        }
+    };
+    private final Runnable adTickRunnable = new Runnable() {
+        @Override
+        public void run() {
+            LaughTaleTickAdReload();
+            mainHandler.postDelayed(this, AD_TICK_INTERVAL_MS);
         }
     };
     private final Runnable bannerLoadRunnable = new Runnable() {
@@ -121,6 +184,16 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         void onAdInitSuccess();
     }
 
+    public interface DebugCallbackListener {
+        void onCallback(String callback);
+    }
+
+    private DebugCallbackListener LaughTale_debugCallbackListener;
+
+    public void LaughTaleSetDebugCallbackListener(DebugCallbackListener listener) {
+        LaughTale_debugCallbackListener = listener;
+    }
+
     public static LaughTaleMediationManager getInstance() {
         if (instance == null) {
             instance = new LaughTaleMediationManager();
@@ -128,7 +201,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         return instance;
     }
     private LaughTaleMediationManager() {
-//        ProcessLifecycleOwner.get().getLifecycle().addObserver( this );
     }
 
     //////////////////////////////////////////////////////////////////////初始化////////////////////////////////////////////////////////////////////////////////
@@ -150,7 +222,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             LaughTale_bannerKey = appInfo.metaData.getString("LaughTale_BANNER_ID");
             LaughTale_splashKey = appInfo.metaData.getString("LaughTale_SPLASH_ID");
             LaughTale_mrecKey = appInfo.metaData.getString("LaughTale_MREC_ID");
-//            sdkKey = appInfo.metaData.getString("LaughTale_SDK_Key");
+            sdkKey = appInfo.metaData.getString("applovin.sdk.key");
         }catch (Exception e){
         }
 
@@ -291,19 +363,58 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTale_isInitializing = true;
         LaughTaleApplyPrivacySettings(activity, umpPermissiveFallback);
         LaughTaleInitAdAdapters(activity);
-        AppLovinSdk.getInstance(LaughTale_activity).setMediationProvider("max");
-        AppLovinSdk.initializeSdk(LaughTale_activity, new AppLovinSdk.SdkInitializationListener() {
+        AppLovinSdkInitializationConfiguration initConfig = AppLovinSdkInitializationConfiguration.builder(sdkKey, activity)
+                .setMediationProvider(AppLovinMediationProvider.MAX)
+                .build();
+        AppLovinSdk.getInstance(LaughTale_activity).initialize(initConfig, new AppLovinSdk.SdkInitializationListener() {
             @Override
             public void onSdkInitialized(final AppLovinSdkConfiguration configuration) {
-                // AppLovin SDK is initialized, start loading ads
                 initListener.onAdInitSuccess();
                 LaughTale_isInitSuccess = true;
                 LaughTaleScheduleStaggeredAdLoads();
+                LaughTaleStartAdTick();
                 if (LaughTaleToolsManager.instance().LaughTale_isDebug) {
-                    AppLovinSdk.getInstance(LaughTale_activity).showMediationDebugger();
+                    mainHandler.postDelayed(() -> {
+                        if (LaughTale_activity == null || LaughTale_activity.isFinishing()
+                                || LaughTale_activity.isDestroyed()) {
+                            return;
+                        }
+                        AppLovinSdk.getInstance(LaughTale_activity).showMediationDebugger();
+                    }, 30000L);
                 }
             }
         });
+    }
+
+    private void LaughTaleStartAdTick() {
+        mainHandler.removeCallbacks(adTickRunnable);
+        mainHandler.postDelayed(adTickRunnable, AD_TICK_INTERVAL_MS);
+    }
+
+    private void LaughTaleStopAdTick() {
+        mainHandler.removeCallbacks(adTickRunnable);
+    }
+
+    /** 竞品对齐：每 5 秒检查各广告位库存，未加载则补货。 */
+    private void LaughTaleTickAdReload() {
+        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+            adapter.LaughTaleTickReload();
+        }
+        if (LaughTale_interAdapter != null
+                && !LaughTale_interAdapter.LaughTaleIsShowing()
+                && LaughTale_interAdapter.LaughTaleGetADPrice() <= 0) {
+            LaughTale_interAdapter.LaughTaleLoadInterstitialAd();
+        }
+        if (LaughTale_rewardAdapter != null
+                && !LaughTale_rewardAdapter.LaughTaleIsShowing()
+                && LaughTale_rewardAdapter.LaughTaleGetADPrice() <= 0) {
+            LaughTale_rewardAdapter.LaughTaleLoadRewardVideoAd();
+        }
+        if (LaughTale_splashAdapter != null
+                && !LaughTale_splashAdapter.LaughTaleIsShowing()
+                && !LaughTale_splashAdapter.LaughTaleIsADReady()) {
+            LaughTale_splashAdapter.LaughTaleLoadSplashAD();
+        }
     }
 
     /** 按收入占比分阶段加载：Native/Splash 优先，Banner/MREC 延后。 */
@@ -370,13 +481,24 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     @Override
     public void LaughTaleOnInterstitialAdClosed() {
         LaughTaleOnFullscreenAdClosed();
-        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_INTERSTITIAL_CLOSE");
+        LaughTaleMarkSplashCooldownStarted();
+        LaughTale_interstitialInSession = false;
+        LaughTaleDispatchInterstitialCloseCallbackNow();
     }
 
     @Override
     public void LaughTaleOnInterstitialAdDisplayed() {
+        if (LaughTale_interstitialInSession) {
+            return;
+        }
+        LaughTale_interstitialInSession = true;
+        LaughTale_interstitialCloseDispatched = false;
         LaughTaleOnFullscreenAdShow();
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_INTERSTITIAL_OPEN");
+    }
+
+    @Override
+    public void LaughTaleOnInterstitialAdClicked() {
     }
 
     //////////////////////////////////////////////////////////////////////RewardedVideo////////////////////////////////////////////////////////////////////////////////
@@ -415,7 +537,8 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     private void LaughTaleShowRewardAsNative(LaughTaleNativeAdapter bestNativeAdapter) {
         LaughTale_showingRewardAsNative = true;
-        LaughTaleCloseAllOpenNativeAds();
+        LaughTale_rewardNativeAdapter = bestNativeAdapter;
+        LaughTaleCloseOtherOpenNativeAds(bestNativeAdapter);
         bestNativeAdapter.LaughTaleShowNativeAd();
     }
 
@@ -472,18 +595,34 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     @Override
     public void LaughTaleOnRewardVideoAdClosed() {
         LaughTaleOnFullscreenAdClosed();
-        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_CLOSE");
+        LaughTaleMarkSplashCooldownStarted();
+        LaughTale_rewardVideoInSession = false;
+        LaughTaleDispatchRewardCloseCallbacksNow();
     }
 
     @Override
     public void LaughTaleOnRewardVideoAdDisplayed() {
+        if (LaughTale_rewardVideoInSession) {
+            return;
+        }
+        LaughTale_rewardVideoInSession = true;
+        LaughTale_rewardCompleteDispatched = false;
+        LaughTale_rewardCloseDispatched = false;
         LaughTaleOnFullscreenAdShow();
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_OPEN");
     }
 
     @Override
+    public void LaughTaleOnRewardVideoAdClicked() {
+    }
+
+    @Override
     public void LaughTaleOnRewardVideoAdCompleted() {
+        if (LaughTale_rewardCompleteDispatched) {
+            return;
+        }
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_COMPLETE");
+        LaughTale_rewardCompleteDispatched = true;
     }
 
     //////////////////////////////////////////////////////////////////////Banner////////////////////////////////////////////////////////////////////////////////
@@ -496,10 +635,8 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     public void LaughTaleShowBannerView(){
-        if (LaughTale_bannerAdapter == null) {
-            return;
-        }
-        LaughTale_bannerAdapter.LaughTaleShowBannerView();
+        LaughTale_bannerEnabled = true;
+        LaughTaleSyncBannerVisibility();
     }
 
     public void LaughTaleHideBannerView(){
@@ -509,20 +646,53 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTale_bannerAdapter.LaughTaleHideBannerView();
     }
 
-    private void LaughTaleOnFullscreenAdShow() {
-        if (LaughTale_fullscreenAdRefCount == 0) {
-            LaughTaleHideBannerView();
+    private void LaughTaleReconcileFullscreenAdRefCount() {
+        if (LaughTale_fullscreenAdRefCount <= 0) {
+            return;
         }
+        if (!LaughTaleIsFullscreenAdShowing() && !LaughTaleIsSplashAdShowing()) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
+                    "=====LaughTaleMediatonManager",
+                    "===reconcile fullscreenAdRefCount " + LaughTale_fullscreenAdRefCount + " -> 0");
+            LaughTale_fullscreenAdRefCount = 0;
+        }
+    }
+
+    private boolean LaughTaleShouldBlockBannerDisplay() {
+        if (!LaughTale_bannerEnabled) {
+            return true;
+        }
+        if (!LaughTale_isAppForeground) {
+            return true;
+        }
+        if (LaughTale_fullscreenAdRefCount > 0) {
+            return true;
+        }
+        return LaughTaleIsFullscreenAdShowing() || LaughTaleIsSplashAdShowing();
+    }
+
+    private void LaughTaleSyncBannerVisibility() {
+        if (LaughTale_bannerAdapter == null) {
+            return;
+        }
+        LaughTaleReconcileFullscreenAdRefCount();
+        if (LaughTaleShouldBlockBannerDisplay()) {
+            LaughTale_bannerAdapter.LaughTaleHideBannerView();
+        } else {
+            LaughTale_bannerAdapter.LaughTaleShowBannerView();
+        }
+    }
+
+    private void LaughTaleOnFullscreenAdShow() {
         LaughTale_fullscreenAdRefCount++;
+        LaughTaleSyncBannerVisibility();
     }
 
     private void LaughTaleOnFullscreenAdClosed() {
         if (LaughTale_fullscreenAdRefCount > 0) {
             LaughTale_fullscreenAdRefCount--;
         }
-        if (LaughTale_fullscreenAdRefCount == 0) {
-            LaughTaleShowBannerView();
-        }
+        LaughTaleSyncBannerVisibility();
     }
 
     //////////////////////////////////////////////////////////////////////MREC////////////////////////////////////////////////////////////////////////////////
@@ -546,6 +716,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     private void LaughTaleHideMRECBannerView(){
+        mainHandler.removeCallbacks(mrecHideRunnable);
         if (LaughTale_mrecAdapter == null) {
             return;
         }
@@ -570,6 +741,10 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     private boolean LaughTaleIsNativeReady(){
         for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList){
+            adapter.LaughTaleRefreshStaleInventoryIfNeeded();
+            if (adapter.LaughTale_isOpen) {
+                continue;
+            }
             if (adapter.LaughTaleGetADPrice() > 0 && adapter.LaughTaleCanShowNativeAd()){
                 return true;
             }
@@ -579,10 +754,15 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     private LaughTaleNativeAdapter LaughTaleGetBestNativeAdapter() {
         LaughTaleNativeAdapter bestNativeAdapter = null;
+        LaughTaleNativeAdapter firstDisplayable = null;
         double maxNativePrice = 0.0;
         for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-            if (!adapter.LaughTaleCanShowNativeAd()) {
+            adapter.LaughTaleRefreshStaleInventoryIfNeeded();
+            if (adapter.LaughTale_isOpen || !adapter.LaughTaleCanShowNativeAd()) {
                 continue;
+            }
+            if (firstDisplayable == null) {
+                firstDisplayable = adapter;
             }
             double price = adapter.LaughTaleGetADPrice();
             if (price > maxNativePrice) {
@@ -590,22 +770,29 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                 bestNativeAdapter = adapter;
             }
         }
-        return bestNativeAdapter;
+        return bestNativeAdapter != null ? bestNativeAdapter : firstDisplayable;
+    }
+
+    private boolean LaughTaleHasOpenNativeAd() {
+        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+            if (adapter.LaughTale_isOpen) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void LaughTaleCloseAllOpenNativeAds() {
-        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-            if (adapter.LaughTale_isOpen) {
-                adapter.LaughTaleAutoHideNativeAd();
-            }
-        }
+        LaughTaleCloseOtherOpenNativeAds(null);
     }
 
-    /** 回前台展示 Splash 前先关闭可关闭的全屏广告（Native）；插屏/激励由 SDK 托管无法强制关闭。 */
-    private void LaughTaleCloseAllFullscreenAds() {
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
-                "=====LaughTaleMediatonManager", "===close fullscreen ads before splash");
-        LaughTaleCloseAllOpenNativeAds();
+    private void LaughTaleCloseOtherOpenNativeAds(LaughTaleNativeAdapter except) {
+        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+            if (adapter == except || !adapter.LaughTale_isOpen) {
+                continue;
+            }
+            adapter.LaughTaleAutoHideNativeAd();
+        }
     }
 
     /** Native 出价高于激励视频时，用 Native 顶替激励位 */
@@ -614,26 +801,64 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     @Override
-    public void LaughTaleOnNativeAdClosed(){
+    public void LaughTaleOnNativeAdClosed(boolean clickedCloseButton, boolean silentClose) {
         LaughTaleOnFullscreenAdClosed();
         if (LaughTale_showingRewardAsNative) {
+            LaughTaleNativeAdapter rewardAdapter = LaughTale_rewardNativeAdapter;
+            if (silentClose) {
+                LaughTale_showingRewardAsNative = false;
+                LaughTale_rewardNativeAdapter = null;
+                LaughTaleMarkSplashCooldownStarted();
+                return;
+            }
             LaughTale_showingRewardAsNative = false;
-            LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_COMPLETE");
-            LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_CLOSE");
+            LaughTale_rewardNativeAdapter = null;
+            if (clickedCloseButton && rewardAdapter != null && rewardAdapter.LaughTaleIsCountdownFinished()
+                    && !LaughTale_rewardCompleteDispatched) {
+                LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_COMPLETE");
+                LaughTale_rewardCompleteDispatched = true;
+            }
+            LaughTaleDispatchRewardCloseCallbacksNow();
+            LaughTaleMarkSplashCooldownStarted();
             return;
         }
-        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_CLOSE");
+        LaughTale_showingCollapsibleAsNative = false;
+        LaughTaleDispatchNativeCloseCallbackNow();
+        LaughTaleMarkSplashCooldownStarted();
     }
 
     @Override
-    public void LaughTaleOnNativeAdDisplayed(){
+    public void LaughTaleOnNativeAdDisplayed() {
         LaughTaleOnFullscreenAdShow();
         if (LaughTale_showingRewardAsNative) {
+            LaughTale_rewardCompleteDispatched = false;
+            LaughTale_rewardCloseDispatched = false;
             LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_OPEN");
             return;
         }
+        LaughTale_nativeCloseDispatched = false;
         LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_OPEN");
     }
+
+    @Override
+    public void LaughTaleOnNativeAdClicked() {
+    }
+
+    @Override
+    public void LaughTaleOnNativeAdLoaded() {
+    }
+
+    @Override
+    public void LaughTaleOnNativeAdShowSkipped() {
+        if (LaughTale_showingRewardAsNative) {
+            LaughTale_showingRewardAsNative = false;
+            LaughTale_rewardNativeAdapter = null;
+        }
+        if (LaughTale_showingCollapsibleAsNative) {
+            LaughTale_showingCollapsibleAsNative = false;
+        }
+    }
+
     /**
      * 按 UTC 时间判断是否为周二、周三、周四
      */
@@ -661,6 +886,12 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         return LaughTale_cachedPValue;
     }
 
+    private void LaughTaleShowCollapsibleAsNative(LaughTaleNativeAdapter adapter) {
+        LaughTale_showingCollapsibleAsNative = true;
+        LaughTaleCloseOtherOpenNativeAds(adapter);
+        adapter.LaughTaleShowNativeAd();
+    }
+
     private void LaughTaleDecideAndShowCollapsibleAd(LaughTaleNativeAdapter bestNativeAdapter, double interPrice, boolean useBidding) {
         boolean interReady = interPrice > 0;
         boolean nativeReady = bestNativeAdapter != null && bestNativeAdapter.LaughTaleCanShowNativeAd();
@@ -671,14 +902,16 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         double maxNativePrice = nativeReady ? bestNativeAdapter.LaughTaleGetADPrice() : 0.0;
         if (useBidding) {
             if (nativeReady && interReady && interPrice > maxNativePrice * getPValueByTime()) {
+                LaughTaleCloseAllOpenNativeAds();
                 LaughTale_interAdapter.LaughTaleShowInterstitialAd();
             } else if (nativeReady) {
-                bestNativeAdapter.LaughTaleShowNativeAd();
+                LaughTaleShowCollapsibleAsNative(bestNativeAdapter);
             } else if (interReady) {
+                LaughTaleCloseAllOpenNativeAds();
                 LaughTale_interAdapter.LaughTaleShowInterstitialAd();
             }
         } else if (nativeReady) {
-            bestNativeAdapter.LaughTaleShowNativeAd();
+            LaughTaleShowCollapsibleAsNative(bestNativeAdapter);
         }
     }
 
@@ -696,24 +929,31 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             if (nativeReady && bestNativeAdapter != null) {
                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
                         "===ShowCollapsibleNative(debug cycle " + (phase + 1) + "/" + cycleLength + ")");
-                bestNativeAdapter.LaughTaleShowNativeAd();
+                LaughTaleShowCollapsibleAsNative(bestNativeAdapter);
             } else if (interReady) {
                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
                         "===ShowCollapsibleInter(debug fallback, native not ready, cycle " + (phase + 1) + "/" + cycleLength + ")");
+                LaughTaleCloseAllOpenNativeAds();
                 LaughTale_interAdapter.LaughTaleShowInterstitialAd();
             }
         } else if (interReady) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
                     "===ShowCollapsibleInter(debug cycle " + (phase + 1) + "/" + cycleLength + ")");
+            LaughTaleCloseAllOpenNativeAds();
             LaughTale_interAdapter.LaughTaleShowInterstitialAd();
         } else if (nativeReady && bestNativeAdapter != null) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
                     "===ShowCollapsibleNative(debug fallback, inter not ready, cycle " + (phase + 1) + "/" + cycleLength + ")");
-            bestNativeAdapter.LaughTaleShowNativeAd();
+            LaughTaleShowCollapsibleAsNative(bestNativeAdapter);
         }
     }
 
     private void LaughTaleSmartShowCollapsibleBannerView(boolean needHighValue){
+        if (LaughTaleHasOpenNativeAd()) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
+                    "=====LaughTaleMediatonManager", "===ShowCollapsibleSkipped native already showing");
+            return;
+        }
         try {
             LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("collapsibleBanner_should_show",null);
         }catch (Exception e){
@@ -723,7 +963,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         boolean nativeReady = LaughTaleIsNativeReady();
         if (needHighValue) {
             if (nativeReady || interReady) {
-                LaughTaleCloseAllOpenNativeAds();
                 LaughTaleDecideAndShowCollapsibleAd(
                         LaughTaleGetBestNativeAdapter(),
                         LaughTale_interAdapter != null ? LaughTale_interAdapter.LaughTaleGetADPrice() : 0.0,
@@ -731,14 +970,13 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             }
         } else {
             if (nativeReady || interReady) {
-                LaughTaleCloseAllOpenNativeAds();
                 if (LaughTaleToolsManager.instance().LaughTale_isDebug) {
                     LaughTaleDecideAndShowCollapsibleAdDebug(
                             LaughTaleGetBestNativeAdapter(), interReady, nativeReady);
                 } else if (nativeReady) {
                     LaughTaleNativeAdapter bestNativeAdapter = LaughTaleGetBestNativeAdapter();
                     if (bestNativeAdapter != null) {
-                        bestNativeAdapter.LaughTaleShowNativeAd();
+                        LaughTaleShowCollapsibleAsNative(bestNativeAdapter);
                     }
                 }
             }
@@ -757,57 +995,350 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     //////////////////////////////////////////////////////////////////////Splash////////////////////////////////////////////////////////////////////////////////
 
-    public void LaughTaleShowSplashADWithLifeTime(){
-        if (LaughTale_needPopAD){
-            if (LaughTale_sessionLaunchCnt == 0){
-                LaughTale_sessionLaunchCnt++;
-                return;
-            }
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase","showSplashADWithLifeTime");
-            LaughTaleCloseAllFullscreenAds();
-            if (LaughTaleIsSplashADReady()&& LaughTale_isInPlaying == false){
-                LaughTale_splashAdapter.LaughTaleShowSplashAd("background");
-            }
+    private boolean LaughTaleCanShowSplashByInterval() {
+        if (LaughTale_mSplashLastADTime == 0) {
+            return true;
         }
+        return System.currentTimeMillis() - LaughTale_mSplashLastADTime >= LaughTale_mSplashADInterval;
     }
 
-    public boolean LaughTaleIsSplashADReady(){
-        if (System.currentTimeMillis() - LaughTale_mSplashLastADTime > LaughTale_mSplashADInterval){
-            if (LaughTale_splashAdapter != null){
-                if (LaughTale_splashAdapter.LaughTaleIsADReady()){
-                    return true;
-                }
+    /** 全屏广告（开屏/Native/插屏/激励）关闭后才开始 30s 开屏 CD。 */
+    private void LaughTaleMarkSplashCooldownStarted() {
+        LaughTale_mSplashLastADTime = System.currentTimeMillis();
+    }
+
+    private double LaughTaleGetSplashAppOpenPrice() {
+        if (LaughTale_splashAdapter == null || !LaughTale_splashAdapter.LaughTaleIsADReady()) {
+            return 0;
+        }
+        return LaughTale_splashAdapter.LaughTaleGetADPrice();
+    }
+
+    private boolean LaughTaleHasSplashCandidateReady() {
+        return LaughTaleGetSplashAppOpenPrice() > 0;
+    }
+
+    private void LaughTaleNotifySplashOpen() {
+        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_SPLASH_OPEN");
+    }
+
+    private void LaughTaleNotifySplashClose() {
+        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_SPLASH_CLOSE");
+    }
+
+    private void LaughTaleDispatchRewardCloseCallbacksNow() {
+        if (LaughTale_rewardCloseDispatched) {
+            return;
+        }
+        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_CLOSE");
+        LaughTale_rewardCloseDispatched = true;
+    }
+
+    private void LaughTaleDispatchInterstitialCloseCallbackNow() {
+        if (LaughTale_interstitialCloseDispatched) {
+            return;
+        }
+        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_INTERSTITIAL_CLOSE");
+        LaughTale_interstitialCloseDispatched = true;
+    }
+
+    private void LaughTaleDispatchNativeCloseCallbackNow() {
+        if (LaughTale_nativeCloseDispatched) {
+            return;
+        }
+        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_NATIVE_CLOSE");
+        LaughTale_nativeCloseDispatched = true;
+    }
+
+    /** 激励/插屏/Native 展示中或开屏展示中时不播开屏 */
+    private boolean LaughTaleIsBlockingSplash() {
+        if (LaughTaleIsSplashAdShowing()) {
+            return true;
+        }
+        if (LaughTale_showingRewardAsNative || LaughTale_showingCollapsibleAsNative) {
+            return true;
+        }
+        if (LaughTale_rewardVideoInSession || LaughTale_interstitialInSession) {
+            return true;
+        }
+        if (LaughTale_interAdapter != null && LaughTale_interAdapter.LaughTaleIsShowing()) {
+            return true;
+        }
+        if (LaughTale_rewardAdapter != null && LaughTale_rewardAdapter.LaughTaleIsShowing()) {
+            return true;
+        }
+        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+            if (adapter.LaughTale_isOpen) {
+                return true;
             }
         }
         return false;
     }
 
-    public void LaughTaleShowSplashADWithUnity(String scene){
-        if (LaughTale_splashAdapter == null || !LaughTale_needPopAD) {
-            return;
-        }
-        if (LaughTaleIsSplashADReady()) {
-                LaughTaleCloseAllFullscreenAds();
-                try {
-                    JSONObject object = new JSONObject();
-                    object.put("scene", scene);
-                    LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("splash_show", object.toString());
-                } catch (Exception e) {
-                }
-                LaughTale_splashAdapter.LaughTaleShowSplashAd(scene);
-            } else {
-                LaughTale_splashAdapter.LaughTale_autoShow = true;
-                LaughTaleLoadSplashAD();
-            }
+    private void LaughTaleScheduleSplashWaitTimeout() {
+        mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
+        mainHandler.postDelayed(coldSplashTimeoutRunnable, COLD_SPLASH_WAIT_TIMEOUT_MS);
     }
 
-    public void LaughTaleCancelSplashADWithUnity(){
-        if (LaughTale_splashAdapter != null){
+    private void LaughTaleFinishColdStartSplashFlow() {
+        LaughTale_unityColdSplashPending = false;
+        LaughTale_coldSplashHandled = true;
+        LaughTale_allowHotStartSplash = true;
+    }
+
+    private boolean LaughTaleShouldBlockHotStartByPlayingState() {
+        return LaughTale_isInPlaying;
+    }
+
+    private void LaughTaleFinishHotStartSplashAttemptNotReady() {
+        LaughTale_hotStartSplashPending = false;
+        mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
+        if (LaughTale_splashAdapter != null) {
             LaughTale_splashAdapter.LaughTale_autoShow = false;
         }
     }
 
-    private void LaughTaleLoadSplashAD(){
+    private void LaughTaleScheduleHotStartSplashWaitTimeout() {
+        mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
+        mainHandler.postDelayed(hotStartSplashTimeoutRunnable, COLD_SPLASH_WAIT_TIMEOUT_MS);
+    }
+
+    /** SDK 热启动：回前台时由生命周期触发，仅 App Open。 */
+    private void LaughTaleTryShowHotStartSplash() {
+        if (!LaughTale_allowHotStartSplash || !LaughTale_needPopAD || LaughTale_isDestroyed
+                || !LaughTale_isAppForeground || !LaughTale_wentToBackground) {
+            return;
+        }
+        if (LaughTale_unityColdSplashPending || LaughTaleShouldBlockHotStartByPlayingState()) {
+            return;
+        }
+        if (LaughTaleIsBlockingSplash()) {
+            LaughTale_wentToBackground = false;
+            return;
+        }
+        if (!LaughTaleCanShowSplashByInterval()) {
+            LaughTale_wentToBackground = false;
+            return;
+        }
+        LaughTale_wentToBackground = false;
+        if (LaughTaleHasSplashCandidateReady()) {
+            LaughTaleShowAppOpenSplash(LAUGHTALE_HOT_START_SPLASH_SCENE);
+            return;
+        }
+        if (LaughTale_splashAdapter == null) {
+            return;
+        }
+        LaughTale_hotStartSplashPending = true;
+        LaughTale_splashAdapter.LaughTale_pendingScene = LAUGHTALE_HOT_START_SPLASH_SCENE;
+        LaughTale_splashAdapter.LaughTale_autoShow = true;
+        LaughTaleLoadSplashAD();
+        LaughTaleScheduleHotStartSplashWaitTimeout();
+    }
+
+    private void LaughTaleTryShowHotStartSplashAfterLoad(String scene) {
+        if (!LaughTale_hotStartSplashPending || !LaughTale_allowHotStartSplash
+                || !LaughTale_needPopAD || LaughTale_isDestroyed) {
+            LaughTaleFinishHotStartSplashAttemptNotReady();
+            return;
+        }
+        if (LaughTaleIsBlockingSplash() || !LaughTaleCanShowSplashByInterval()) {
+            LaughTale_wentToBackground = false;
+            LaughTaleFinishHotStartSplashAttemptNotReady();
+            return;
+        }
+        if (!LaughTaleHasSplashCandidateReady()) {
+            LaughTaleFinishHotStartSplashAttemptNotReady();
+            return;
+        }
+        LaughTale_hotStartSplashPending = false;
+        mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
+        LaughTaleShowAppOpenSplash(scene != null ? scene : LAUGHTALE_HOT_START_SPLASH_SCENE);
+    }
+
+    private void LaughTaleTryShowUnityColdSplash(String scene) {
+        if (!LaughTale_unityColdSplashPending || LaughTale_coldSplashHandled
+                || !LaughTale_needPopAD || LaughTale_isDestroyed) {
+            return;
+        }
+        if (LaughTaleIsBlockingSplash()) {
+            LaughTaleFinishColdStartSplashFlow();
+            return;
+        }
+        if (!LaughTaleCanShowSplashByInterval()) {
+            LaughTaleFinishColdStartSplashFlow();
+            return;
+        }
+        if (LaughTaleHasSplashCandidateReady()) {
+            LaughTaleShowAppOpenSplash(scene != null ? scene : LaughTale_unityColdSplashScene);
+            return;
+        }
+        if (LaughTale_splashAdapter != null) {
+            LaughTale_splashAdapter.LaughTale_pendingScene = scene != null ? scene : LaughTale_unityColdSplashScene;
+            LaughTale_splashAdapter.LaughTale_autoShow = true;
+            LaughTaleLoadSplashAD();
+            LaughTaleScheduleSplashWaitTimeout();
+        }
+    }
+
+    private void LaughTaleResumeSplashOnForeground() {
+        if (LaughTale_unityColdSplashPending && !LaughTale_coldSplashHandled) {
+            LaughTaleTryShowUnityColdSplash(LaughTale_unityColdSplashScene);
+            return;
+        }
+        LaughTaleTryShowHotStartSplash();
+    }
+
+    /** 等 onPause 里 runOnUiThread 关 Native 的回调跑完，再决策热启动开屏，避免先于 CD 写入触发开屏。 */
+    private void LaughTaleResumeSplashOnForegroundDeferred() {
+        mainHandler.post(this::LaughTaleResumeSplashOnForeground);
+    }
+
+    /** 冷/热启动开屏：仅 App Open，不与 Native 比价。 */
+    private void LaughTaleShowAppOpenSplash(String scene) {
+        if (!LaughTale_needPopAD || LaughTale_isDestroyed) {
+            if (LaughTale_unityColdSplashPending) {
+                LaughTaleFinishColdStartSplashFlow();
+            }
+            LaughTaleFinishHotStartSplashAttemptNotReady();
+            return;
+        }
+        if (LaughTaleIsBlockingSplash()) {
+            if (LaughTale_unityColdSplashPending) {
+                LaughTaleFinishColdStartSplashFlow();
+            } else {
+                LaughTale_wentToBackground = false;
+                LaughTaleFinishHotStartSplashAttemptNotReady();
+            }
+            return;
+        }
+        if (!LaughTaleCanShowSplashByInterval()) {
+            if (LaughTale_unityColdSplashPending) {
+                LaughTaleFinishColdStartSplashFlow();
+            }
+            LaughTale_wentToBackground = false;
+            LaughTaleFinishHotStartSplashAttemptNotReady();
+            return;
+        }
+        if (LaughTale_splashAdapter == null) {
+            LaughTaleFinishHotStartSplashAttemptNotReady();
+            if (LaughTale_unityColdSplashPending) {
+                LaughTaleScheduleSplashWaitTimeout();
+            }
+            return;
+        }
+        if (LaughTaleGetSplashAppOpenPrice() <= 0) {
+            if (LaughTale_unityColdSplashPending) {
+                LaughTale_splashAdapter.LaughTale_autoShow = true;
+                LaughTale_splashAdapter.LaughTale_pendingScene = scene;
+                LaughTaleLoadSplashAD();
+                LaughTaleScheduleSplashWaitTimeout();
+            } else {
+                LaughTaleFinishHotStartSplashAttemptNotReady();
+            }
+            return;
+        }
+        try {
+            JSONObject object = new JSONObject();
+            object.put("scene", scene);
+            LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("splash_show", object.toString());
+        } catch (Exception ignored) {
+        }
+        LaughTale_unityColdSplashPending = false;
+        mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
+        LaughTale_splashSessionActive = true;
+        LaughTale_hotStartSplashPending = false;
+        mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
+        LaughTale_splashAdapter.LaughTaleShowSplashAd(scene);
+    }
+
+    private void LaughTaleFinishSplashSession(boolean applyCooldown) {
+        mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
+        mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
+        if (applyCooldown) {
+            LaughTaleMarkSplashCooldownStarted();
+        }
+        LaughTale_unityColdSplashPending = false;
+        LaughTale_coldSplashHandled = true;
+        LaughTale_allowHotStartSplash = true;
+        LaughTale_hotStartSplashPending = false;
+        LaughTale_splashSessionActive = false;
+        LaughTale_splashOpenDispatched = false;
+        LaughTaleSyncBannerVisibility();
+    }
+
+    @Override
+    public void LaughTaleOnSplashAdDisplayFailed() {
+        if (LaughTale_splashOpenDispatched) {
+            LaughTaleOnFullscreenAdClosed();
+            LaughTaleNotifySplashClose();
+            LaughTaleFinishSplashSession(true);
+            return;
+        }
+        LaughTale_splashSessionActive = false;
+        LaughTaleFinishHotStartSplashAttemptNotReady();
+        if (LaughTale_unityColdSplashPending) {
+            LaughTaleFinishColdStartSplashFlow();
+        } else if (!LaughTale_coldSplashHandled) {
+            LaughTale_allowHotStartSplash = true;
+        }
+        LaughTaleSyncBannerVisibility();
+    }
+
+    /** 兼容 Unity 旧接口；热启动开屏由 SDK 生命周期 onResume 托管。 */
+    public void LaughTaleShowSplashADWithLifeTime() {
+    }
+
+    public boolean LaughTaleIsSplashADReady() {
+        return LaughTaleHasSplashCandidateReady();
+    }
+
+    /** Unity 冷启动：init 成功后调用一次即可。 */
+    public void LaughTaleShowSplashADWithUnity(String scene) {
+        if (LaughTale_coldSplashHandled || LaughTale_splashAdapter == null || !LaughTale_needPopAD) {
+            LaughTaleFinishColdStartSplashFlow();
+            return;
+        }
+        LaughTale_unityColdSplashScene = scene != null ? scene : "launch";
+        if (LaughTaleIsBlockingSplash()) {
+            LaughTaleFinishColdStartSplashFlow();
+            return;
+        }
+        if (!LaughTaleCanShowSplashByInterval()) {
+            LaughTaleFinishColdStartSplashFlow();
+            return;
+        }
+        LaughTale_unityColdSplashPending = true;
+        if (LaughTaleHasSplashCandidateReady()) {
+            LaughTaleShowAppOpenSplash(LaughTale_unityColdSplashScene);
+            return;
+        }
+        LaughTale_splashAdapter.LaughTale_pendingScene = LaughTale_unityColdSplashScene;
+        LaughTale_splashAdapter.LaughTale_autoShow = true;
+        LaughTaleLoadSplashAD();
+        LaughTaleScheduleSplashWaitTimeout();
+    }
+
+    public void LaughTaleCancelSplashADWithUnity() {
+        if (LaughTale_splashAdapter != null) {
+            LaughTale_splashAdapter.LaughTale_autoShow = false;
+        }
+        LaughTale_unityColdSplashPending = false;
+        mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
+        LaughTaleFinishColdStartSplashFlow();
+    }
+
+    @Override
+    public void LaughTaleOnSplashAdReadyForAutoShow(String scene) {
+        if (LaughTale_unityColdSplashPending) {
+            LaughTaleTryShowUnityColdSplash(scene != null ? scene : LaughTale_unityColdSplashScene);
+            return;
+        }
+        if (LaughTale_hotStartSplashPending) {
+            LaughTaleTryShowHotStartSplashAfterLoad(scene);
+        }
+    }
+
+    private void LaughTaleLoadSplashAD() {
         if (LaughTale_splashAdapter == null) {
             return;
         }
@@ -816,22 +1347,26 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     @Override
     public void LaughTaleOnSplashAdClosed() {
-        LaughTale_mSplashLastADTime = System.currentTimeMillis();
         LaughTaleOnFullscreenAdClosed();
-        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_SPLASH_CLOSE");
+        LaughTaleNotifySplashClose();
+        LaughTaleFinishSplashSession(true);
     }
 
     @Override
     public void LaughTaleOnSplashAdDisplayed() {
+        LaughTale_splashOpenDispatched = true;
         LaughTaleOnFullscreenAdShow();
-        LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_SPLASH_OPEN");
+        LaughTaleNotifySplashOpen();
     }
 
-    public void LaughTaleReportIsPlaying(boolean isPlaying){
+    public void LaughTaleReportIsPlaying(boolean isPlaying) {
         LaughTale_isInPlaying = isPlaying;
     }
 
     //////////////////////////////////////////////////////////////////////Lifecycle////////////////////////////////////////////////////////////////////////////////
+
+    public void LaughTaleOnUserLeaveHint() {
+    }
 
     public void LaughTaleOnAppStart(Activity activity) {
         LaughTale_activity = activity;
@@ -855,72 +1390,123 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
             adapter.LaughTale_activity = activity;
         }
-        LaughTaleCloseAllFullscreenAds();
-        LaughTaleTryShowPendingUnitySplash();
+        if (LaughTale_sessionLaunchCnt == 0) {
+            LaughTale_sessionLaunchCnt++;
+            return;
+        }
+        LaughTaleSyncBannerVisibility();
+        LaughTaleResumeSplashOnForegroundDeferred();
     }
 
     public void LaughTaleOnAppResume() {
         LaughTale_isAppForeground = true;
-        LaughTaleCloseAllFullscreenAds();
-        if (LaughTale_bannerAdapter != null) {
-            LaughTale_bannerAdapter.LaughTaleResumeAutoRefresh();
-        }
-        if (LaughTale_mrecAdapter != null) {
+        LaughTaleSyncBannerVisibility();
+        if (LaughTale_wentToBackground) {
+            LaughTaleHideMRECBannerView();
+        } else if (LaughTale_mrecAdapter != null) {
             LaughTale_mrecAdapter.LaughTaleResumeAutoRefresh();
         }
-        LaughTaleTryShowPendingUnitySplash();
+        LaughTaleResumeSplashOnForegroundDeferred();
     }
 
-    /** 切后台时关闭正在展示的全屏 Native，与 0611bk onActivityPaused 行为一致。 */
+    private void LaughTaleHideMrecOnBackgroundIfNeeded() {
+        if (LaughTale_mrecAdapter == null) {
+            return;
+        }
+        if (LaughTale_mrecAdapter.LaughTaleIsVisible() || LaughTale_mrecAdapter.LaughTaleIsShowRequested()) {
+            LaughTaleHideMRECBannerView();
+        }
+    }
+
     public void LaughTaleOnAppPause() {
         if (LaughTale_isDestroyed) {
             return;
         }
-        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
-            if (adapter.LaughTale_isOpen) {
-                LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
-                        "=====LaughTaleMediatonManager", "===close native on app pause");
-                LaughTaleCloseAllOpenNativeAds();
-                return;
-            }
+        LaughTaleHideAllNativeAdsOnBackground();
+        LaughTaleHideMrecOnBackgroundIfNeeded();
+    }
+
+    private void LaughTaleCancelPendingHotSplashOnBackground() {
+        if (!LaughTale_hotStartSplashPending) {
+            return;
+        }
+        LaughTaleFinishHotStartSplashAttemptNotReady();
+    }
+
+    private void LaughTaleCancelPendingColdSplashOnBackground() {
+        if (!LaughTale_unityColdSplashPending) {
+            return;
+        }
+        LaughTale_unityColdSplashPending = false;
+        LaughTale_coldSplashHandled = true;
+        LaughTale_allowHotStartSplash = true;
+        mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
+        if (LaughTale_splashAdapter != null) {
+            LaughTale_splashAdapter.LaughTale_autoShow = false;
         }
     }
 
-    private void LaughTaleTryShowPendingUnitySplash() {
-        if (!LaughTale_isAppForeground || LaughTale_isDestroyed
-                || LaughTale_splashAdapter == null || !LaughTale_needPopAD) {
-            return;
+    private boolean LaughTaleIsSplashAdShowing() {
+        if (LaughTale_splashSessionActive) {
+            return true;
         }
-        if (!LaughTale_splashAdapter.LaughTale_autoShow) {
-            return;
+        return LaughTale_splashAdapter != null && LaughTale_splashAdapter.LaughTaleIsShowing();
+    }
+
+    private boolean LaughTaleIsFullscreenAdShowing() {
+        if (LaughTale_interAdapter != null && LaughTale_interAdapter.LaughTaleIsShowing()) {
+            return true;
         }
-        if (!LaughTaleIsSplashADReady()) {
-            return;
+        if (LaughTale_rewardAdapter != null && LaughTale_rewardAdapter.LaughTaleIsShowing()) {
+            return true;
         }
-        LaughTaleCloseAllFullscreenAds();
-        LaughTale_splashAdapter.LaughTale_autoShow = false;
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
-                "=====LaughTaleMediatonManager", "===tryShowPendingUnitySplash");
-        LaughTale_splashAdapter.LaughTaleShowSplashAd("pending");
+        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+            if (adapter.LaughTale_isOpen) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void LaughTaleHideAllNativeAdsOnBackground() {
+        boolean rewardNativeShowing = LaughTale_showingRewardAsNative;
+        if (rewardNativeShowing && !LaughTale_rewardCompleteDispatched) {
+            LaughTaleSendUnityMsg("LaughTaleADManager", "LaughTaleCallback", "LaughTale_REWARD_COMPLETE");
+            LaughTale_rewardCompleteDispatched = true;
+        }
+        for (LaughTaleNativeAdapter adapter : LaughTale_nativeAdapterList) {
+            if (!adapter.LaughTale_isOpen) {
+                continue;
+            }
+            adapter.LaughTaleCloseNativeAdOnBackground();
+        }
+        if (rewardNativeShowing) {
+            LaughTaleDispatchRewardCloseCallbacksNow();
+        }
     }
 
     public void LaughTaleOnAppStop() {
-        mainHandler.removeCallbacks(mrecHideRunnable);
-        if (LaughTale_bannerAdapter != null) {
-            LaughTale_bannerAdapter.LaughTalePauseAutoRefresh();
-        }
-        if (LaughTale_mrecAdapter != null) {
-            LaughTale_mrecAdapter.LaughTalePauseAutoRefresh();
-        }
         LaughTale_isAppForeground = false;
+        LaughTale_wentToBackground = true;
+        mainHandler.removeCallbacks(mrecHideRunnable);
+        LaughTaleCancelPendingColdSplashOnBackground();
+        LaughTaleCancelPendingHotSplashOnBackground();
+        LaughTaleHideAllNativeAdsOnBackground();
+        LaughTaleSyncBannerVisibility();
+        LaughTaleHideMrecOnBackgroundIfNeeded();
     }
 
     public void LaughTaleOnAppDestroy(Activity activity) {
         LaughTale_isAppForeground = false;
         LaughTale_isDestroyed = true;
+        LaughTale_wentToBackground = false;
         mainHandler.removeCallbacks(mrecHideRunnable);
         mainHandler.removeCallbacks(bannerLoadRunnable);
         mainHandler.removeCallbacks(mrecLoadRunnable);
+        mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
+        mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
+        LaughTaleStopAdTick();
+        LaughTale_unityColdSplashPending = false;
         if (LaughTale_activity == activity) {
             LaughTale_activity = null;
         }
@@ -929,9 +1515,11 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     //////////////////////////////////////////////////////////////////////Unity交互////////////////////////////////////////////////////////////////////////////////
 
     private void LaughTaleSendUnityMsg(String gamaObject, String methodName, String data) {
+        if ("LaughTaleCallback".equals(methodName) && LaughTale_debugCallbackListener != null && data != null) {
+            LaughTale_debugCallbackListener.onCallback(data);
+        }
         LaughTaleUnityBridge.send(gamaObject, methodName, data);
     }
-
     //////////////////////////////////////////////////////////////////////tools////////////////////////////////////////////////////////////////////////////////
 
     public void LaughTaleSetUserNoPopAd(){
@@ -942,6 +1530,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             LaughTale_dataPrefs.edit().putInt("noPop", 1).apply();
         }
         LaughTale_needPopAD = false;
+        LaughTale_bannerEnabled = false;
         //关闭现在的广告
         LaughTaleHideBannerView();
         LaughTaleHideMRECBannerView();
@@ -1011,6 +1600,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     public boolean LaughTaleDebugIsSplashReady() {
-        return LaughTale_splashAdapter != null && LaughTale_splashAdapter.LaughTaleIsADReady();
+        return LaughTaleHasSplashCandidateReady();
     }
 }

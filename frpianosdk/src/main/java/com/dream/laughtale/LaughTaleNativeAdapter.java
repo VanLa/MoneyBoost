@@ -1,23 +1,21 @@
 package com.dream.laughtale;
 
 import android.app.Activity;
+import android.content.Context;
 import android.graphics.Color;
-import android.os.Handler;
-import android.os.Looper;
-import android.view.Gravity;
+import android.os.CountDownTimer;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.constraintlayout.widget.ConstraintLayout;
+
 import com.applovin.mediation.MaxAd;
-import com.applovin.mediation.MaxAdFormat;
 import com.applovin.mediation.MaxAdRevenueListener;
 import com.applovin.mediation.MaxError;
-import com.applovin.sdk.AppLovinSdkUtils;
 import com.applovin.mediation.nativeAds.MaxNativeAd;
 import com.applovin.mediation.nativeAds.MaxNativeAdListener;
 import com.applovin.mediation.nativeAds.MaxNativeAdLoader;
@@ -28,37 +26,76 @@ import org.jetbrains.annotations.Nullable;
 
 public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
 
-    private static final int LAUGHTALE_CLOSE_SIZE_DP = 25;
-    private static final int LAUGHTALE_CLOSE_MARGIN_TOP_DP = 10;
-    private static final int LAUGHTALE_CLOSE_MARGIN_START_DP = 20;
-    private static final int LAUGHTALE_DELAY_WIDTH_DP = 35;
-    private static final int LAUGHTALE_DELAY_HEIGHT_DP = 25;
-    /** Meta 顶栏高度，与竞品 FrameLayout1 一致 */
-    private static final int LAUGHTALE_META_HEADER_HEIGHT_DP = 52;
-    /** Meta 关闭按钮底边距，与竞品一致：关闭按钮底部到广告层顶部 = 5dp */
-    private static final int LAUGHTALE_META_CLOSE_MARGIN_BOTTOM_DP = 5;
-    private static int LaughTale_debugNativeTemplateIndex = 0;
+    private enum LoadState {
+        UNLOAD,
+        LOADING,
+        LOADED
+    }
+
+    private static final float COUNTDOWN_MIN_SIZE_DP = 25f;
+    private static final int COUNTDOWN_SECONDS = 3;
 
     private MaxNativeAdLoader LaughTale_nativeAdLoader;
     private MaxNativeAdView LaughTale_nativeAdView;
     private MaxAd LaughTale_nativeAd;
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
-    private int LaughTale_nativeRetryAttempt;
     public LaughTaleNativeListener LaughTale_nativeListener;
     private double LaughTale_adPrice = 0;
-    private Button controlBtn;
-    private int delayTime = 3;
-    private TextView delayView;
     private View adView;
-    private LinearLayout LaughTale_root;
+    private Button controlBtn;
+    private TextView delayView;
+    private FrameLayout LaughTale_overlayRoot;
     public boolean LaughTale_isOpen = false;
     private boolean LaughTale_isMetaNetwork = false;
-    private boolean LaughTale_useMetaTemplate = false;
-    private Button LaughTale_metaHeaderCloseBtn;
-    private TextView LaughTale_metaHeaderDelayView;
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private Runnable countdownRunnable;
+    private LoadState LaughTale_loadState = LoadState.UNLOAD;
+    private final NativeAdListener nativeAdListener = new NativeAdListener();
+    private boolean LaughTale_countdownFinished = false;
+    private CountDownTimer countdownTimer;
+
+    public boolean LaughTaleIsCountdownFinished() {
+        return LaughTale_countdownFinished;
+    }
+
+    public boolean LaughTaleIsOpen() {
+        return LaughTale_isOpen;
+    }
+
+    public boolean LaughTaleIsLoading() {
+        return LaughTale_loadState == LoadState.LOADING;
+    }
+
+    /** 对齐竞品 AdInst.tick：仅 UNLOAD 时由外层 5s tick 触发 load。 */
+    public void LaughTaleTickReload() {
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_isOpen || LaughTale_loadState == LoadState.LOADING) {
+            return;
+        }
+        if (LaughTale_loadState != LoadState.UNLOAD) {
+            return;
+        }
+        LaughTaleLoadNativeAdView();
+    }
+
+    public void LaughTaleCloseNativeAdOnBackground() {
+        LaughTaleHideView(false, true, false);
+    }
+
+    public void LaughTaleDestroyNativeInventoryOnly() {
+        if (LaughTale_activity == null) {
+            return;
+        }
+        LaughTale_activity.runOnUiThread(() -> {
+            cancelCountdown();
+            detachFromParent(LaughTale_overlayRoot);
+            LaughTale_isOpen = false;
+            clearLoadedInventory();
+            LaughTale_loadState = LoadState.UNLOAD;
+            LaughTaleLoadNativeAdView();
+        });
+    }
 
     private static boolean isMetaNetwork(String networkName) {
         if (networkName == null) {
@@ -68,123 +105,23 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
         return lower.contains("facebook") || lower.contains("meta");
     }
 
-    private boolean resolveUseMetaTemplate() {
-        if (LaughTaleToolsManager.instance().LaughTale_isDebug) {
-            boolean useMetaTemplate = LaughTale_debugNativeTemplateIndex % 2 == 0;
-            LaughTale_debugNativeTemplateIndex++;
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
-                    "=========", "NativeTemplateDebug useMetaTemplate=" + useMetaTemplate);
-            return useMetaTemplate;
+    private void refreshMetaNetworkFlag() {
+        if (LaughTale_nativeAd == null) {
+            LaughTale_isMetaNetwork = false;
+            return;
         }
+        LaughTale_isMetaNetwork = isMetaNetwork(LaughTale_nativeAd.getNetworkName());
+    }
+
+    private boolean isMetaAd() {
         return LaughTale_isMetaNetwork;
     }
 
-    private Button getActiveCloseBtn() {
-        return LaughTale_useMetaTemplate ? LaughTale_metaHeaderCloseBtn : controlBtn;
-    }
-
-    private TextView getActiveDelayView() {
-        return LaughTale_useMetaTemplate ? LaughTale_metaHeaderDelayView : delayView;
-    }
-
-    private void resetAdMediaTopMargin() {
-        if (LaughTale_nativeAdView == null || LaughTale_activity == null) {
-            return;
-        }
-        View mediaView = LaughTale_nativeAdView.findViewById(R.id.ad_media);
-        if (mediaView == null) {
-            return;
-        }
-        ViewGroup.LayoutParams layoutParams = mediaView.getLayoutParams();
-        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) {
-            return;
-        }
-        ViewGroup.MarginLayoutParams marginLayoutParams = (ViewGroup.MarginLayoutParams) layoutParams;
-        if (marginLayoutParams.topMargin != 0) {
-            marginLayoutParams.topMargin = 0;
-            mediaView.setLayoutParams(marginLayoutParams);
-        }
-    }
-
-    private void setInternalCloseDelayVisible(boolean visible) {
-        if (controlBtn != null) {
-            controlBtn.setVisibility(View.GONE);
-        }
-        if (delayView != null) {
-            delayView.setVisibility(visible ? View.VISIBLE : View.GONE);
-        }
-    }
-
-    private View createMetaHeaderBar() {
-        int headerHeightPx = AppLovinSdkUtils.dpToPx(LaughTale_activity, LAUGHTALE_META_HEADER_HEIGHT_DP);
-        int closeSizePx = AppLovinSdkUtils.dpToPx(LaughTale_activity, LAUGHTALE_CLOSE_SIZE_DP);
-        int delayWidthPx = AppLovinSdkUtils.dpToPx(LaughTale_activity, LAUGHTALE_DELAY_WIDTH_DP);
-        int delayHeightPx = AppLovinSdkUtils.dpToPx(LaughTale_activity, LAUGHTALE_DELAY_HEIGHT_DP);
-        int marginStartPx = AppLovinSdkUtils.dpToPx(LaughTale_activity, LAUGHTALE_CLOSE_MARGIN_START_DP);
-        int marginBottomPx = AppLovinSdkUtils.dpToPx(LaughTale_activity, LAUGHTALE_META_CLOSE_MARGIN_BOTTOM_DP);
-
-        FrameLayout header = new FrameLayout(LaughTale_activity);
-        header.setBackgroundColor(Color.BLACK);
-
-        LaughTale_metaHeaderCloseBtn = new Button(LaughTale_activity);
-        LaughTale_metaHeaderCloseBtn.setBackgroundResource(R.mipmap.ad_close);
-        LaughTale_metaHeaderCloseBtn.setVisibility(View.GONE);
-        LaughTale_metaHeaderCloseBtn.setOnClickListener(v -> LaughTaleHideView());
-        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(closeSizePx, closeSizePx);
-        closeParams.gravity = Gravity.BOTTOM | Gravity.START;
-        closeParams.setMarginStart(marginStartPx);
-        closeParams.bottomMargin = marginBottomPx;
-        header.addView(LaughTale_metaHeaderCloseBtn, closeParams);
-
-        LaughTale_metaHeaderDelayView = new TextView(LaughTale_activity);
-        LaughTale_metaHeaderDelayView.setTextColor(0xFF666666);
-        LaughTale_metaHeaderDelayView.setGravity(Gravity.CENTER);
-        LaughTale_metaHeaderDelayView.setBackgroundResource(R.drawable.back_time);
-        FrameLayout.LayoutParams delayParams = new FrameLayout.LayoutParams(delayWidthPx, delayHeightPx);
-        delayParams.gravity = Gravity.BOTTOM | Gravity.START;
-        delayParams.setMarginStart(marginStartPx);
-        delayParams.bottomMargin = marginBottomPx;
-        header.addView(LaughTale_metaHeaderDelayView, delayParams);
-
-        header.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, headerHeightPx));
-        return header;
-    }
-
-    private void mountNativeAdView() {
-        LinearLayout.LayoutParams fullScreenParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT);
-        if (LaughTale_useMetaTemplate) {
-            LaughTale_root.addView(createMetaHeaderBar(), new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    AppLovinSdkUtils.dpToPx(LaughTale_activity, LAUGHTALE_META_HEADER_HEIGHT_DP)));
-            LinearLayout.LayoutParams adParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-            LaughTale_root.addView(LaughTale_nativeAdView, adParams);
-            return;
-        }
-        LaughTale_root.addView(LaughTale_nativeAdView, fullScreenParams);
-    }
-
-    public void LaughTaleInitNativeAdapter() {
-        LinearLayout linearLayout = new LinearLayout(LaughTale_activity);
-        linearLayout.setOrientation(LinearLayout.VERTICAL);
-        this.LaughTale_root = linearLayout;
-    }
-
-    private void initAdView() {
-        delayTime = 3;
-        this.adView = LayoutInflater.from(LaughTale_activity).inflate(R.layout.laughtale_max_native, (ViewGroup) null);
-        this.delayView = (TextView) this.adView.findViewById(R.id.delay_time);
-        this.delayView.setText(this.delayTime + "s");
-        this.controlBtn = (Button) this.adView.findViewById(R.id.btn_close);
-        this.controlBtn.setVisibility(View.GONE);
-        this.controlBtn.setOnClickListener(v -> LaughTaleHideView());
-    }
-
     private MaxNativeAdView createNativeAdView() {
-        initAdView();
-        MaxNativeAdViewBinder binder = new MaxNativeAdViewBinder.Builder(this.adView)
+        adView = LayoutInflater.from(LaughTale_activity)
+                .inflate(R.layout.laughtale_max_native, null);
+        initCloseViews();
+        MaxNativeAdViewBinder binder = new MaxNativeAdViewBinder.Builder(adView)
                 .setTitleTextViewId(R.id.ad_headline)
                 .setBodyTextViewId(R.id.ad_body)
                 .setIconImageViewId(R.id.ad_app_icon)
@@ -195,51 +132,94 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
         return new MaxNativeAdView(binder, LaughTale_activity);
     }
 
-    private void startCountdown() {
-        if (countdownRunnable != null) {
-            mainHandler.removeCallbacks(countdownRunnable);
-        }
-        countdownRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (!LaughTale_isOpen) return;
-                TextView activeDelayView = getActiveDelayView();
-                Button activeCloseBtn = getActiveCloseBtn();
-                if (delayTime <= 0) {
-                    if (activeDelayView != null) {
-                        activeDelayView.setVisibility(View.GONE);
-                    }
-                    if (activeCloseBtn != null) {
-                        activeCloseBtn.setVisibility(View.VISIBLE);
-                    }
-                } else {
-                    delayTime--;
-                    if (activeDelayView != null) {
-                        activeDelayView.setText(delayTime + "s");
-                    }
-                    mainHandler.postDelayed(this, 1000L);
-                }
+    private void initCloseViews() {
+        delayView = adView.findViewById(R.id.delay_time);
+        delayView.setVisibility(View.VISIBLE);
+        delayView.setText(COUNTDOWN_SECONDS + "s");
+        controlBtn = adView.findViewById(R.id.btn_close);
+        controlBtn.setVisibility(View.GONE);
+        controlBtn.setOnClickListener(v -> {
+            if (LaughTale_overlayRoot != null) {
+                LaughTale_overlayRoot.removeAllViews();
             }
-        };
-        mainHandler.postDelayed(countdownRunnable, 1000L);
+            LaughTaleHideView(true, false, false);
+        });
     }
 
+    private void applyCloseButtonSize() {
+        if (controlBtn == null || delayView == null || LaughTale_activity == null) {
+            return;
+        }
+        LaughTaleLayoutSize layoutSize = new LaughTaleLayoutSize(LaughTale_activity);
+        float closeSizeDp = isMetaAd() ? layoutSize.closeSizeMeta : layoutSize.closeSize;
+        float countdownSizeDp = Math.max(closeSizeDp, COUNTDOWN_MIN_SIZE_DP);
+        int closePx = dp2px(LaughTale_activity, closeSizeDp);
+
+        ConstraintLayout.LayoutParams closeLp = (ConstraintLayout.LayoutParams) controlBtn.getLayoutParams();
+        closeLp.width = closePx;
+        closeLp.height = closePx;
+        controlBtn.setLayoutParams(closeLp);
+
+        ConstraintLayout.LayoutParams delayLp = (ConstraintLayout.LayoutParams) delayView.getLayoutParams();
+        delayLp.width = dp2px(LaughTale_activity, 1.4f * countdownSizeDp);
+        delayLp.height = dp2px(LaughTale_activity, countdownSizeDp);
+        delayView.setLayoutParams(delayLp);
+        delayView.setTextSize(0.7f * countdownSizeDp);
+    }
+
+    public void LaughTaleInitNativeAdapter() {
+        if (LaughTale_activity == null) {
+            return;
+        }
+        if (LaughTale_overlayRoot == null) {
+            LaughTale_overlayRoot = new FrameLayout(LaughTale_activity);
+            LaughTale_overlayRoot.setClickable(true);
+            LaughTale_overlayRoot.setFocusable(true);
+        }
+    }
+
+    public void LaughTaleRefreshStaleInventoryIfNeeded() {
+        if (LaughTale_isOpen || LaughTale_loadState == LoadState.LOADING) {
+            return;
+        }
+        if (LaughTale_loadState != LoadState.LOADED) {
+            return;
+        }
+        if (LaughTaleCanShowNativeAd()) {
+            return;
+        }
+        LaughTale_loadState = LoadState.UNLOAD;
+        LaughTale_adPrice = 0;
+    }
+
+    /** 对齐竞品 doLoad：每次 load 新建 MaxNativeAdLoader。 */
     public void LaughTaleLoadNativeAdView() {
-        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) return;
-        if (LaughTale_isOpen) return;
-        tryDestroyAd();
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_isOpen || LaughTale_loadState != LoadState.UNLOAD) {
+            return;
+        }
+        clearLoadedInventory();
+        LaughTale_loadState = LoadState.LOADING;
         LaughTale_nativeAdLoader = new MaxNativeAdLoader(LaughTale_ad_unit, LaughTale_activity);
         LaughTale_nativeAdLoader.setRevenueListener(this);
-        LaughTale_nativeAdLoader.setNativeAdListener(new NativeAdListener());
+        LaughTale_nativeAdLoader.setNativeAdListener(nativeAdListener);
         LaughTale_nativeAdLoader.loadAd(createNativeAdView());
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "NativeStartLoad");
     }
 
     public double LaughTaleGetADPrice() {
+        if (LaughTale_loadState != LoadState.LOADED || LaughTale_isOpen) {
+            return 0;
+        }
         return LaughTale_adPrice;
     }
 
     public boolean LaughTaleCanShowNativeAd() {
+        if (LaughTale_loadState != LoadState.LOADED || LaughTale_isOpen) {
+            return false;
+        }
         if (LaughTale_nativeAd == null) {
             return false;
         }
@@ -247,76 +227,108 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
         return nativeAd != null && !nativeAd.isExpired();
     }
 
+    private void notifyNativeAdShowSkipped() {
+        if (LaughTale_nativeListener != null) {
+            LaughTale_nativeListener.LaughTaleOnNativeAdShowSkipped();
+        }
+    }
+
     public void LaughTaleShowNativeAd() {
-        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) return;
-        if (LaughTale_isOpen) return;
-        if (LaughTale_nativeAdView == null || LaughTale_nativeAd == null || LaughTale_root == null) return;
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        if (LaughTale_isOpen) {
+            return;
+        }
+        if (LaughTale_nativeAdView == null || LaughTale_nativeAd == null || LaughTale_loadState != LoadState.LOADED) {
+            notifyNativeAdShowSkipped();
+            return;
+        }
         if (!LaughTaleCanShowNativeAd()) {
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "NativeShowSkipped not ready or expired");
-            LaughTaleLoadNativeAdView();
+            LaughTale_loadState = LoadState.UNLOAD;
+            LaughTale_adPrice = 0;
+            notifyNativeAdShowSkipped();
             return;
         }
         LaughTale_activity.runOnUiThread(() -> {
-            if (LaughTale_isOpen) return;
-            if (LaughTale_nativeAdView == null || LaughTale_root == null) return;
-
+            if (LaughTale_isOpen || LaughTale_nativeAdView == null || LaughTale_loadState != LoadState.LOADED) {
+                notifyNativeAdShowSkipped();
+                return;
+            }
+            if (!LaughTaleCanShowNativeAd()) {
+                notifyNativeAdShowSkipped();
+                return;
+            }
             LaughTale_isOpen = true;
-            LaughTale_adPrice = 0;
-            LaughTale_useMetaTemplate = resolveUseMetaTemplate();
-            resetAdMediaTopMargin();
-            setInternalCloseDelayVisible(!LaughTale_useMetaTemplate);
-
-            detachFromParent(LaughTale_root);
-            detachFromParent(LaughTale_nativeAdView);
-
-            LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT);
-            LaughTale_activity.addContentView(LaughTale_root, layoutParams);
-            LaughTale_root.removeAllViews();
-            LaughTale_root.setOrientation(LinearLayout.VERTICAL);
-            LaughTale_root.setGravity(Gravity.TOP);
-            mountNativeAdView();
-
-            delayTime = 3;
-            TextView activeDelayView = getActiveDelayView();
-            Button activeCloseBtn = getActiveCloseBtn();
-            if (activeDelayView != null) {
-                activeDelayView.setVisibility(View.VISIBLE);
-                activeDelayView.setText(delayTime + "s");
-            }
-            if (activeCloseBtn != null) {
-                activeCloseBtn.setVisibility(View.GONE);
-            }
-            if (countdownRunnable != null) {
-                mainHandler.removeCallbacks(countdownRunnable);
-            }
-            startCountdown();
-
+            LaughTale_countdownFinished = false;
+            showNativeAdWithOverlay();
             if (LaughTale_nativeListener != null) {
                 LaughTale_nativeListener.LaughTaleOnNativeAdDisplayed();
             }
         });
     }
 
-    public void LaughTaleAutoHideNativeAd() {
-        LaughTaleHideView(null);
-    }
+    private void showNativeAdWithOverlay() {
+        refreshMetaNetworkFlag();
+        applyCloseButtonSize();
+        controlBtn.setVisibility(View.GONE);
+        delayView.setVisibility(View.VISIBLE);
+        delayView.setText(COUNTDOWN_SECONDS + "s");
 
-    private void LaughTaleHideView() {
-        LaughTaleHideView(getActiveCloseBtn());
-    }
+        LaughTaleInitNativeAdapter();
+        FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        if (LaughTale_overlayRoot.getParent() == null) {
+            LaughTale_activity.addContentView(LaughTale_overlayRoot, overlayParams);
+        }
+        LaughTale_overlayRoot.setBackgroundColor(Color.TRANSPARENT);
+        LaughTale_overlayRoot.removeAllViews();
+        LaughTale_overlayRoot.addView(LaughTale_nativeAdView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-    private void LaughTaleHideView(View view) {
-        LaughTale_activity.runOnUiThread(() -> {
-            if (!LaughTale_isOpen) return;
-            if (countdownRunnable != null) {
-                mainHandler.removeCallbacks(countdownRunnable);
+        cancelCountdown();
+        countdownTimer = new CountDownTimer(COUNTDOWN_SECONDS * 1000L, 1000L) {
+            @Override
+            public void onTick(long millisUntilFinished) {
+                delayView.setText((millisUntilFinished / 1000) + "s");
             }
-            detachFromParent(LaughTale_root);
+
+            @Override
+            public void onFinish() {
+                LaughTale_countdownFinished = true;
+                delayView.setVisibility(View.GONE);
+                controlBtn.setVisibility(View.VISIBLE);
+            }
+        };
+        countdownTimer.start();
+    }
+
+    public void LaughTaleAutoHideNativeAd() {
+        LaughTaleHideView(true, false, false);
+    }
+
+    private void cancelCountdown() {
+        if (countdownTimer != null) {
+            countdownTimer.cancel();
+            countdownTimer = null;
+        }
+    }
+
+    private void LaughTaleHideView(boolean clickedCloseButton, boolean silentClose, boolean removeOverlayChildrenFirst) {
+        if (LaughTale_activity == null) {
+            return;
+        }
+        LaughTale_activity.runOnUiThread(() -> {
+            if (!LaughTale_isOpen) {
+                return;
+            }
+            cancelCountdown();
+            if (removeOverlayChildrenFirst && LaughTale_overlayRoot != null) {
+                LaughTale_overlayRoot.removeAllViews();
+            }
+            detachFromParent(LaughTale_overlayRoot);
             LaughTale_isOpen = false;
-            LaughTale_metaHeaderCloseBtn = null;
-            LaughTale_metaHeaderDelayView = null;
-            onNativeAdClosed(view != null);
+            onNativeAdClosed(clickedCloseButton, silentClose);
         });
     }
 
@@ -336,24 +348,35 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
         }
     }
 
-    private void onNativeAdClosed(boolean clickedCloseButton) {
+    private void clearLoadedInventory() {
         tryDestroyAd();
         LaughTale_nativeAd = null;
         LaughTale_nativeAdView = null;
         LaughTale_adPrice = 0;
+    }
+
+    /** 对齐竞品 onHide：仅标记 UNLOAD，不 destroy；补货交给 5s tick。 */
+    private void onNativeAdClosed(boolean clickedCloseButton, boolean silentClose) {
+        LaughTale_loadState = LoadState.UNLOAD;
+        LaughTale_adPrice = 0;
         if (LaughTale_nativeListener != null) {
-            LaughTale_nativeListener.LaughTaleOnNativeAdClosed();
+            LaughTale_nativeListener.LaughTaleOnNativeAdClosed(clickedCloseButton, silentClose);
         }
-        mainHandler.postDelayed(this::LaughTaleLoadNativeAdView, 500);
+    }
+
+    private static int dp2px(Context context, float dp) {
+        return (int) ((dp * context.getResources().getDisplayMetrics().density) + 0.5f);
     }
 
     private class NativeAdListener extends MaxNativeAdListener {
         @Override
         public void onNativeAdLoaded(@Nullable final MaxNativeAdView nativeAdView, final MaxAd ad) {
+            if (LaughTale_loadState != LoadState.LOADING) {
+                return;
+            }
             if (LaughTale_nativeAd != null && LaughTale_nativeAdLoader != null) {
                 LaughTale_nativeAdLoader.destroy(LaughTale_nativeAd);
             }
-            LaughTale_nativeRetryAttempt = 0;
             LaughTale_nativeAd = ad;
             LaughTale_nativeAdView = nativeAdView;
             LaughTale_isMetaNetwork = isMetaNetwork(ad.getNetworkName());
@@ -361,32 +384,31 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
             if (LaughTale_adPrice == 0) {
                 LaughTale_adPrice = 0.02;
             }
+            LaughTale_loadState = LoadState.LOADED;
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
                     "=========", "NativeLoaded " + ad.getNetworkName());
+            if (LaughTale_nativeListener != null) {
+                LaughTale_nativeListener.LaughTaleOnNativeAdLoaded();
+            }
         }
 
         @Override
         public void onNativeAdLoadFailed(final String adUnitId, final MaxError error) {
+            if (LaughTale_loadState != LoadState.LOADING) {
+                return;
+            }
+            LaughTale_loadState = LoadState.UNLOAD;
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
                     "=========", "LOADNativeFailed " + error.getMessage());
-            LaughTale_nativeRetryAttempt++;
-            long delay = (long) Math.pow(2, Math.min(6, LaughTale_nativeRetryAttempt));
-            LaughTaleAdRetryScheduler.scheduleSeconds(() -> {
-                if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) return;
-                mainHandler.post(LaughTaleNativeAdapter.this::LaughTaleLoadNativeAdView);
-            }, delay);
         }
 
         @Override
         public void onNativeAdClicked(final MaxAd ad) {
-        }
-
-        @Override
-        public void onNativeAdExpired(final MaxAd ad) {
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "NativeExpired");
-            LaughTale_adPrice = 0;
-            if (!LaughTale_isOpen) {
-                mainHandler.post(LaughTaleNativeAdapter.this::LaughTaleLoadNativeAdView);
+            if (LaughTale_nativeListener != null) {
+                LaughTale_nativeListener.LaughTaleOnNativeAdClicked();
+            }
+            if (LaughTale_isOpen) {
+                LaughTaleHideView(false, false, false);
             }
         }
     }
@@ -396,7 +418,7 @@ public class LaughTaleNativeAdapter implements MaxAdRevenueListener {
         double revenue = maxAd.getRevenue();
         String networkName = maxAd.getNetworkName();
         String adUnitId = maxAd.getAdUnitId();
-        MaxAdFormat adFormat = maxAd.getFormat();
-        LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseRevenue(revenue, adFormat.toString(), networkName, adUnitId);
+        LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseRevenue(
+                revenue, maxAd.getFormat().toString(), networkName, adUnitId);
     }
 }

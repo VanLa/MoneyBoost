@@ -97,7 +97,9 @@ public class LaughTaleRewardVideoAdapter implements MaxRewardedAdListener, MaxAd
 
     @Override
     public void onAdClicked(MaxAd maxAd) {
-
+        if (null != LaughTale_rewardVideoListener) {
+            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClicked();
+        }
     }
 
     @Override
@@ -112,6 +114,14 @@ public class LaughTaleRewardVideoAdapter implements MaxRewardedAdListener, MaxAd
 
     @Override
     public void onAdDisplayFailed(MaxAd maxAd, MaxError maxError) {
+        if (!LaughTale_isShowing) {
+            LaughTaleLoadRewardVideoAd();
+            return;
+        }
+        LaughTale_isShowing = false;
+        if (LaughTale_rewardVideoListener != null) {
+            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClosed();
+        }
         LaughTaleLoadRewardVideoAd();
     }
 
