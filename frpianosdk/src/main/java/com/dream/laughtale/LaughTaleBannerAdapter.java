@@ -126,6 +126,8 @@ public class LaughTaleBannerAdapter {
                     params.height = heightPx;
                     LaughTale_adView.setLayoutParams(params);
                 }
+                // 加载完成后再 Sync：Init 前 Unity 调 ShowBanner 时 adapter 还空，否则会一直 GONE 到插屏关闭
+                LaughTaleMediationManager.getInstance().LaughTaleOnBannerAdLoaded();
             }
         });
     }

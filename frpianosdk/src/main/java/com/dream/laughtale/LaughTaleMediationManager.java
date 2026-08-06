@@ -87,7 +87,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     private static final long LOAD_DELAY_BANNER_LOW_END_MS = 2500L;
     private static final long LOAD_DELAY_MREC_LOW_END_MS = 5000L;
     private static final long AD_TICK_INTERVAL_MS = 5000L;
-    private static final long COLD_SPLASH_WAIT_TIMEOUT_MS = 10000L;
+    private static final long COLD_SPLASH_WAIT_TIMEOUT_MS = 20000L;
 
     private static final String PREF_NATIVE_FULL_INTER_SHOW_COUNT = "native_full_inter_show_count";
     /** 竞品 CountOpenApp：累计冷启动打开次数 */
@@ -183,6 +183,8 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             LaughTale_splashSessionActive = false;
             LaughTale_coldSplashHandled = true;
             LaughTale_allowHotStartSplash = true;
+            // 超时未出开屏时也要恢复 Banner（Unity 常在 Init 前就 ShowBanner）
+            LaughTaleSyncBannerVisibility();
         }
     };
     private final Runnable hotStartSplashTimeoutRunnable = new Runnable() {
@@ -481,6 +483,11 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                                 }
                                 LaughTaleScheduleStaggeredAdLoads();
                                 LaughTaleStartAdTick();
+                                // Unity 常在 Init 完成前就调 ShowSplash / ShowBanner：补排队请求
+                                if (LaughTale_unityColdSplashPending && !LaughTale_coldSplashHandled) {
+                                    LaughTaleTryShowUnityColdSplash(LaughTale_unityColdSplashScene);
+                                }
+                                LaughTaleSyncBannerVisibility();
                             });
                         });
             } catch (Exception e) {
@@ -835,6 +842,11 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             return;
         }
         LaughTale_bannerAdapter.LaughTaleHideBannerView();
+    }
+
+    /** Banner 加载完成后再按 bannerEnabled / 全屏状态 Sync，避免 Init 前 ShowBanner 永久不显示 */
+    public void LaughTaleOnBannerAdLoaded() {
+        LaughTaleSyncBannerVisibility();
     }
 
     private void LaughTaleReconcileFullscreenAdRefCount() {
@@ -1334,6 +1346,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTale_unityColdSplashPending = false;
         LaughTale_coldSplashHandled = true;
         LaughTale_allowHotStartSplash = true;
+        LaughTaleSyncBannerVisibility();
     }
 
     private boolean LaughTaleShouldBlockHotStartByPlayingState() {
@@ -1509,19 +1522,28 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTaleSyncBannerVisibility();
     }
 
-    /** Unity 冷启动：init 成功后调用一次即可。 */
+    /**
+     * Unity 冷启动开屏。理想时机：Init 成功之后；若 Init 前调用会排队，等 Init 后再播。
+     * 注意：不要在 adapter 未就绪时把 coldSplashHandled 置 true，否则冷启动开屏会永久跳过。
+     */
     public void LaughTaleShowSplashADWithUnity(String scene) {
         if (LaughTale_coldSplashHandled || !LaughTale_needPopAD) {
             LaughTaleFinishColdStartSplashFlow();
             return;
         }
-        if (LaughTale_splashAdapter == null
-                || LaughTale_splashKey == null
-                || LaughTale_splashKey.trim().isEmpty()) {
+        LaughTale_unityColdSplashScene = scene != null ? scene : "launch";
+        // 未 Init / 无 adapter：只排队，等 LaughTaleInit 完成后再试
+        if (!LaughTale_isInitSuccess || LaughTale_splashAdapter == null) {
+            LaughTale_unityColdSplashPending = true;
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
+                    "=====LaughTaleMediatonManager",
+                    "===ShowSplash queued until init (isInit=" + LaughTale_isInitSuccess + ")");
+            return;
+        }
+        if (LaughTale_splashKey == null || LaughTale_splashKey.trim().isEmpty()) {
             LaughTaleFinishColdStartSplashFlow();
             return;
         }
-        LaughTale_unityColdSplashScene = scene != null ? scene : "launch";
         if (LaughTaleIsBlockingSplash()) {
             LaughTaleFinishColdStartSplashFlow();
             return;
