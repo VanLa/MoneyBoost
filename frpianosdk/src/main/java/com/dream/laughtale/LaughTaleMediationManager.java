@@ -24,6 +24,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class LaughTaleMediationManager implements LaughTaleInterstitialListener, LaughTaleRewardVideoListener,
         LaughTaleNativeListener, LaughTaleSplashListener {
@@ -131,6 +132,8 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
      */
     private boolean LaughTale_collapsibleDoublePending = false;
     private LaughTaleNativeAdapter LaughTale_pendingCollapsibleDoubleAdapter = null;
+    /** 本轮第一条关闭钮所在侧，供第二条推算：倒计时在其对侧 */
+    private boolean LaughTale_collapsibleFirstCloseOnLeft = false;
     private final Runnable collapsibleDoubleShowRunnable = new Runnable() {
         @Override
         public void run() {
@@ -1166,26 +1169,35 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     /**
-     * @param secondOfPair true=本轮 double 第二条（倒计时+关闭都在左）；
-     *                     false=第一条（倒计时左、关闭右）。不跟全局 CountNativeCollab 绑死，
-     *                     避免历史 count 为奇数时「本轮第一条」错成双左。
+     * @param secondOfPair false=本轮第一条：倒计时随机左右，关闭在对侧；
+     *                     true=第二条：倒计时在第一条关闭的对侧，关闭与倒计时同侧。
      */
     private void LaughTaleShowCollapsibleHalfNative(LaughTaleNativeAdapter adapter, boolean secondOfPair) {
         LaughTale_showingCollapsibleAsNative = true;
         LaughTale_collapsibleShowingAdapter = adapter;
         LaughTaleCloseOtherOpenNativeAds(adapter);
-        boolean closeOnLeft = secondOfPair;
+        boolean countdownOnLeft;
+        boolean closeOnLeft;
+        if (!secondOfPair) {
+            countdownOnLeft = ThreadLocalRandom.current().nextBoolean();
+            closeOnLeft = !countdownOnLeft;
+            LaughTale_collapsibleFirstCloseOnLeft = closeOnLeft;
+        } else {
+            countdownOnLeft = !LaughTale_collapsibleFirstCloseOnLeft;
+            closeOnLeft = countdownOnLeft;
+        }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
                 "===ShowCollapsibleHalf secondOfPair=" + secondOfPair
+                        + " countdownOnLeft=" + countdownOnLeft
                         + " closeOnLeft=" + closeOnLeft
                         + " count=" + LaughTaleGetCountNativeCollab()
                         + " unit=" + adapter.LaughTale_ad_unit);
-        adapter.LaughTaleShowNativeAdHalf(closeOnLeft);
+        adapter.LaughTaleShowNativeAdHalf(countdownOnLeft, closeOnLeft);
     }
 
     /**
      * CollapsibleBanner = 半屏 Native（竞品 ShowNativeCollapsible / ShowNativeCollapsible2）。
-     * 双 ID 时：先播一条（倒计时左/关闭右），关闭后再播另一条（倒计时+关闭都在左）。
+     * 双 ID：第一条倒计时随机边、关闭对侧；第二条倒计时在第一条关闭对侧、关闭与倒计时同侧。
      */
     public void LaughTaleShowCollapsibleBannerView(boolean needHighValue){
         if (LaughTaleHasOpenCollapsibleNative()) {
@@ -1206,7 +1218,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             return;
         }
         LaughTale_collapsibleDoublePending = LaughTalePickReadyCollapsibleNative(adapter) != null;
-        // 本轮第一条固定：倒计时左 / 关闭右
         LaughTaleShowCollapsibleHalfNative(adapter, false);
     }
 

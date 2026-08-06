@@ -42,7 +42,8 @@ import java.util.concurrent.ScheduledFuture;
  * FULLSCREEN：竞品 FSN 全屏 overlay（3s 倒计时 + 灰色 X）
  * HALF：截图模板（黄 Ad + icon/标题在上 + Media + 绿 CTA）；
  * 倒计时灰圆与关闭灰圆：
- * 第一条：倒计时左、关闭右；第二条：倒计时与关闭都在左（先后显示，不重叠可见）
+ * 第一条：倒计时随机左右，关闭在对侧；
+ * 第二条：倒计时在第一条关闭的对侧，关闭与倒计时同侧（先后显示）。
  */
 public class LaughTaleNativeAdapter {
 
@@ -73,10 +74,7 @@ public class LaughTaleNativeAdapter {
     private ImageView halfCloseIcon;
     private View halfCardAction;
     private View halfCardCountdown;
-    /**
-     * true = 第二条：倒计时与关闭都在左；
-     * false = 第一条：倒计时左、关闭右。
-     */
+    private boolean LaughTale_halfCountdownOnLeft = true;
     private boolean LaughTale_halfCloseOnLeft = false;
     private FrameLayout LaughTale_overlayRoot;
     public boolean LaughTale_isOpen = false;
@@ -228,8 +226,8 @@ public class LaughTaleNativeAdapter {
         applyHalfCloseSide();
     }
 
-    /** closeOnLeft=true：第二条倒计时+关闭都在左；false：第一条倒计时左/关闭右。 */
-    public void LaughTaleSetHalfCloseOnLeft(boolean closeOnLeft) {
+    public void LaughTaleSetHalfSides(boolean countdownOnLeft, boolean closeOnLeft) {
+        LaughTale_halfCountdownOnLeft = countdownOnLeft;
         LaughTale_halfCloseOnLeft = closeOnLeft;
         if (LaughTale_activity == null) {
             return;
@@ -241,8 +239,7 @@ public class LaughTaleNativeAdapter {
         if (halfCardAction == null || halfCardCountdown == null) {
             return;
         }
-        // 倒计时始终在左；关闭：第一条右，第二条左（与倒计时同侧，靠显隐先后出现）
-        applyHalfWidgetGravity(halfCardCountdown, true);
+        applyHalfWidgetGravity(halfCardCountdown, LaughTale_halfCountdownOnLeft);
         applyHalfWidgetGravity(halfCardAction, LaughTale_halfCloseOnLeft);
         halfCardCountdown.requestLayout();
         halfCardAction.requestLayout();
@@ -563,8 +560,9 @@ public class LaughTaleNativeAdapter {
         LaughTaleShowNativeAdInternal(DisplayMode.FULLSCREEN);
     }
 
-    /** 半屏展示（底部）；closeOnLeft 对齐竞品 CountNativeCollab 左右切换。 */
-    public void LaughTaleShowNativeAdHalf(boolean closeOnLeft) {
+    /** 半屏展示（底部）；countdown/close 左右由 MediationManager 按 double 规则传入。 */
+    public void LaughTaleShowNativeAdHalf(boolean countdownOnLeft, boolean closeOnLeft) {
+        LaughTale_halfCountdownOnLeft = countdownOnLeft;
         LaughTale_halfCloseOnLeft = closeOnLeft;
         LaughTaleShowNativeAdInternal(DisplayMode.HALF);
     }

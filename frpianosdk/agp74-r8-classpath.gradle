@@ -1,0 +1,12 @@
+// 供 Unity / 宿主根 build.gradle 的 buildscript {} 内 apply：
+//   apply from: '<path-to-sdk>/agp74-r8-classpath.gradle'
+// 或手工复制下面两行。无法打进 AAR，必须由构建工程加载。
+// 修复 AGP 7.4.x mergeExtDex：NullPointerException String.length()（webkit / error_prone 新 jar）
+buildscript {
+    repositories {
+        maven { url "https://storage.googleapis.com/r8-releases/raw" }
+    }
+    dependencies {
+        classpath 'com.android.tools:r8:8.1.56'
+    }
+}

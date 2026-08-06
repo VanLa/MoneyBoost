@@ -3,9 +3,9 @@
   半屏 Native：
   黄 Ad → 倒计时/关闭分列左右（夹在 Ad 与 icon 之间）
   → icon/标题 → Media → CTA；
-  CountNativeCollab：
-  - 第一条：倒计时左、关闭右
-  - 第二条：倒计时与关闭都在左（先后显示）
+  左右规则（运行时 Gravity）：
+  - 第一条：倒计时随机左/右，关闭在对侧
+  - 第二条：倒计时在第一条关闭对侧，关闭与倒计时同侧（先后显示）
 -->
 <com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
