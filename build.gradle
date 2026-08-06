@@ -4,6 +4,7 @@ allprojects {
         repositories {
             google()
             mavenCentral()
+            maven { url "https://storage.googleapis.com/r8-releases/raw" }
             maven { url "https://android-sdk.is.com" }
             maven { url "https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea" }
             maven { url "https://artifact.bytedance.com/repository/pangle" }
@@ -15,6 +16,8 @@ allprojects {
             // See official Gradle and Android Gradle Plugin compatibility table here https://developer.android.com/studio/releases/gradle-plugin#updating-gradle
             // To specify a custom Gradle version in Unity, go do "Preferences > External Tools", uncheck "Gradle Installed with Unity (recommended)" and specify a path to a custom Gradle version
             classpath 'com.android.tools.build:gradle:7.4.2'
+            // AGP 7.4 自带 D8 无法 dex 新依赖（webkit 1.15 / error_prone 2.41 等）；单独升 R8，不升 AGP
+            classpath 'com.android.tools:r8:8.1.56'
             classpath 'com.google.gms:google-services:4.4.2'
             classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.9'
         }

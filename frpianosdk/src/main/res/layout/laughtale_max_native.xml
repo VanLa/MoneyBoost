@@ -1,140 +1,115 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<!-- 对齐竞品 layout_fsn_dialog；AdChoices 由 SDK 自动插入 TOP_RIGHT，勿自建 AdChoicesView -->
+<com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/native_ad_view"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:scrollbars="none">
+    android:background="#000000"
+    android:clipChildren="true"
+    android:clipToPadding="true">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
+        android:id="@+id/media_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_gravity="center"
-        android:background="@android:color/black"
-        android:minHeight="50dp"
-        android:orientation="vertical"
-        android:scrollbars="none">
+        android:layout_gravity="center_vertical" />
 
-        <FrameLayout
-            android:id="@+id/ad_media"
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_gravity="center_horizontal"
-            android:scrollbars="none"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <TextView
-            android:id="@+id/ad_body"
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:layout_marginTop="50dp"
-            android:ellipsize="end"
-            android:maxWidth="200dp"
-            android:singleLine="false"
-            android:textSize="12sp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <Button
-            android:id="@+id/btn_close"
-            android:layout_width="25dp"
-            android:layout_height="25dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginTop="10dp"
-            android:background="@mipmap/laughtale_ad_close"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <TextView
-            android:id="@+id/delay_time"
-            android:layout_width="35dp"
-            android:layout_height="25dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/laughtale_back_time"
-            android:gravity="center"
-            android:textColor="#666666"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:layout_marginEnd="10dp"
-            android:layout_marginBottom="25dp"
-            android:alpha="1"
-            android:background="@drawable/laughtale_native_rounded_corner"
-            android:backgroundTint="#ffffff"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent">
-
-            <ImageView
-                android:id="@+id/ad_app_icon"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_marginStart="10dp"
-                android:layout_marginTop="10dp"
-                android:layout_marginBottom="10dp"
-                android:background="@drawable/laughtale_native_rounded_corner"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintHorizontal_bias="0"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+            android:layout_marginStart="3dp"
+            android:layout_marginEnd="40dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/ad_headline"
+                android:id="@+id/ad_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:background="@drawable/fsn_ad_label_bg"
+                android:gravity="center"
+                android:paddingHorizontal="3dp"
+                android:text="Ad"
+                android:textColor="#c8c8c8"
+                android:textSize="10sp" />
+
+            <!-- 必须 0dp+weight，match_parent 会把 headline 撑出 NativeAdView 触发校验器 -->
+            <TextView
+                android:id="@+id/headline"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="10dp"
-                android:ellipsize="middle"
-                android:gravity="start|center_vertical"
-                android:maxWidth="150dp"
-                android:singleLine="false"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toEndOf="@id/ad_app_icon"
-                app:layout_constraintTop_toTopOf="parent" />
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:lines="1"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
-            <Button
-                android:id="@+id/ad_call_to_action"
-                android:layout_width="100dp"
-                android:layout_height="35dp"
-                android:layout_marginEnd="10dp"
-                android:background="@drawable/laughtale_native_rounded_corner_button"
-                android:textColor="#ffffff"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintVertical_bias="0.5" />
-        </androidx.constraintlayout.widget.ConstraintLayout>
+        <ImageView
+            android:id="@+id/icon"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="10dp"
+            android:scaleType="fitCenter" />
+    </LinearLayout>
 
-        <FrameLayout
-            android:id="@+id/options_view"
-            android:layout_width="25dp"
-            android:layout_height="25dp"
-            android:orientation="horizontal"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+    <FrameLayout
+        android:id="@+id/safeRootView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:ellipsize="middle"
-            android:singleLine="false"
-            android:text="AD"
-            android:textColor="#ffffff"
+            android:id="@+id/cta"
+            android:layout_width="200dp"
+            android:layout_height="50dp"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginLeft="5dp"
+            android:layout_marginRight="5dp"
+            android:layout_marginBottom="50dp"
+            android:background="@drawable/fsn_cta_background"
+            android:gravity="center"
+            android:lines="1"
+            android:textColor="#FFFFFF"
             android:textSize="16sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
-</LinearLayout>
+            android:textStyle="bold" />
+
+        <FrameLayout
+            android:id="@+id/btnClose"
+            android:layout_width="@dimen/fsn_close_btn_size"
+            android:layout_height="@dimen/fsn_close_btn_size"
+            android:layout_gravity="end|top"
+            android:layout_marginEnd="10dp"
+            android:padding="2dp">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/fsn_ad_close_bg" />
+
+            <TextView
+                android:id="@+id/tv_countdown"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp" />
+
+            <ImageView
+                android:id="@+id/iv_close"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:padding="5dp"
+                android:src="@drawable/fsn_ad_close_ic"
+                android:visibility="gone" />
+        </FrameLayout>
+    </FrameLayout>
+</com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView>

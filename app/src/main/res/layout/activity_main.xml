@@ -44,6 +44,13 @@
             android:text="Show CollapsibleBanner" />
 
         <Button
+            android:id="@+id/btn_interstitial"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="Show Inter" />
+
+        <Button
             android:id="@+id/btn_rewarded"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

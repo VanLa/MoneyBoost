@@ -2,126 +2,235 @@ package com.dream.laughtale;
 
 import android.app.Activity;
 
-import com.applovin.mediation.MaxAd;
-import com.applovin.mediation.MaxAdFormat;
-import com.applovin.mediation.MaxAdListener;
-import com.applovin.mediation.MaxAdRevenueListener;
-import com.applovin.mediation.MaxError;
-import com.applovin.mediation.ads.MaxInterstitialAd;
+import androidx.annotation.NonNull;
 
-public class LaughTaleInterstitialAdapter implements MaxAdListener, MaxAdRevenueListener {
-    private MaxInterstitialAd LaughTale_interstitialAd;
+import com.google.android.libraries.ads.mobile.sdk.common.AdRequest;
+import com.google.android.libraries.ads.mobile.sdk.common.AdSourceResponseInfo;
+import com.google.android.libraries.ads.mobile.sdk.common.AdValue;
+import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError;
+import com.google.android.libraries.ads.mobile.sdk.common.PreloadCallback;
+import com.google.android.libraries.ads.mobile.sdk.common.PreloadConfiguration;
+import com.google.android.libraries.ads.mobile.sdk.common.ResponseInfo;
+import com.google.android.libraries.ads.mobile.sdk.interstitial.InterstitialAd;
+import com.google.android.libraries.ads.mobile.sdk.interstitial.InterstitialAdEventCallback;
+import com.google.android.libraries.ads.mobile.sdk.interstitial.InterstitialAdPreloader;
+
+import java.util.concurrent.ScheduledFuture;
+
+public class LaughTaleInterstitialAdapter {
     private int LaughTale_interRetryAttempt;
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     public LaughTaleInterstitialListener LaughTale_InterstitialListener;
     private double LaughTale_adPrice = 0;
     private boolean LaughTale_isShowing = false;
+    private boolean LaughTale_isLoading = false;
+    private ScheduledFuture<?> LaughTale_retryFuture;
+    private final PreloadCallback LaughTale_preloadCallback = new PreloadCallback() {
+        @Override
+        public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADINTERLoaded");
+            LaughTale_isLoading = false;
+            LaughTale_adPrice = 0.01;
+            LaughTale_interRetryAttempt = 0;
+            LaughTaleCancelRetry();
+        }
+
+        @Override
+        public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADINTERFailed");
+            LaughTale_isLoading = false;
+            LaughTale_adPrice = 0;
+            LaughTale_interRetryAttempt++;
+            long delay = (long) Math.pow(2, Math.min(6, LaughTale_interRetryAttempt));
+            LaughTaleCancelRetry();
+            LaughTale_retryFuture = LaughTaleAdRetryScheduler.scheduleSeconds(
+                    LaughTaleInterstitialAdapter.this::LaughTaleLoadInterstitialAd, delay);
+        }
+    };
 
     public boolean LaughTaleIsShowing() {
         return LaughTale_isShowing;
     }
 
-    public void LaughTaleInitInterstitialAdapter(){
-        LaughTale_interstitialAd = new MaxInterstitialAd(LaughTale_ad_unit,LaughTale_activity);
-        LaughTale_interstitialAd.setListener(this);
-        LaughTale_interstitialAd.setRevenueListener(this);
+    public boolean LaughTaleIsLoading() {
+        return LaughTale_isLoading;
     }
 
-    public void LaughTaleLoadInterstitialAd(){
+    public boolean LaughTaleIsAdAvailable() {
+        String unitId = LaughTaleUnitId();
+        return unitId != null && InterstitialAdPreloader.isAdAvailable(unitId);
+    }
+
+    public void LaughTaleInitInterstitialAdapter() {
+        // 预加载在 MobileAds.initialize 完成后由 Load 触发
+    }
+
+    public void LaughTaleLoadInterstitialAd() {
         if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
             return;
         }
-        if (LaughTale_interstitialAd == null) {
+        String unitId = LaughTaleUnitId();
+        if (unitId == null) {
             return;
         }
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========","LOADINTER");
-        LaughTale_interstitialAd.loadAd();
+        if (LaughTale_isLoading || LaughTale_isShowing || InterstitialAdPreloader.isAdAvailable(unitId)) {
+            return;
+        }
+        LaughTaleCancelRetry();
+        LaughTale_isLoading = true;
+        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADINTER");
+        if (!LaughTaleStartInterstitialPreloading(unitId)) {
+            LaughTale_isLoading = false;
+        }
     }
 
-    public double LaughTaleGetADPrice(){
-        return LaughTale_adPrice;
+    private boolean LaughTaleStartInterstitialPreloading(String unitId) {
+        AdRequest adRequest = new AdRequest.Builder(unitId).build();
+        PreloadConfiguration preloadConfig = new PreloadConfiguration(adRequest);
+        return InterstitialAdPreloader.start(unitId, preloadConfig, LaughTale_preloadCallback);
     }
 
-    public void LaughTaleShowInterstitialAd(){
+    public double LaughTaleGetADPrice() {
+        if (!LaughTaleIsAdAvailable()) {
+            return 0;
+        }
+        return LaughTale_adPrice > 0 ? LaughTale_adPrice : 0.01;
+    }
+
+    public void LaughTaleShowInterstitialAd() {
         if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            if (LaughTale_InterstitialListener != null) {
+                LaughTale_InterstitialListener.LaughTaleOnInterstitialAdFailedToShow();
+            }
             return;
         }
-        if (LaughTale_interstitialAd == null) {
+        final String unitId = LaughTaleUnitId();
+        if (unitId == null) {
+            if (LaughTale_InterstitialListener != null) {
+                LaughTale_InterstitialListener.LaughTaleOnInterstitialAdFailedToShow();
+            }
             return;
         }
-        if (!LaughTale_interstitialAd.isReady()) {
+        if (!InterstitialAdPreloader.isAdAvailable(unitId)) {
             LaughTaleLoadInterstitialAd();
+            if (LaughTale_InterstitialListener != null) {
+                LaughTale_InterstitialListener.LaughTaleOnInterstitialAdFailedToShow();
+            }
             return;
         }
         LaughTale_activity.runOnUiThread(new Runnable() {
             public void run() {
-                // 显示插页广告
-                LaughTale_interstitialAd.showAd(LaughTale_activity);
-                // 重置广告价格
+                final InterstitialAd interstitialAd = InterstitialAdPreloader.pollAd(unitId);
+                if (interstitialAd == null) {
+                    LaughTaleLoadInterstitialAd();
+                    if (LaughTale_InterstitialListener != null) {
+                        LaughTale_InterstitialListener.LaughTaleOnInterstitialAdFailedToShow();
+                    }
+                    return;
+                }
                 LaughTale_adPrice = 0;
+                interstitialAd.setAdEventCallback(new InterstitialAdEventCallback() {
+                    @Override
+                    public void onAdShowedFullScreenContent() {
+                        LaughTale_isShowing = true;
+                        if (LaughTale_InterstitialListener != null) {
+                            LaughTale_InterstitialListener.LaughTaleOnInterstitialAdDisplayed();
+                        }
+                    }
+
+                    @Override
+                    public void onAdDismissedFullScreenContent() {
+                        LaughTale_isShowing = false;
+                        interstitialAd.destroy();
+                        if (LaughTale_InterstitialListener != null) {
+                            LaughTale_InterstitialListener.LaughTaleOnInterstitialAdClosed();
+                        }
+                        LaughTaleLoadInterstitialAd();
+                    }
+
+                    @Override
+                    public void onAdFailedToShowFullScreenContent(
+                            @NonNull com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError fullScreenContentError) {
+                        boolean wasShowing = LaughTale_isShowing;
+                        LaughTale_isShowing = false;
+                        interstitialAd.destroy();
+                        LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
+                                "=========", "INTERFailedToShow wasShowing=" + wasShowing
+                                        + " " + fullScreenContentError.getMessage());
+                        if (LaughTale_InterstitialListener != null) {
+                            if (wasShowing) {
+                                LaughTale_InterstitialListener.LaughTaleOnInterstitialAdClosed();
+                            } else {
+                                LaughTale_InterstitialListener.LaughTaleOnInterstitialAdFailedToShow();
+                            }
+                        }
+                        LaughTaleLoadInterstitialAd();
+                    }
+
+                    @Override
+                    public void onAdClicked() {
+                        if (LaughTale_InterstitialListener != null) {
+                            LaughTale_InterstitialListener.LaughTaleOnInterstitialAdClicked();
+                        }
+                    }
+
+                    @Override
+                    public void onAdPaid(@NonNull AdValue adValue) {
+                        LaughTaleLogFirebaseRevenue(adValue, "INTERSTITIAL", unitId, interstitialAd);
+                    }
+                });
+                interstitialAd.show(LaughTale_activity);
             }
         });
     }
 
-    @Override
-    public void onAdLoaded(MaxAd maxAd) {
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========","LOADINTERLoaded");
-        LaughTale_adPrice = maxAd.getRevenue();
-        if (LaughTale_adPrice == 0){
-            LaughTale_adPrice = 0.01;
-        }
-        LaughTale_interRetryAttempt = 0;
-    }
-
-    @Override
-    public void onAdDisplayed(MaxAd maxAd) {
-        LaughTale_isShowing = true;
-        if (null != LaughTale_InterstitialListener){
-            LaughTale_InterstitialListener.LaughTaleOnInterstitialAdDisplayed();
-        }
-    }
-
-    @Override
-    public void onAdHidden(MaxAd maxAd) {
+    public void LaughTaleOnDestroy() {
+        LaughTaleCancelRetry();
+        LaughTale_isLoading = false;
         LaughTale_isShowing = false;
-        if (null != LaughTale_InterstitialListener){
-            LaughTale_InterstitialListener.LaughTaleOnInterstitialAdClosed();
+        LaughTale_adPrice = 0;
+        String unitId = LaughTaleUnitId();
+        if (unitId != null) {
+            InterstitialAdPreloader.destroy(unitId);
         }
-        LaughTaleLoadInterstitialAd();
+        LaughTale_activity = null;
+        LaughTale_InterstitialListener = null;
     }
 
-    @Override
-    public void onAdClicked(MaxAd maxAd) {
-        if (null != LaughTale_InterstitialListener) {
-            LaughTale_InterstitialListener.LaughTaleOnInterstitialAdClicked();
+    private void LaughTaleCancelRetry() {
+        LaughTaleAdRetryScheduler.cancel(LaughTale_retryFuture);
+        LaughTale_retryFuture = null;
+    }
+
+    private String LaughTaleUnitId() {
+        if (LaughTale_ad_unit == null) {
+            return null;
         }
+        String unitId = LaughTale_ad_unit.trim();
+        return unitId.isEmpty() ? null : unitId;
     }
 
-    @Override
-    public void onAdLoadFailed(String s, MaxError maxError) {
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========","LOADINTERFailed");
-        LaughTale_interRetryAttempt++;
-        long delay = (long) Math.pow(2, Math.min(6, LaughTale_interRetryAttempt));
-        LaughTaleAdRetryScheduler.scheduleSeconds(LaughTaleInterstitialAdapter.this::LaughTaleLoadInterstitialAd, delay);
+    private static void LaughTaleLogFirebaseRevenue(
+            AdValue adValue, String adFormat, String unitId, InterstitialAd ad) {
+        if (adValue == null) {
+            return;
+        }
+        double revenue = adValue.getValueMicros() / 1_000_000.0;
+        LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseRevenue(
+                revenue, adFormat, LaughTaleResolveNetworkName(ad), unitId);
     }
 
-    @Override
-    public void onAdDisplayFailed(MaxAd maxAd, MaxError maxError) {
-        LaughTaleLoadInterstitialAd();
-    }
-
-    @Override
-    public void onAdRevenuePaid(MaxAd maxAd) {
-        double revenue = maxAd.getRevenue(); // In USD
-        String networkName = maxAd.getNetworkName(); // Display name of the network that showed the ad (e.g. "AdColony")
-        String adUnitId = maxAd.getAdUnitId(); // The MAX Ad Unit ID
-        MaxAdFormat adFormat = maxAd.getFormat(); // The ad format of the ad (e.g. BANNER, MREC, INTERSTITIAL, REWARDED)
-//        String placement = maxAd.getPlacement(); // The placement this ad's postbacks are tied to
-//        String networkPlacement = maxAd.getNetworkPlacement(); // The placement ID from the network that showed the ad
-
-        LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseRevenue(revenue,adFormat.toString(),networkName,adUnitId);
-        //上报Bank 收入数据
-//        LaughTaleBankManager.instance().updateAdStats("inter",revenue*1000);
+    private static String LaughTaleResolveNetworkName(InterstitialAd ad) {
+        if (ad == null || ad.getResponseInfo() == null) {
+            return "AdMob";
+        }
+        ResponseInfo responseInfo = ad.getResponseInfo();
+        AdSourceResponseInfo loaded = responseInfo.getLoadedAdSourceResponseInfo();
+        if (loaded != null && loaded.getName() != null && !loaded.getName().isEmpty()) {
+            return loaded.getName();
+        }
+        String adapter = responseInfo.getAdapterClassName();
+        return adapter != null && !adapter.isEmpty() ? adapter : "AdMob";
     }
 }

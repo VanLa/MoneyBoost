@@ -22,6 +22,7 @@ public class MainActivity extends AppCompatActivity {
     private LaughTaleMediationManager mediationManager;
     private final Handler statusHandler = new Handler(Looper.getMainLooper());
     private Button btnCollapsibleBanner;
+    private Button btnInterstitial;
     private Button btnRewarded;
     private Button btnMrec1;
     private Button btnMrec2;
@@ -50,6 +51,7 @@ public class MainActivity extends AppCompatActivity {
         colorReady = ContextCompat.getColor(this, R.color.white);
 
         btnCollapsibleBanner = findViewById(R.id.btn_collapsible_banner);
+        btnInterstitial = findViewById(R.id.btn_interstitial);
         btnRewarded = findViewById(R.id.btn_rewarded);
         btnMrec1 = findViewById(R.id.btn_mrec_1);
         btnMrec2 = findViewById(R.id.btn_mrec_2);
@@ -114,6 +116,9 @@ public class MainActivity extends AppCompatActivity {
         btnCollapsibleBanner.setOnClickListener(v ->
                 mediationManager.LaughTaleShowCollapsibleBannerView(true));
 
+        btnInterstitial.setOnClickListener(v ->
+                mediationManager.LaughTaleShowInterstitialUnity("test"));
+
         btnRewarded.setOnClickListener(v ->
                 mediationManager.LaughTaleShowRewardAdUnity("test"));
 
@@ -138,6 +143,9 @@ public class MainActivity extends AppCompatActivity {
         updateAdButton(btnCollapsibleBanner,
                 mediationManager.LaughTaleDebugIsCollapsibleReady(),
                 mediationManager.LaughTaleDebugIsCollapsibleShowing());
+        updateAdButton(btnInterstitial,
+                mediationManager.LaughTaleDebugIsInterReady(),
+                mediationManager.LaughTaleDebugIsInterShowing());
         updateAdButton(btnRewarded,
                 mediationManager.LaughTaleDebugIsRewardReady(),
                 mediationManager.LaughTaleDebugIsRewardShowing());

@@ -2,136 +2,221 @@ package com.dream.laughtale;
 
 import android.app.Activity;
 
-import com.applovin.mediation.MaxAd;
-import com.applovin.mediation.MaxAdFormat;
-import com.applovin.mediation.MaxAdRevenueListener;
-import com.applovin.mediation.MaxError;
-import com.applovin.mediation.MaxReward;
-import com.applovin.mediation.MaxRewardedAdListener;
-import com.applovin.mediation.ads.MaxRewardedAd;
+import androidx.annotation.NonNull;
 
-public class LaughTaleRewardVideoAdapter implements MaxRewardedAdListener, MaxAdRevenueListener {
-    private MaxRewardedAd LaughTale_rewardedAd;
+import com.google.android.libraries.ads.mobile.sdk.common.AdRequest;
+import com.google.android.libraries.ads.mobile.sdk.common.AdSourceResponseInfo;
+import com.google.android.libraries.ads.mobile.sdk.common.AdValue;
+import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError;
+import com.google.android.libraries.ads.mobile.sdk.common.PreloadCallback;
+import com.google.android.libraries.ads.mobile.sdk.common.PreloadConfiguration;
+import com.google.android.libraries.ads.mobile.sdk.common.ResponseInfo;
+import com.google.android.libraries.ads.mobile.sdk.rewarded.OnUserEarnedRewardListener;
+import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardItem;
+import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAd;
+import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAdEventCallback;
+import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAdPreloader;
+
+import java.util.concurrent.ScheduledFuture;
+
+public class LaughTaleRewardVideoAdapter {
     private int LaughTale_rewardRetryAttempt;
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     public LaughTaleRewardVideoListener LaughTale_rewardVideoListener;
     private double LaughTale_adPrice = 0;
     private boolean LaughTale_isShowing = false;
+    private boolean LaughTale_isLoading = false;
+    private ScheduledFuture<?> LaughTale_retryFuture;
+
+    private final PreloadCallback LaughTale_preloadCallback = new PreloadCallback() {
+        @Override
+        public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADREWARDLoaded");
+            LaughTale_isLoading = false;
+            LaughTale_adPrice = 0.01;
+            LaughTale_rewardRetryAttempt = 0;
+            LaughTaleCancelRetry();
+        }
+
+        @Override
+        public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADREWARDFailed");
+            LaughTale_isLoading = false;
+            LaughTale_adPrice = 0;
+            LaughTale_rewardRetryAttempt++;
+            long delay = (long) Math.pow(2, Math.min(6, LaughTale_rewardRetryAttempt));
+            LaughTaleCancelRetry();
+            LaughTale_retryFuture = LaughTaleAdRetryScheduler.scheduleSeconds(
+                    LaughTaleRewardVideoAdapter.this::LaughTaleLoadRewardVideoAd, delay);
+        }
+    };
 
     public boolean LaughTaleIsShowing() {
         return LaughTale_isShowing;
     }
 
+    public boolean LaughTaleIsLoading() {
+        return LaughTale_isLoading;
+    }
+
+    public boolean LaughTaleIsAdAvailable() {
+        String unitId = LaughTaleUnitId();
+        return unitId != null && RewardedAdPreloader.isAdAvailable(unitId);
+    }
+
     public void LaughTaleInitRewardVideoAdapter() {
-        LaughTale_rewardedAd = MaxRewardedAd.getInstance(LaughTale_ad_unit, LaughTale_activity);
-        LaughTale_rewardedAd.setListener(this);
-        LaughTale_rewardedAd.setRevenueListener(this);
+        // 预加载在 MobileAds.initialize 完成后由 Load 触发
     }
 
     public void LaughTaleLoadRewardVideoAd() {
         if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
             return;
         }
-        if (LaughTale_rewardedAd == null) {
+        String unitId = LaughTaleUnitId();
+        if (unitId == null) {
             return;
         }
+        if (LaughTale_isLoading || LaughTale_isShowing || RewardedAdPreloader.isAdAvailable(unitId)) {
+            return;
+        }
+        LaughTaleCancelRetry();
+        LaughTale_isLoading = true;
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADREWARD");
-        LaughTale_rewardedAd.loadAd();
+        if (!LaughTaleStartRewardPreloading(unitId)) {
+            LaughTale_isLoading = false;
+        }
+    }
+
+    private boolean LaughTaleStartRewardPreloading(String unitId) {
+        AdRequest adRequest = new AdRequest.Builder(unitId).build();
+        PreloadConfiguration preloadConfig = new PreloadConfiguration(adRequest);
+        return RewardedAdPreloader.start(unitId, preloadConfig, LaughTale_preloadCallback);
     }
 
     public void LaughTaleShowRewardVideoAd() {
         if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
             return;
         }
-        if (LaughTale_rewardedAd == null) {
+        final String unitId = LaughTaleUnitId();
+        if (unitId == null) {
             return;
         }
-        if (LaughTale_rewardedAd.isReady()){
-            LaughTale_activity.runOnUiThread(new Runnable() {
-                public void run() {
-                    LaughTale_rewardedAd.showAd(LaughTale_activity);
-                }
-            });
-            LaughTale_adPrice = 0;
+        if (!RewardedAdPreloader.isAdAvailable(unitId)) {
+            return;
         }
+        LaughTale_activity.runOnUiThread(new Runnable() {
+            public void run() {
+                final RewardedAd rewardedAd = RewardedAdPreloader.pollAd(unitId);
+                if (rewardedAd == null) {
+                    LaughTaleLoadRewardVideoAd();
+                    return;
+                }
+                LaughTale_adPrice = 0;
+                rewardedAd.setAdEventCallback(new RewardedAdEventCallback() {
+                    @Override
+                    public void onAdShowedFullScreenContent() {
+                        LaughTale_isShowing = true;
+                        if (LaughTale_rewardVideoListener != null) {
+                            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdDisplayed();
+                        }
+                    }
+
+                    @Override
+                    public void onAdDismissedFullScreenContent() {
+                        LaughTale_isShowing = false;
+                        rewardedAd.destroy();
+                        if (LaughTale_rewardVideoListener != null) {
+                            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClosed();
+                        }
+                        LaughTaleLoadRewardVideoAd();
+                    }
+
+                    @Override
+                    public void onAdFailedToShowFullScreenContent(
+                            @NonNull com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError fullScreenContentError) {
+                        if (!LaughTale_isShowing) {
+                            rewardedAd.destroy();
+                            LaughTaleLoadRewardVideoAd();
+                            return;
+                        }
+                        LaughTale_isShowing = false;
+                        rewardedAd.destroy();
+                        if (LaughTale_rewardVideoListener != null) {
+                            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClosed();
+                        }
+                        LaughTaleLoadRewardVideoAd();
+                    }
+
+                    @Override
+                    public void onAdClicked() {
+                        if (LaughTale_rewardVideoListener != null) {
+                            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClicked();
+                        }
+                    }
+
+                    @Override
+                    public void onAdPaid(@NonNull AdValue adValue) {
+                        double revenue = adValue.getValueMicros() / 1_000_000.0;
+                        LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseRevenue(
+                                revenue, "REWARDED", LaughTaleResolveNetworkName(rewardedAd), unitId);
+                    }
+                });
+                rewardedAd.show(LaughTale_activity, new OnUserEarnedRewardListener() {
+                    @Override
+                    public void onUserEarnedReward(@NonNull RewardItem rewardItem) {
+                        if (LaughTale_rewardVideoListener != null) {
+                            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdCompleted();
+                        }
+                    }
+                });
+            }
+        });
     }
 
     public double LaughTaleGetADPrice() {
-        return LaughTale_adPrice;
-    }
-
-    @Override
-    public void onUserRewarded(MaxAd maxAd, MaxReward maxReward) {
-        if (null != LaughTale_rewardVideoListener) {
-            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdCompleted();
+        if (!LaughTaleIsAdAvailable()) {
+            return 0;
         }
+        return LaughTale_adPrice > 0 ? LaughTale_adPrice : 0.01;
     }
 
-    @Override
-    public void onAdLoaded(MaxAd maxAd) {
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADREWARDLoaded:" + maxAd.getRevenue());
-        LaughTale_adPrice = maxAd.getRevenue();
-        if (LaughTale_adPrice == 0) {
-            LaughTale_adPrice = 0.01;
-        }
-        LaughTale_rewardRetryAttempt = 0;
-    }
-
-    @Override
-    public void onAdDisplayed(MaxAd maxAd) {
-        LaughTale_isShowing = true;
-        if (null != LaughTale_rewardVideoListener) {
-            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdDisplayed();
-        }
-    }
-
-    @Override
-    public void onAdHidden(MaxAd maxAd) {
+    public void LaughTaleOnDestroy() {
+        LaughTaleCancelRetry();
+        LaughTale_isLoading = false;
         LaughTale_isShowing = false;
-        if (null != LaughTale_rewardVideoListener) {
-            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClosed();
+        LaughTale_adPrice = 0;
+        String unitId = LaughTaleUnitId();
+        if (unitId != null) {
+            RewardedAdPreloader.destroy(unitId);
         }
-        LaughTaleLoadRewardVideoAd(); // 关闭后重新加载广告
+        LaughTale_activity = null;
+        LaughTale_rewardVideoListener = null;
     }
 
-    @Override
-    public void onAdClicked(MaxAd maxAd) {
-        if (null != LaughTale_rewardVideoListener) {
-            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClicked();
-        }
+    private void LaughTaleCancelRetry() {
+        LaughTaleAdRetryScheduler.cancel(LaughTale_retryFuture);
+        LaughTale_retryFuture = null;
     }
 
-    @Override
-    public void onAdLoadFailed(String s, MaxError maxError) {
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADREWARDFailed");
-        LaughTale_rewardRetryAttempt++;
-        // 使用不同的退避策略：低端设备用 4 的幂，高端设备用 2 的幂，最大延迟 64 秒
-        long delay = (long) Math.pow(2, Math.min(6, LaughTale_rewardRetryAttempt));
-
-        LaughTaleAdRetryScheduler.scheduleSeconds(LaughTaleRewardVideoAdapter.this::LaughTaleLoadRewardVideoAd, delay);
+    private String LaughTaleUnitId() {
+        if (LaughTale_ad_unit == null) {
+            return null;
+        }
+        String unitId = LaughTale_ad_unit.trim();
+        return unitId.isEmpty() ? null : unitId;
     }
 
-    @Override
-    public void onAdDisplayFailed(MaxAd maxAd, MaxError maxError) {
-        if (!LaughTale_isShowing) {
-            LaughTaleLoadRewardVideoAd();
-            return;
+    private static String LaughTaleResolveNetworkName(RewardedAd ad) {
+        if (ad == null || ad.getResponseInfo() == null) {
+            return "AdMob";
         }
-        LaughTale_isShowing = false;
-        if (LaughTale_rewardVideoListener != null) {
-            LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClosed();
+        ResponseInfo responseInfo = ad.getResponseInfo();
+        AdSourceResponseInfo loaded = responseInfo.getLoadedAdSourceResponseInfo();
+        if (loaded != null && loaded.getName() != null && !loaded.getName().isEmpty()) {
+            return loaded.getName();
         }
-        LaughTaleLoadRewardVideoAd();
-    }
-
-    @Override
-    public void onAdRevenuePaid(MaxAd maxAd) {
-        double revenue = maxAd.getRevenue(); // In USD
-        String networkName = maxAd.getNetworkName(); // Display name of the network that showed the ad (e.g. "AdColony")
-        String adUnitId = maxAd.getAdUnitId(); // The MAX Ad Unit ID
-        MaxAdFormat adFormat = maxAd.getFormat(); // The ad format of the ad (e.g. BANNER, MREC, INTERSTITIAL, REWARDED)
-
-        LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseRevenue(revenue, adFormat.toString(), networkName, adUnitId);
+        String adapter = responseInfo.getAdapterClassName();
+        return adapter != null && !adapter.isEmpty() ? adapter : "AdMob";
     }
 }
