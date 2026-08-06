@@ -27,13 +27,6 @@ public final class LaughTaleNativeAdConstants {
      * RC 默认值未知，写死 true。
      */
     public static final boolean OPEN_AD_RESUME_ON = true;
-    /**
-     * 竞品 open_ad_start_up_times → OpenAdsStartUpCount：
-     * 冷启动累计打开次数上限（CountOpenApp &lt;= 此值才播）。
-     * RC 默认值未知，写死 1（仅前 N 次冷启动）。
-     */
-    public static final int OPEN_ADS_STARTUP_COUNT_MAX = 1;
-
     /** 关闭后是否立即补货 */
     public static final boolean LOAD_NEW_AFTER_CLOSE = true;
     /** FSN 默认非静音；对齐竞品 VideoOptions.setStartMuted */

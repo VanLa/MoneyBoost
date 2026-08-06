@@ -58,8 +58,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
      * 展示全屏广告时清掉，避免插屏/激励刚关就立刻出开屏。
      */
     private boolean LaughTale_canShowAoaResume = false;
-    /** 本进程是否已对 CountOpenApp +1（对齐竞品冷启动计数） */
-    private boolean LaughTale_countOpenAppIncrementedThisProcess = false;
 
     private long LaughTale_sessionLaunchCnt = 0;
 
@@ -87,11 +85,9 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     private static final long LOAD_DELAY_BANNER_LOW_END_MS = 2500L;
     private static final long LOAD_DELAY_MREC_LOW_END_MS = 5000L;
     private static final long AD_TICK_INTERVAL_MS = 5000L;
-    private static final long COLD_SPLASH_WAIT_TIMEOUT_MS = 20000L;
+    private static final long COLD_SPLASH_WAIT_TIMEOUT_MS = 12000L;
 
     private static final String PREF_NATIVE_FULL_INTER_SHOW_COUNT = "native_full_inter_show_count";
-    /** 竞品 CountOpenApp：累计冷启动打开次数 */
-    private static final String PREF_COUNT_OPEN_APP = "count_open_app";
     /** 竞品 CountNativeCollab：半屏展示次数，用于关闭钮左右切换 */
     private static final String PREF_COUNT_NATIVE_COLLAB = "count_native_collab";
 
@@ -609,27 +605,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTale_dataPrefs.edit().putInt(PREF_NATIVE_FULL_INTER_SHOW_COUNT, 0).apply();
     }
 
-    private int LaughTaleGetCountOpenApp() {
-        if (LaughTale_dataPrefs == null) {
-            return 0;
-        }
-        return LaughTale_dataPrefs.getInt(PREF_COUNT_OPEN_APP, 0);
-    }
-
-    /** 本进程冷启动首次进入时 CountOpenApp++（对齐竞品）。 */
-    private int LaughTaleBumpCountOpenAppOncePerProcess() {
-        if (LaughTale_countOpenAppIncrementedThisProcess) {
-            return LaughTaleGetCountOpenApp();
-        }
-        LaughTale_countOpenAppIncrementedThisProcess = true;
-        if (LaughTale_dataPrefs == null) {
-            return 0;
-        }
-        int next = LaughTaleGetCountOpenApp() + 1;
-        LaughTale_dataPrefs.edit().putInt(PREF_COUNT_OPEN_APP, next).apply();
-        return next;
-    }
-
     /** 竞品：全屏广告展示后清掉 CanShowAoaResume。 */
     private void LaughTaleClearAoaResumeEligibility() {
         LaughTale_canShowAoaResume = false;
@@ -731,6 +706,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTale_interstitialInSession = false;
         LaughTaleResetNativeFullInterShowCount();
         LaughTaleDispatchInterstitialCloseCallbackNow();
+        LaughTaleRetryPendingColdSplashIfNeeded();
     }
 
     @Override
@@ -742,6 +718,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTale_interstitialInSession = false;
         // 未真正展示不重置 Native 优先次数；仍发 CLOSE 解阻塞 Unity
         LaughTaleDispatchInterstitialCloseCallbackNow();
+        LaughTaleRetryPendingColdSplashIfNeeded();
     }
 
     @Override
@@ -1095,6 +1072,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             LaughTale_interstitialInSession = false;
             LaughTaleDispatchInterstitialCloseCallbackNow();
             LaughTaleClearAoaResumeEligibility();
+            LaughTaleRetryPendingColdSplashIfNeeded();
             return;
         }
         if (LaughTale_showingCollapsibleAsNative) {
@@ -1105,6 +1083,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                 // 后台 / 被顶掉：结束 double，不再弹第二条
                 LaughTaleCancelCollapsibleDoubleShow();
                 LaughTaleSyncBannerVisibility();
+                LaughTaleRetryPendingColdSplashIfNeeded();
                 return;
             }
             LaughTaleDispatchNativeCloseCallbackNow();
@@ -1120,6 +1099,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                 LaughTaleCancelCollapsibleDoubleShow();
             }
             LaughTaleSyncBannerVisibility();
+            LaughTaleRetryPendingColdSplashIfNeeded();
             return;
         }
         // 静默关闭（被顶掉的无关 Native）不派发 Unity 回调
@@ -1248,15 +1228,11 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     //////////////////////////////////////////////////////////////////////Splash////////////////////////////////////////////////////////////////////////////////
 
     /**
-     * 竞品冷启动：open_ad_on_off(needPopAD) + open_ad_startup_on_off
-     * + CountOpenApp &lt;= OpenAdsStartUpCount。无固定秒级 CD。
+     * 冷启动开屏开关：needPopAD + open_ad_startup_on_off。
+     * 次数限制由本进程内存 flag {@link #LaughTale_coldSplashHandled} 保证（每次冷启动最多 1 次，不落盘）。
      */
     private boolean LaughTaleCanShowColdStartSplash() {
-        if (!LaughTale_needPopAD || !LaughTaleNativeAdConstants.OPEN_AD_STARTUP_ON) {
-            return false;
-        }
-        int countOpenApp = LaughTaleBumpCountOpenAppOncePerProcess();
-        return countOpenApp <= LaughTaleNativeAdConstants.OPEN_ADS_STARTUP_COUNT_MAX;
+        return LaughTale_needPopAD && LaughTaleNativeAdConstants.OPEN_AD_STARTUP_ON;
     }
 
     /**
@@ -1415,7 +1391,10 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             return;
         }
         if (LaughTaleIsBlockingSplash()) {
-            LaughTaleFinishColdStartSplashFlow();
+            // 被半屏/插屏挡住时不要结束冷启动，等对方关闭后再试
+            LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
+                    "=====LaughTaleMediatonManager",
+                    "===ColdSplash blocked, keep pending");
             return;
         }
         if (!LaughTaleCanShowColdStartSplash()) {
@@ -1427,6 +1406,14 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             return;
         }
         LaughTaleBeginWaitingForSplashInventory(scene != null ? scene : LaughTale_unityColdSplashScene);
+    }
+
+    /** 挡住冷启动开屏的全屏/半屏关掉后重试。 */
+    private void LaughTaleRetryPendingColdSplashIfNeeded() {
+        if (!LaughTale_unityColdSplashPending || LaughTale_coldSplashHandled) {
+            return;
+        }
+        mainHandler.post(() -> LaughTaleTryShowUnityColdSplash(LaughTale_unityColdSplashScene));
     }
 
     private void LaughTaleResumeSplashOnForeground() {
@@ -1453,11 +1440,14 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         }
         if (LaughTaleIsBlockingSplash()) {
             if (LaughTale_unityColdSplashPending) {
-                LaughTaleFinishColdStartSplashFlow();
-            } else {
-                LaughTale_wentToBackground = false;
-                LaughTaleFinishHotStartSplashAttemptNotReady();
+                // 冷启动排队中被挡住：保留 pending，不 Finish
+                LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
+                        "=====LaughTaleMediatonManager",
+                        "===ShowStandardSplash blocked while cold pending");
+                return;
             }
+            LaughTale_wentToBackground = false;
+            LaughTaleFinishHotStartSplashAttemptNotReady();
             return;
         }
         boolean isCold = LaughTale_unityColdSplashPending;
@@ -1885,5 +1875,29 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     public boolean LaughTaleDebugIsSplashReady() {
         return LaughTaleHasSplashCandidateReady();
+    }
+
+    /**
+     * Demo / 调试：重置本进程冷启动开屏状态，便于同一次运行内反复测开屏。
+     * 正式包不要调用。
+     */
+    public void LaughTaleDebugResetColdSplashState() {
+        LaughTale_coldSplashHandled = false;
+        LaughTale_unityColdSplashPending = false;
+        LaughTale_hotStartSplashPending = false;
+        LaughTale_splashSessionActive = false;
+        LaughTale_allowHotStartSplash = false;
+        mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
+        mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
+        LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
+                "=====LaughTaleMediatonManager", "===DebugResetColdSplashState");
+    }
+
+    public String LaughTaleDebugSplashStateText() {
+        return "SplashReady=" + LaughTaleHasSplashCandidateReady()
+                + " pending=" + LaughTale_unityColdSplashPending
+                + " handled=" + LaughTale_coldSplashHandled
+                + " needPop=" + LaughTale_needPopAD
+                + " init=" + LaughTale_isInitSuccess;
     }
 }
