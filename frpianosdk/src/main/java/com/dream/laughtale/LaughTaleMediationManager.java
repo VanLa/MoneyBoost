@@ -1865,6 +1865,3 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         return LaughTaleHasSplashCandidateReady();
     }
 }
-
-    }
-}
