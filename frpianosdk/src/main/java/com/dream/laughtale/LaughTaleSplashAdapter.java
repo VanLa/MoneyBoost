@@ -1,6 +1,8 @@
 package com.dream.laughtale;
 
 import android.app.Activity;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.NonNull;
 
@@ -28,6 +30,23 @@ public class LaughTaleSplashAdapter {
     private boolean LaughTale_isShowing = false;
     private boolean LaughTale_isLoading = false;
     private ScheduledFuture<?> LaughTale_retryFuture;
+    private final Handler LaughTale_mainHandler = new Handler(Looper.getMainLooper());
+
+    /** GMA Next-Gen 全屏回调常在后台线程，统一切回主线程再通知上层。 */
+    private void LaughTalePostToMain(Runnable runnable) {
+        if (runnable == null) {
+            return;
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            runnable.run();
+            return;
+        }
+        if (LaughTale_activity != null) {
+            LaughTale_activity.runOnUiThread(runnable);
+        } else {
+            LaughTale_mainHandler.post(runnable);
+        }
+    }
 
     private final PreloadCallback LaughTale_preloadCallback = new PreloadCallback() {
         @Override
@@ -37,9 +56,11 @@ public class LaughTaleSplashAdapter {
             LaughTale_adPrice = 0.01;
             LaughTale_splashRetryAttempt = 0;
             LaughTaleCancelRetry();
-            if (LaughTale_splashListener != null) {
-                LaughTale_splashListener.LaughTaleOnSplashAdLoaded();
-            }
+            LaughTalePostToMain(() -> {
+                if (LaughTale_splashListener != null) {
+                    LaughTale_splashListener.LaughTaleOnSplashAdLoaded();
+                }
+            });
         }
 
         @Override
@@ -139,19 +160,23 @@ public class LaughTaleSplashAdapter {
                 @Override
                 public void onAdShowedFullScreenContent() {
                     LaughTale_isShowing = true;
-                    if (LaughTale_splashListener != null) {
-                        LaughTale_splashListener.LaughTaleOnSplashAdDisplayed();
-                    }
+                    LaughTalePostToMain(() -> {
+                        if (LaughTale_splashListener != null) {
+                            LaughTale_splashListener.LaughTaleOnSplashAdDisplayed();
+                        }
+                    });
                 }
 
                 @Override
                 public void onAdDismissedFullScreenContent() {
                     LaughTale_isShowing = false;
                     appOpenAd.destroy();
-                    if (LaughTale_splashListener != null) {
-                        LaughTale_splashListener.LaughTaleOnSplashAdClosed();
-                    }
-                    LaughTaleLoadSplashAd();
+                    LaughTalePostToMain(() -> {
+                        if (LaughTale_splashListener != null) {
+                            LaughTale_splashListener.LaughTaleOnSplashAdClosed();
+                        }
+                        LaughTaleLoadSplashAd();
+                    });
                 }
 
                 @Override
@@ -159,10 +184,12 @@ public class LaughTaleSplashAdapter {
                         @NonNull FullScreenContentError fullScreenContentError) {
                     LaughTale_isShowing = false;
                     appOpenAd.destroy();
-                    if (LaughTale_splashListener != null) {
-                        LaughTale_splashListener.LaughTaleOnSplashAdFailedToShow();
-                    }
-                    LaughTaleLoadSplashAd();
+                    LaughTalePostToMain(() -> {
+                        if (LaughTale_splashListener != null) {
+                            LaughTale_splashListener.LaughTaleOnSplashAdFailedToShow();
+                        }
+                        LaughTaleLoadSplashAd();
+                    });
                 }
 
                 @Override

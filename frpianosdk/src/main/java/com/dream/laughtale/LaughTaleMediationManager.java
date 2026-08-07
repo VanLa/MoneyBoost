@@ -858,6 +858,11 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     private void LaughTaleSyncBannerVisibility() {
+        // 全屏广告 dismiss 可能在 GMA 后台线程回调，Banner 显隐必须回主线程
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::LaughTaleSyncBannerVisibility);
+            return;
+        }
         if (LaughTale_bannerAdapter == null) {
             return;
         }

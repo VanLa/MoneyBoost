@@ -2,6 +2,7 @@ package com.dream.laughtale;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
@@ -59,6 +60,11 @@ public class LaughTaleBannerAdapter {
 
     public void LaughTaleLoadBannerView() {
         if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        // resize/loadAd 必须主线程；开屏 dismiss 可能从 GMA(BG) 回调进来
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            LaughTale_activity.runOnUiThread(this::LaughTaleLoadBannerView);
             return;
         }
         if (LaughTale_adView == null || LaughTale_ad_unit == null || LaughTale_ad_unit.trim().isEmpty()) {
@@ -140,11 +146,14 @@ public class LaughTaleBannerAdapter {
             return;
         }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "BannerShouldShow");
-        if (!LaughTale_isLoaded) {
-            LaughTaleLoadBannerView();
-        }
         this.LaughTale_activity.runOnUiThread(new Runnable() {
             public void run() {
+                if (LaughTale_adView == null) {
+                    return;
+                }
+                if (!LaughTale_isLoaded) {
+                    LaughTaleLoadBannerView();
+                }
                 LaughTale_adView.setVisibility(View.VISIBLE);
             }
         });
