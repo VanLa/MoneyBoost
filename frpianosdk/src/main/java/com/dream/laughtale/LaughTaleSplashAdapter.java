@@ -10,7 +10,6 @@ import com.google.android.libraries.ads.mobile.sdk.appopen.AppOpenAd;
 import com.google.android.libraries.ads.mobile.sdk.appopen.AppOpenAdEventCallback;
 import com.google.android.libraries.ads.mobile.sdk.appopen.AppOpenAdPreloader;
 import com.google.android.libraries.ads.mobile.sdk.common.AdRequest;
-import com.google.android.libraries.ads.mobile.sdk.common.AdSourceResponseInfo;
 import com.google.android.libraries.ads.mobile.sdk.common.AdValue;
 import com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError;
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError;
@@ -198,7 +197,7 @@ public class LaughTaleSplashAdapter {
 
                 @Override
                 public void onAdPaid(@NonNull AdValue adValue) {
-                    LaughTaleLogFirebaseRevenue(adValue, "APP_OPEN", unitId, appOpenAd);
+                    // 开屏不报 Firebase revenue（对齐原逻辑）
                 }
             });
             appOpenAd.show(LaughTale_activity);
@@ -229,28 +228,5 @@ public class LaughTaleSplashAdapter {
         }
         String unitId = LaughTale_ad_unit.trim();
         return unitId.isEmpty() ? null : unitId;
-    }
-
-    private static void LaughTaleLogFirebaseRevenue(
-            AdValue adValue, String adFormat, String unitId, AppOpenAd ad) {
-        if (adValue == null) {
-            return;
-        }
-        double revenue = adValue.getValueMicros() / 1_000_000.0;
-        LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseRevenue(
-                revenue, adFormat, LaughTaleResolveNetworkName(ad), unitId);
-    }
-
-    private static String LaughTaleResolveNetworkName(AppOpenAd ad) {
-        if (ad == null || ad.getResponseInfo() == null) {
-            return "AdMob";
-        }
-        ResponseInfo responseInfo = ad.getResponseInfo();
-        AdSourceResponseInfo loaded = responseInfo.getLoadedAdSourceResponseInfo();
-        if (loaded != null && loaded.getName() != null && !loaded.getName().isEmpty()) {
-            return loaded.getName();
-        }
-        String adapter = responseInfo.getAdapterClassName();
-        return adapter != null && !adapter.isEmpty() ? adapter : "AdMob";
     }
 }
