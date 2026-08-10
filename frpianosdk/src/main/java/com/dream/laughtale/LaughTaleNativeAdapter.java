@@ -259,8 +259,8 @@ public class LaughTaleNativeAdapter {
                     raw != null ? raw.width : ViewGroup.LayoutParams.WRAP_CONTENT,
                     raw != null ? raw.height : ViewGroup.LayoutParams.WRAP_CONTENT);
         }
-        // 清掉 START/END，只保留绝对左右，防止 RTL/历史 gravity 干扰
-        lp.gravity = (onLeft ? Gravity.LEFT : Gravity.RIGHT) | Gravity.CENTER_VERTICAL;
+        // 清掉 START/END；半屏关闭/倒计时叠在 Media 顶部左右
+        lp.gravity = (onLeft ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP;
         widget.setLayoutParams(lp);
     }
 

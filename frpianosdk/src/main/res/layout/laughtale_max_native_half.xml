@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  半屏 Native：
-  黄 Ad → 倒计时/关闭分列左右（夹在 Ad 与 icon 之间）
-  → icon/标题 → Media → CTA；
-  左右规则（运行时 Gravity）：
+  半屏 Native（对齐官方常见结构）：
+  上方 Media + 倒计时/关闭叠在 Media 内（下移避开 AdChoices）；
+  下方 icon + 黄 Ad（与标题同行对齐）+ 正文 + CTA；
+  淡灰外边框便于与内容区分（政策可辨识）。
+  左右规则（运行时 Gravity）不变：
   - 第一条：倒计时随机左/右，关闭在对侧
   - 第二条：倒计时在第一条关闭对侧，关闭与倒计时同侧（先后显示）
 -->
@@ -12,91 +13,50 @@
     android:id="@+id/native_ad_view"
     android:layout_width="match_parent"
     android:layout_height="430dp"
-    android:background="#F7F5F2"
+    android:background="@drawable/laughtale_half_ad_border"
     android:clickable="false"
     android:clipChildren="true"
-    android:focusable="false">
+    android:focusable="false"
+    android:padding="2dp">
 
     <LinearLayout
         android:id="@+id/rootNative"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:paddingTop="4dp">
+        android:orientation="vertical">
 
-        <!-- 第 1 排：黄 Ad 角标 -->
+        <!-- 上：Media + 倒计时/关闭叠层 -->
         <FrameLayout
+            android:id="@+id/mediaContainer"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp"
-            android:paddingBottom="2dp">
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#000000"
+            android:clipChildren="false">
 
-            <TextView
-                android:id="@+id/ad_badge"
-                android:layout_width="wrap_content"
+            <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
+                android:id="@+id/ad_media"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#000000" />
+
+            <!-- 倒计时 + 关闭：paddingTop 避开右上角 AdChoices（谷歌广告） -->
+            <FrameLayout
+                android:id="@+id/closeRow"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="start|center_vertical"
-                android:background="@drawable/laughtale_half_ad_badge_bg"
-                android:paddingHorizontal="3dp"
-                android:paddingVertical="1dp"
-                android:text="Ad"
-                android:textColor="#FFFFFF"
-                android:textSize="9sp"
-                android:textStyle="bold" />
-        </FrameLayout>
-
-        <!-- 第 2 排：倒计时 + 关闭分列左右（FrameLayout+Gravity，避免 ConstraintSet 换边失效） -->
-        <FrameLayout
-            android:id="@+id/closeRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="28dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingBottom="4dp">
-
-            <!-- 倒计时灰圆（默认左：第一条） -->
-            <FrameLayout
-                android:id="@+id/cardCountdown"
-                android:layout_width="@dimen/fsn_close_btn_size"
-                android:layout_height="@dimen/fsn_close_btn_size"
-                android:layout_gravity="left|center_vertical"
-                android:padding="2dp">
-
-                <ImageView
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@drawable/laughtale_half_close_bg"
-                    android:contentDescription="@null" />
-
-                <TextView
-                    android:id="@+id/tv_countdown"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:text="3"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    android:visibility="visible" />
-            </FrameLayout>
-
-            <!-- 关闭灰圆 X（默认右：第一条） -->
-            <FrameLayout
-                android:id="@+id/cardAction"
-                android:layout_width="@dimen/fsn_close_btn_size"
-                android:layout_height="@dimen/fsn_close_btn_size"
-                android:layout_gravity="right|center_vertical"
-                android:padding="2dp"
-                android:visibility="invisible">
+                android:layout_gravity="top"
+                android:minHeight="36dp"
+                android:paddingStart="8dp"
+                android:paddingTop="20dp"
+                android:paddingEnd="8dp">
 
                 <FrameLayout
-                    android:id="@+id/btnClose"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clickable="false"
-                    android:focusable="false">
+                    android:id="@+id/cardCountdown"
+                    android:layout_width="@dimen/fsn_close_btn_size"
+                    android:layout_height="@dimen/fsn_close_btn_size"
+                    android:layout_gravity="left|top"
+                    android:padding="2dp">
 
                     <ImageView
                         android:layout_width="match_parent"
@@ -104,26 +64,60 @@
                         android:background="@drawable/laughtale_half_close_bg"
                         android:contentDescription="@null" />
 
-                    <ImageView
-                        android:id="@+id/iv_close"
+                    <TextView
+                        android:id="@+id/tv_countdown"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:contentDescription="@null"
-                        android:padding="5dp"
-                        android:src="@drawable/fsn_ad_close_ic"
-                        android:visibility="gone" />
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="3"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:visibility="visible" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/cardAction"
+                    android:layout_width="@dimen/fsn_close_btn_size"
+                    android:layout_height="@dimen/fsn_close_btn_size"
+                    android:layout_gravity="right|top"
+                    android:padding="2dp"
+                    android:visibility="invisible">
+
+                    <FrameLayout
+                        android:id="@+id/btnClose"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:clickable="false"
+                        android:focusable="false">
+
+                        <ImageView
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/laughtale_half_close_bg"
+                            android:contentDescription="@null" />
+
+                        <ImageView
+                            android:id="@+id/iv_close"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:padding="5dp"
+                            android:src="@drawable/fsn_ad_close_ic"
+                            android:visibility="gone" />
+                    </FrameLayout>
                 </FrameLayout>
             </FrameLayout>
         </FrameLayout>
 
+        <!-- 下：icon / 黄 Ad+标题同行 / 正文 / CTA -->
         <LinearLayout
             android:id="@+id/contentAds"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="10dp">
 
-            <!-- icon + headline + body -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -131,7 +125,7 @@
                 android:orientation="horizontal"
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
-                android:paddingBottom="6dp">
+                android:paddingBottom="8dp">
 
                 <FrameLayout
                     android:layout_width="44dp"
@@ -153,15 +147,38 @@
                     android:layout_weight="1"
                     android:orientation="vertical">
 
-                    <TextView
-                        android:id="@+id/ad_headline"
+                    <!-- 黄 Ad 与 title 同一行垂直居中对齐 -->
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="2"
-                        android:textColor="#222222"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/ad_badge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="6dp"
+                            android:background="@drawable/laughtale_half_ad_badge_bg"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="3dp"
+                            android:paddingVertical="1dp"
+                            android:text="Ad"
+                            android:textColor="#FFFFFF"
+                            android:textSize="9sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/ad_headline"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:ellipsize="end"
+                            android:maxLines="2"
+                            android:textColor="#222222"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/ad_body"
@@ -175,20 +192,10 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
-                android:id="@+id/ad_media"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:background="#000000" />
-
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
-                android:layout_marginTop="2dp"
                 android:layout_marginEnd="12dp"
                 android:layout_marginBottom="10dp">
 
