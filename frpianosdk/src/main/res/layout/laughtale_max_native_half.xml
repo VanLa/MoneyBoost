@@ -1,220 +1,167 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  半屏 Native（对齐官方常见结构）：
-  上方 Media + 倒计时/关闭叠在 Media 内（下移避开 AdChoices）；
-  下方 icon + 黄 Ad（与标题同行对齐）+ 正文 + CTA；
-  淡灰外边框便于与内容区分（政策可辨识）。
-  左右规则（运行时 Gravity）不变：
-  - 第一条：倒计时随机左/右，关闭在对侧
-  - 第二条：倒计时在第一条关闭对侧，关闭与倒计时同侧（先后显示）
+  半屏 Native：对齐历史提交「更换广告模版」(0aa0c7c) 的 b2x 卡片模板。
+  资源已重命名为 laughtale_half_*；关闭尺寸统一，不区分 Meta。
 -->
 <com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/native_ad_view"
     android:layout_width="match_parent"
-    android:layout_height="430dp"
-    android:background="@drawable/laughtale_half_ad_border"
+    android:layout_height="match_parent"
+    android:background="#b3000000"
     android:clickable="false"
-    android:clipChildren="true"
-    android:focusable="false"
-    android:padding="2dp">
+    android:focusable="false">
 
     <LinearLayout
-        android:id="@+id/rootNative"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:gravity="center"
         android:orientation="vertical">
 
-        <!-- 上：Media + 倒计时/关闭叠层 -->
         <FrameLayout
-            android:id="@+id/mediaContainer"
+            android:id="@+id/top_layout"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:background="#000000"
-            android:clipChildren="false">
+            android:layout_height="27dp"
+            android:elevation="2dp">
 
-            <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
-                android:id="@+id/ad_media"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="#000000" />
+            <ImageView
+                android:id="@+id/btnClose"
+                android:layout_width="@dimen/laughtale_close_btn_size"
+                android:layout_height="@dimen/laughtale_close_btn_size"
+                android:layout_gravity="bottom|start"
+                android:layout_marginStart="10dp"
+                android:background="@mipmap/laughtale_half_ad_close"
+                android:contentDescription="@null"
+                android:visibility="gone" />
 
-            <!-- 倒计时 + 关闭：paddingTop 避开右上角 AdChoices（谷歌广告） -->
-            <FrameLayout
-                android:id="@+id/closeRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="top"
-                android:minHeight="36dp"
-                android:paddingStart="8dp"
-                android:paddingTop="20dp"
-                android:paddingEnd="8dp">
-
-                <FrameLayout
-                    android:id="@+id/cardCountdown"
-                    android:layout_width="@dimen/fsn_close_btn_size"
-                    android:layout_height="@dimen/fsn_close_btn_size"
-                    android:layout_gravity="left|top"
-                    android:padding="2dp">
-
-                    <ImageView
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:background="@drawable/laughtale_half_close_bg"
-                        android:contentDescription="@null" />
-
-                    <TextView
-                        android:id="@+id/tv_countdown"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:includeFontPadding="false"
-                        android:text="3"
-                        android:textColor="#FFFFFF"
-                        android:textSize="11sp"
-                        android:visibility="visible" />
-                </FrameLayout>
-
-                <FrameLayout
-                    android:id="@+id/cardAction"
-                    android:layout_width="@dimen/fsn_close_btn_size"
-                    android:layout_height="@dimen/fsn_close_btn_size"
-                    android:layout_gravity="right|top"
-                    android:padding="2dp"
-                    android:visibility="invisible">
-
-                    <FrameLayout
-                        android:id="@+id/btnClose"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:clickable="false"
-                        android:focusable="false">
-
-                        <ImageView
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:background="@drawable/laughtale_half_close_bg"
-                            android:contentDescription="@null" />
-
-                        <ImageView
-                            android:id="@+id/iv_close"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:contentDescription="@null"
-                            android:padding="5dp"
-                            android:src="@drawable/fsn_ad_close_ic"
-                            android:visibility="gone" />
-                    </FrameLayout>
-                </FrameLayout>
-            </FrameLayout>
+            <TextView
+                android:id="@+id/tv_countdown"
+                android:layout_width="35dp"
+                android:layout_height="25dp"
+                android:layout_gravity="bottom|end"
+                android:layout_marginEnd="5dp"
+                android:background="@drawable/laughtale_half_delay_bg"
+                android:gravity="center"
+                android:text="3s"
+                android:textColor="#666666"
+                android:textSize="12sp"
+                android:visibility="visible" />
         </FrameLayout>
 
-        <!-- 下：icon / 黄 Ad+标题同行 / 正文 / CTA -->
         <LinearLayout
-            android:id="@+id/contentAds"
+            android:id="@+id/native_layout"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingTop="10dp">
+            android:layout_height="460dp"
+            android:background="@mipmap/laughtale_half_inters_bg"
+            android:gravity="center_vertical"
+            android:orientation="vertical">
+
+            <FrameLayout
+                android:id="@+id/media_layout"
+                android:layout_width="match_parent"
+                android:layout_height="230dp">
+
+                <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
+                    android:id="@+id/ad_media"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginLeft="5dp"
+                    android:layout_marginRight="5dp"
+                    android:layout_marginBottom="5dp" />
+            </FrameLayout>
 
             <LinearLayout
+                android:id="@+id/title_layout"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="8dp">
+                android:layout_height="80dp"
+                android:gravity="center"
+                android:orientation="horizontal">
 
-                <FrameLayout
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:background="@drawable/laughtale_half_icon_bg">
+                <ImageView
+                    android:id="@+id/ad_app_icon"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:layout_marginLeft="20dp"
+                    android:layout_marginRight="5dp"
+                    android:scaleType="centerCrop" />
 
-                    <ImageView
-                        android:id="@+id/ad_app_icon"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:adjustViewBounds="true"
-                        android:scaleType="centerCrop" />
-                </FrameLayout>
-
-                <LinearLayout
+                <TextView
+                    android:id="@+id/ad_headline"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
+                    android:layout_height="60dp"
+                    android:layout_marginLeft="5dp"
+                    android:layout_marginRight="20dp"
                     android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <!-- 黄 Ad 与 title 同一行垂直居中对齐 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:id="@+id/ad_badge"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginEnd="6dp"
-                            android:background="@drawable/laughtale_half_ad_badge_bg"
-                            android:includeFontPadding="false"
-                            android:paddingHorizontal="3dp"
-                            android:paddingVertical="1dp"
-                            android:text="Ad"
-                            android:textColor="#FFFFFF"
-                            android:textSize="9sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/ad_headline"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:ellipsize="end"
-                            android:maxLines="2"
-                            android:textColor="#222222"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/ad_body"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:textColor="#666666"
-                        android:textSize="12sp" />
-                </LinearLayout>
+                    android:background="@mipmap/laughtale_half_title_bg"
+                    android:gravity="center"
+                    android:lines="1"
+                    android:ellipsize="end"
+                    android:textColor="#FFFFFF"
+                    android:textSize="20sp" />
             </LinearLayout>
 
-            <androidx.constraintlayout.widget.ConstraintLayout
+            <RelativeLayout
+                android:id="@+id/body_text_layout"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_marginEnd="12dp"
-                android:layout_marginBottom="10dp">
+                android:layout_height="45dp">
+
+                <TextView
+                    android:id="@+id/ad_body"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerInParent="true"
+                    android:layout_margin="5dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:lines="1"
+                    android:textColor="#f0f0f0"
+                    android:textSize="16sp" />
+            </RelativeLayout>
+
+            <FrameLayout
+                android:id="@+id/cta_button_layout"
+                android:layout_width="match_parent"
+                android:layout_height="78dp"
+                android:layout_gravity="center"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp">
+
+                <ImageView
+                    android:id="@+id/xa_inters_streamer_img"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:layout_marginLeft="10dp"
+                    android:layout_marginRight="10dp"
+                    android:background="@drawable/laughtale_half_cta_anim"
+                    android:contentDescription="@null" />
 
                 <TextView
                     android:id="@+id/ad_call_to_action"
-                    android:layout_width="0dp"
-                    android:layout_height="0dp"
-                    android:background="@drawable/green_button"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:layout_marginLeft="5dp"
+                    android:layout_marginRight="5dp"
+                    android:background="#00000000"
                     android:gravity="center"
-                    android:textAllCaps="false"
-                    android:textColor="@android:color/white"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintDimensionRatio="H,972:144"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-            </androidx.constraintlayout.widget.ConstraintLayout>
+                    android:text="Go"
+                    android:textColor="#EEEEEE"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:layout_width="30dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="end|bottom"
+                    android:gravity="center_vertical|end"
+                    android:text="Ad"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/bottom_layout"
+                android:layout_width="match_parent"
+                android:layout_height="1dp" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView>

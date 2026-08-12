@@ -7,6 +7,7 @@ import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -55,7 +56,17 @@ public class LaughTaleBannerAdapter {
         this.LaughTale_adView.setBackgroundColor(Color.TRANSPARENT);
         this.LaughTale_adView.setVisibility(View.GONE);
         ViewGroup rootView = (ViewGroup) this.LaughTale_activity.findViewById(android.R.id.content);
-        rootView.addView(this.LaughTale_adView);
+        if (rootView == null) {
+            return;
+        }
+        // 防止重复 Init / Activity 重建后 again addView 触发 already has a parent
+        ViewParent existingParent = this.LaughTale_adView.getParent();
+        if (existingParent instanceof ViewGroup) {
+            ((ViewGroup) existingParent).removeView(this.LaughTale_adView);
+        }
+        if (this.LaughTale_adView.getParent() == null) {
+            rootView.addView(this.LaughTale_adView, frameLayout);
+        }
     }
 
     public void LaughTaleLoadBannerView() {
@@ -171,6 +182,52 @@ public class LaughTaleBannerAdapter {
                 LaughTale_adView.setVisibility(View.GONE);
             }
         });
+    }
+
+    /**
+     * 半屏遮罩底部预留高度（px），避免 #b3000000 盖住 Banner。
+     * 优先用当前 AdView 实测高度，否则用自适应 Banner 估算（+5dp，对齐历史 b2x）。
+     */
+    public int LaughTaleGetBannerReserveHeightPx() {
+        if (LaughTale_activity == null) {
+            return 0;
+        }
+        if (LaughTale_adView != null && LaughTale_adView.getHeight() > 0) {
+            return LaughTale_adView.getHeight() + dp2px(5);
+        }
+        int widthDp = LaughTaleGetScreenWidthDp(LaughTale_activity);
+        AdSize adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(LaughTale_activity, widthDp);
+        if (adSize == null) {
+            adSize = AdSize.getLargeAnchoredAdaptiveBannerAdSize(LaughTale_activity, widthDp);
+        }
+        if (adSize == null) {
+            return dp2px(50 + 5);
+        }
+        return adSize.getHeightInPixels(LaughTale_activity) + dp2px(5);
+    }
+
+    /** 半屏展示后把 Banner 提到最前，保证露在遮罩下方的区域可点。 */
+    public void LaughTaleBringBannerToFront() {
+        if (LaughTale_adView == null) {
+            return;
+        }
+        if (LaughTale_activity == null || LaughTale_activity.isFinishing() || LaughTale_activity.isDestroyed()) {
+            return;
+        }
+        Runnable bring = () -> {
+            if (LaughTale_adView != null) {
+                LaughTale_adView.bringToFront();
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            bring.run();
+        } else {
+            LaughTale_activity.runOnUiThread(bring);
+        }
+    }
+
+    private int dp2px(float dp) {
+        return (int) ((dp * LaughTale_activity.getResources().getDisplayMetrics().density) + 0.5f);
     }
 
     public void LaughTalePauseAutoRefresh() {

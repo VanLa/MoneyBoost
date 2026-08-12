@@ -55,8 +55,8 @@ public class LaughTaleFirebaseManager {
 
     /** Native 关闭钮尺寸 Remote Config 原始 JSON，key: native_close_size_config */
     public String LaughTale_native_close_size_config = "";
+    /** 统一关闭钮尺寸（dp），不区分 Meta */
     public float LaughTale_native_close_size = LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_DP;
-    public float LaughTale_native_close_size_meta = LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_META_DP;
 
     private static final String RC_KEY_NATIVE_CLOSE_SIZE_CONFIG = "native_close_size_config";
 
@@ -106,7 +106,6 @@ public class LaughTaleFirebaseManager {
         }
         LaughTaleLayoutSize size = new LaughTaleLayoutSize(mContext);
         LaughTale_native_close_size = size.closeSize;
-        LaughTale_native_close_size_meta = size.closeSizeMeta;
     }
 
     public void LaughTaleInitStorage(Context context){
@@ -271,7 +270,7 @@ public class LaughTaleFirebaseManager {
 
     /**
      * Remote Config key: native_close_size_config（String JSON）
-     * {"closeSize":20,"closeSize_0":25}
+     * {"closeSize":25}（兼容旧字段 closeSize_0，但忽略 Meta 分支，只用 closeSize）
      * 未配置或取不到时沿用 {@link LaughTaleLayoutSize} 写死默认值。
      */
     private void LaughTaleApplyNativeLayoutRemoteConfig() {
@@ -288,11 +287,8 @@ public class LaughTaleFirebaseManager {
             JSONObject object = new JSONObject(json);
             float closeSize = LaughTaleParseLayoutSizeValue(
                     object, "closeSize", LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_DP);
-            float closeSizeMeta = LaughTaleParseLayoutSizeValue(
-                    object, "closeSize_0", LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_META_DP);
             LaughTale_native_close_size = closeSize;
-            LaughTale_native_close_size_meta = closeSizeMeta;
-            new LaughTaleLayoutSize(mContext).updateFromRemote(closeSize, closeSizeMeta);
+            new LaughTaleLayoutSize(mContext).updateFromRemote(closeSize);
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
                     "===LaughTaleFirebaseRemoteConfig===",
                     "===native_close_size_config=== " + json);

@@ -44,7 +44,7 @@
         <meta-data android:name="LaughTale_MREC_ID" android:value="ca-app-pub-3940256099942544/9214589741"/>
         <meta-data android:name="LaughTale_NATIVE_ID" android:value="ca-app-pub-3940256099942544/2247696110"/>
         <meta-data android:name="LaughTale_SPLASH_ID" android:value="ca-app-pub-3940256099942544/9257395921"/>
-        <meta-data android:name="LaughTale_COLLAPSIBLE_NATIVE_ID" android:value="ca-app-pub-3940256099942544/2247696110;ca-app-pub-3940256099942544/2247696110"/>
+        <meta-data android:name="LaughTale_COLLAPSIBLE_NATIVE_ID" android:value="ca-app-pub-3940256099942544/2247696110"/>
 
         <activity
             android:name=".MainActivity"

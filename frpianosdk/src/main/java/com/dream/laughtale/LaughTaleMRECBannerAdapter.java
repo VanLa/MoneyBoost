@@ -7,6 +7,7 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -70,7 +71,16 @@ public class LaughTaleMRECBannerAdapter {
         this.LaughTale_adView.setVisibility(View.GONE);
 
         ViewGroup rootView = (ViewGroup) this.LaughTale_activity.findViewById(android.R.id.content);
-        rootView.addView(this.LaughTale_adView);
+        if (rootView == null) {
+            return;
+        }
+        ViewParent existingParent = this.LaughTale_adView.getParent();
+        if (existingParent instanceof ViewGroup) {
+            ((ViewGroup) existingParent).removeView(this.LaughTale_adView);
+        }
+        if (this.LaughTale_adView.getParent() == null) {
+            rootView.addView(this.LaughTale_adView, frameLayout);
+        }
     }
 
     public void LaughTaleLoadMRECView() {

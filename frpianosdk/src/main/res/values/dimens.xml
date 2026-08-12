@@ -4,4 +4,6 @@
     <dimen name="fsn_close_btn_size">25dp</dimen>
     <!-- 竞品 fsn_ad_choice_size：safeRootView 顶部至少留这么高，避开 AdChoices -->
     <dimen name="fsn_ad_choice_size">20dp</dimen>
+    <!-- Native 关闭钮统一尺寸（不区分 Meta）；RC native_close_size_config.closeSize 可覆盖 -->
+    <dimen name="laughtale_close_btn_size">25dp</dimen>
 </resources>

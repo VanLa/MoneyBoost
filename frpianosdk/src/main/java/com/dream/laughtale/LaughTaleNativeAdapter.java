@@ -3,6 +3,7 @@ package com.dream.laughtale;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.drawable.AnimationDrawable;
 import android.os.CountDownTimer;
 import android.os.Looper;
 import android.view.Gravity;
@@ -39,11 +40,8 @@ import java.util.concurrent.ScheduledFuture;
 
 /**
  * GMA Next-Gen Native 广告位。
- * FULLSCREEN：竞品 FSN 全屏 overlay（3s 倒计时 + 灰色 X）
- * HALF：截图模板（黄 Ad + icon/标题在上 + Media + 绿 CTA）；
- * 倒计时灰圆与关闭灰圆：
- * 第一条：倒计时随机左右，关闭在对侧；
- * 第二条：倒计时在第一条关闭的对侧，关闭与倒计时同侧（先后显示）。
+ * FULLSCREEN：FSN 全屏 overlay（3s 倒计时 + 灰色 X）
+ * HALF：历史「更换广告模版」b2x 卡片（居中 + 半透明遮罩，统一关闭尺寸）
  */
 public class LaughTaleNativeAdapter {
 
@@ -66,16 +64,9 @@ public class LaughTaleNativeAdapter {
     /** FULLSCREEN 或 HALF，初始化时设定 */
     public DisplayMode LaughTale_displayMode = DisplayMode.FULLSCREEN;
     private double LaughTale_adPrice = 0;
-    private FrameLayout fullscreenCloseFrame;
-    private TextView fullscreenCountdownView;
-    private ImageView fullscreenCloseIcon;
-    private View halfCloseButton;
-    private TextView halfCountdownView;
-    private ImageView halfCloseIcon;
-    private View halfCardAction;
-    private View halfCardCountdown;
-    private boolean LaughTale_halfCountdownOnLeft = true;
-    private boolean LaughTale_halfCloseOnLeft = false;
+    private View closeFrame;
+    private TextView countdownView;
+    private ImageView closeIcon;
     private FrameLayout LaughTale_overlayRoot;
     public boolean LaughTale_isOpen = false;
     private LoadState LaughTale_loadState = LoadState.UNLOAD;
@@ -125,7 +116,7 @@ public class LaughTaleNativeAdapter {
         LaughTaleHideView(false, true, false);
     }
 
-    /** 被其它广告顶掉时静默关闭，不触发 Unity CLOSE / double 链路 */
+    /** 被其它广告顶掉时静默关闭，不触发 Unity CLOSE */
     public void LaughTaleForceCloseNativeAdSilent() {
         LaughTaleHideView(false, true, false);
     }
@@ -176,28 +167,23 @@ public class LaughTaleNativeAdapter {
     private NativeAdView createNativeAdView() {
         NativeAdView nativeAdView = (NativeAdView) LayoutInflater.from(LaughTale_activity)
                 .inflate(layoutResId(), null);
-        if (LaughTale_displayMode == DisplayMode.FULLSCREEN) {
-            bindFullscreenCloseViews(nativeAdView);
+        bindCloseViews(nativeAdView);
+        if (LaughTale_displayMode == DisplayMode.HALF) {
+            applyHalfTemplateLayout(nativeAdView);
         } else {
-            bindHalfCloseViews(nativeAdView);
+            applyUnifiedCloseButtonSize(nativeAdView);
         }
         return nativeAdView;
     }
 
-    private void bindFullscreenCloseViews(NativeAdView nativeAdView) {
-        fullscreenCloseFrame = nativeAdView.findViewById(R.id.btnClose);
-        fullscreenCountdownView = nativeAdView.findViewById(R.id.tv_countdown);
-        fullscreenCloseIcon = nativeAdView.findViewById(R.id.iv_close);
-        halfCloseButton = null;
-        if (fullscreenCountdownView != null) {
-            fullscreenCountdownView.setVisibility(View.VISIBLE);
-            fullscreenCountdownView.setText(LaughTaleNativeAdConstants.COUNTDOWN_FULLSCREEN_SEC + "s");
-        }
-        if (fullscreenCloseIcon != null) {
-            fullscreenCloseIcon.setVisibility(View.GONE);
-        }
-        if (fullscreenCloseFrame != null) {
-            fullscreenCloseFrame.setOnClickListener(v -> {
+    private void bindCloseViews(NativeAdView nativeAdView) {
+        closeFrame = nativeAdView.findViewById(R.id.btnClose);
+        countdownView = nativeAdView.findViewById(R.id.tv_countdown);
+        closeIcon = nativeAdView.findViewById(R.id.iv_close);
+        LaughTale_countdownFinished = false;
+        resetCloseCountdownUi();
+        if (closeFrame != null) {
+            closeFrame.setOnClickListener(v -> {
                 if (LaughTale_countdownFinished) {
                     LaughTaleHideView(true, false, false);
                 }
@@ -205,84 +191,87 @@ public class LaughTaleNativeAdapter {
         }
     }
 
-    private void bindHalfCloseViews(NativeAdView nativeAdView) {
-        halfCloseButton = nativeAdView.findViewById(R.id.btnClose);
-        halfCountdownView = nativeAdView.findViewById(R.id.tv_countdown);
-        halfCloseIcon = nativeAdView.findViewById(R.id.iv_close);
-        halfCardAction = nativeAdView.findViewById(R.id.cardAction);
-        halfCardCountdown = nativeAdView.findViewById(R.id.cardCountdown);
-        fullscreenCloseFrame = null;
-        fullscreenCountdownView = null;
-        fullscreenCloseIcon = null;
-        LaughTale_countdownFinished = false;
-        resetHalfCountdownUi();
-        if (halfCloseButton != null) {
-            halfCloseButton.setOnClickListener(v -> {
-                if (LaughTale_countdownFinished) {
-                    LaughTaleHideView(true, false, false);
-                }
-            });
-        }
-        applyHalfCloseSide();
-    }
-
-    public void LaughTaleSetHalfSides(boolean countdownOnLeft, boolean closeOnLeft) {
-        LaughTale_halfCountdownOnLeft = countdownOnLeft;
-        LaughTale_halfCloseOnLeft = closeOnLeft;
-        if (LaughTale_activity == null) {
+    /** 关闭钮尺寸统一取 closeSize，不区分 Meta / 非 Meta。 */
+    private void applyUnifiedCloseButtonSize(NativeAdView nativeAdView) {
+        if (nativeAdView == null || LaughTale_activity == null) {
             return;
         }
-        LaughTale_activity.runOnUiThread(this::applyHalfCloseSide);
-    }
-
-    private void applyHalfCloseSide() {
-        if (halfCardAction == null || halfCardCountdown == null) {
+        View close = nativeAdView.findViewById(R.id.btnClose);
+        if (close == null) {
             return;
         }
-        applyHalfWidgetGravity(halfCardCountdown, LaughTale_halfCountdownOnLeft);
-        applyHalfWidgetGravity(halfCardAction, LaughTale_halfCloseOnLeft);
-        halfCardCountdown.requestLayout();
-        halfCardAction.requestLayout();
-        if (halfCardAction.getParent() instanceof View) {
-            ((View) halfCardAction.getParent()).requestLayout();
+        float sizeDp = LaughTaleFirebaseManager.instance().LaughTale_native_close_size;
+        if (sizeDp <= 0f) {
+            sizeDp = LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_DP;
+        }
+        int px = dp2px(LaughTale_activity, sizeDp);
+        ViewGroup.LayoutParams lp = close.getLayoutParams();
+        if (lp != null) {
+            lp.width = px;
+            lp.height = px;
+            close.setLayoutParams(lp);
+        }
+        // 半屏倒计时条高度跟关闭钮对齐（历史 DEFAULT 逻辑，去掉 Meta 分支）
+        if (LaughTale_displayMode == DisplayMode.HALF && countdownView != null) {
+            ViewGroup.LayoutParams delayLp = countdownView.getLayoutParams();
+            if (delayLp != null) {
+                delayLp.width = dp2px(LaughTale_activity, 10f + Math.max(25f, sizeDp));
+                delayLp.height = dp2px(LaughTale_activity, Math.max(25f, sizeDp));
+                countdownView.setLayoutParams(delayLp);
+            }
         }
     }
 
-    /** 用绝对 LEFT/RIGHT Gravity，避免 ConstraintSet / RTL 换边失效。 */
-    private static void applyHalfWidgetGravity(View widget, boolean onLeft) {
-        ViewGroup.LayoutParams raw = widget.getLayoutParams();
-        FrameLayout.LayoutParams lp;
-        if (raw instanceof FrameLayout.LayoutParams) {
-            lp = (FrameLayout.LayoutParams) raw;
-        } else {
-            lp = new FrameLayout.LayoutParams(
-                    raw != null ? raw.width : ViewGroup.LayoutParams.WRAP_CONTENT,
-                    raw != null ? raw.height : ViewGroup.LayoutParams.WRAP_CONTENT);
+    /**
+     * 半屏 b2x 卡片固定用历史 DEFAULT 尺寸（不再按 Meta 切换）。
+     * media 230 / title 80 / body 45 / btn 78 / card≈434dp
+     */
+    private void applyHalfTemplateLayout(NativeAdView nativeAdView) {
+        if (nativeAdView == null || LaughTale_activity == null) {
+            return;
         }
-        // 清掉 START/END；半屏关闭/倒计时叠在 Media 顶部左右
-        lp.gravity = (onLeft ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP;
-        widget.setLayoutParams(lp);
+        updateViewHeightDp(nativeAdView.findViewById(R.id.media_layout), 230f);
+        updateViewHeightDp(nativeAdView.findViewById(R.id.title_layout), 80f);
+        updateViewHeightDp(nativeAdView.findViewById(R.id.body_text_layout), 45f);
+        updateViewHeightDp(nativeAdView.findViewById(R.id.cta_button_layout), 78f);
+        updateViewHeightDp(nativeAdView.findViewById(R.id.bottom_layout), 1f);
+        // media+title+body+btn+bottom+bottomM(10)
+        updateViewHeightDp(nativeAdView.findViewById(R.id.native_layout), 230f + 80f + 45f + 78f + 1f + 10f);
+        TextView cta = nativeAdView.findViewById(R.id.ad_call_to_action);
+        if (cta != null) {
+            cta.setTextSize(78f / 3.0f);
+        }
+        applyUnifiedCloseButtonSize(nativeAdView);
     }
 
-    private void resetHalfCountdownUi() {
+    private void updateViewHeightDp(View view, float heightDp) {
+        if (view == null || LaughTale_activity == null) {
+            return;
+        }
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        if (lp == null) {
+            return;
+        }
+        lp.height = dp2px(LaughTale_activity, heightDp);
+        view.setLayoutParams(lp);
+    }
+
+    private void resetCloseCountdownUi() {
         LaughTale_countdownFinished = false;
-        if (halfCardCountdown != null) {
-            halfCardCountdown.setVisibility(View.VISIBLE);
+        int seconds = LaughTale_displayMode == DisplayMode.HALF
+                ? LaughTaleNativeAdConstants.COUNTDOWN_HALF_SEC
+                : LaughTaleNativeAdConstants.COUNTDOWN_FULLSCREEN_SEC;
+        if (countdownView != null) {
+            countdownView.setVisibility(View.VISIBLE);
+            countdownView.setText(seconds + "s");
         }
-        if (halfCountdownView != null) {
-            halfCountdownView.setVisibility(View.VISIBLE);
-            halfCountdownView.setText(String.valueOf(LaughTaleNativeAdConstants.COUNTDOWN_HALF_SEC));
-        }
-        // 倒计时结束前：关闭侧（含 X）整圆隐藏
-        if (halfCardAction != null) {
-            halfCardAction.setVisibility(View.INVISIBLE);
-        }
-        if (halfCloseIcon != null) {
-            halfCloseIcon.setVisibility(View.GONE);
-        }
-        if (halfCloseButton != null) {
-            halfCloseButton.setClickable(false);
-            halfCloseButton.setFocusable(false);
+        if (LaughTale_displayMode == DisplayMode.HALF) {
+            // b2x：倒计时结束前隐藏关闭钮
+            if (closeFrame != null) {
+                closeFrame.setVisibility(View.GONE);
+            }
+        } else if (closeIcon != null) {
+            closeIcon.setVisibility(View.GONE);
         }
     }
 
@@ -380,10 +369,10 @@ public class LaughTaleNativeAdapter {
         LaughTale_loadState = LoadState.LOADED;
         // 仅预填文案；registerNativeAd 必须在 View 附着并完成 layout 后调用，
         // 否则校验器会报 Advertiser assets outside native ad view。
-        if (LaughTale_displayMode == DisplayMode.FULLSCREEN) {
-            bindFullscreenAssetTexts(nativeAd, LaughTale_nativeAdView);
-        } else {
+        if (LaughTale_displayMode == DisplayMode.HALF) {
             bindHalfAssetTexts(nativeAd, LaughTale_nativeAdView);
+        } else {
+            bindFullscreenAssetTexts(nativeAd, LaughTale_nativeAdView);
         }
         nativeAd.setAdEventCallback(new NativeAdEventCallback() {
             @Override
@@ -412,10 +401,10 @@ public class LaughTaleNativeAdapter {
     }
 
     private void populateNativeAdView(@NonNull NativeAd nativeAd, @NonNull NativeAdView nativeAdView) {
-        if (LaughTale_displayMode == DisplayMode.FULLSCREEN) {
-            populateFullscreenNativeAdView(nativeAd, nativeAdView);
-        } else {
+        if (LaughTale_displayMode == DisplayMode.HALF) {
             populateHalfNativeAdView(nativeAd, nativeAdView);
+        } else {
+            populateFullscreenNativeAdView(nativeAd, nativeAdView);
         }
     }
 
@@ -427,7 +416,6 @@ public class LaughTaleNativeAdapter {
         if (headlineView != null) {
             String headline = nativeAd.getHeadline();
             headlineView.setText(headline != null ? headline : "");
-            // Google 样例：缺资产用 INVISIBLE，不用 GONE（GONE 易触发 outside 校验）
             headlineView.setVisibility(headline != null ? View.VISIBLE : View.INVISIBLE);
         }
         if (ctaView != null) {
@@ -462,7 +450,6 @@ public class LaughTaleNativeAdapter {
             nativeAdView.setCallToActionView(ctaView);
         }
         if (iconView != null) {
-            // 始终绑定 iconView（即使 INVISIBLE），与 Google Next-Gen 样例一致
             nativeAdView.setIconView(iconView);
         }
         if (mediaView != null) {
@@ -472,7 +459,6 @@ public class LaughTaleNativeAdapter {
         nativeAdView.registerNativeAd(nativeAd, mediaView);
     }
 
-    /** 加载成功时预填，不 register（避免未附着 0 尺寸时注册）。 */
     private void bindHalfAssetTexts(@NonNull NativeAd nativeAd, @NonNull NativeAdView nativeAdView) {
         TextView headlineView = nativeAdView.findViewById(R.id.ad_headline);
         TextView bodyView = nativeAdView.findViewById(R.id.ad_body);
@@ -560,10 +546,8 @@ public class LaughTaleNativeAdapter {
         LaughTaleShowNativeAdInternal(DisplayMode.FULLSCREEN);
     }
 
-    /** 半屏展示（底部）；countdown/close 左右由 MediationManager 按 double 规则传入。 */
-    public void LaughTaleShowNativeAdHalf(boolean countdownOnLeft, boolean closeOnLeft) {
-        LaughTale_halfCountdownOnLeft = countdownOnLeft;
-        LaughTale_halfCloseOnLeft = closeOnLeft;
+    /** 半屏展示：b2x 居中卡片 + 半透明遮罩。 */
+    public void LaughTaleShowNativeAdHalf() {
         LaughTaleShowNativeAdInternal(DisplayMode.HALF);
     }
 
@@ -615,13 +599,7 @@ public class LaughTaleNativeAdapter {
     }
 
     private void showNativeAdFullscreenOverlay() {
-        if (fullscreenCountdownView != null) {
-            fullscreenCountdownView.setVisibility(View.VISIBLE);
-            fullscreenCountdownView.setText(LaughTaleNativeAdConstants.COUNTDOWN_FULLSCREEN_SEC + "s");
-        }
-        if (fullscreenCloseIcon != null) {
-            fullscreenCloseIcon.setVisibility(View.GONE);
-        }
+        resetCloseCountdownUi();
 
         FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
@@ -631,30 +609,35 @@ public class LaughTaleNativeAdapter {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         applyFullscreenSafeRootInsets();
         registerNativeAdAfterLayout();
-        startFullscreenCountdown();
+        startCloseCountdown();
     }
 
-    /** Overlay 复用：首次 addContentView，之后只改 LayoutParams + VISIBLE。 */
+    /**
+     * Overlay 挂到当前 Activity content。
+     * 已在当前 content 上则只改 LayoutParams；否则先卸旧 parent 再 addView，避免 already has a parent。
+     */
     private void attachOrReuseOverlay(FrameLayout.LayoutParams overlayParams) {
         LaughTaleInitNativeAdapter();
         if (LaughTale_overlayRoot == null || LaughTale_activity == null) {
             return;
         }
-        // Activity 重建后旧 overlay 可能仍挂在旧 decor 上，必须卸下再挂到当前 Activity
+        ViewGroup content = LaughTale_activity.findViewById(android.R.id.content);
         ViewParent overlayParent = LaughTale_overlayRoot.getParent();
-        if (overlayParent instanceof ViewGroup) {
-            ViewGroup oldParent = (ViewGroup) overlayParent;
-            View currentContent = LaughTale_activity.findViewById(android.R.id.content);
-            if (currentContent != null && oldParent != currentContent && !isDescendantOf(oldParent, currentContent)) {
-                oldParent.removeView(LaughTale_overlayRoot);
+        if (overlayParent == content) {
+            LaughTale_overlayRoot.setLayoutParams(overlayParams);
+        } else {
+            safeRemoveFromParent(LaughTale_overlayRoot);
+            if (LaughTale_overlayRoot.getParent() != null) {
+                return;
+            }
+            if (content != null) {
+                content.addView(LaughTale_overlayRoot, overlayParams);
+            } else {
+                LaughTale_activity.addContentView(LaughTale_overlayRoot, overlayParams);
             }
         }
-        if (LaughTale_overlayRoot.getParent() == null) {
-            LaughTale_activity.addContentView(LaughTale_overlayRoot, overlayParams);
-        } else {
-            LaughTale_overlayRoot.setLayoutParams(overlayParams);
-        }
         LaughTale_overlayRoot.setVisibility(View.VISIBLE);
+        LaughTale_overlayRoot.bringToFront();
     }
 
     /**
@@ -665,24 +648,28 @@ public class LaughTaleNativeAdapter {
         if (LaughTale_overlayRoot == null || LaughTale_nativeAdView == null) {
             return;
         }
-        ViewParent childParent = LaughTale_nativeAdView.getParent();
-        if (childParent instanceof ViewGroup) {
-            ((ViewGroup) childParent).removeView(LaughTale_nativeAdView);
-        }
+        safeRemoveFromParent(LaughTale_nativeAdView);
+        // 清掉 overlay 里其它残留 child（不含已卸下的 nativeAdView）
         LaughTale_overlayRoot.removeAllViews();
+        if (LaughTale_nativeAdView.getParent() != null) {
+            return;
+        }
         LaughTale_overlayRoot.addView(LaughTale_nativeAdView, childParams);
     }
 
-    private static boolean isDescendantOf(View child, View ancestor) {
-        View current = child;
-        while (current != null) {
-            if (current == ancestor) {
-                return true;
-            }
-            Object parent = current.getParent();
-            current = parent instanceof View ? (View) parent : null;
+    /** 若已有 parent 则先 remove，避免 addView crash。 */
+    private static void safeRemoveFromParent(View view) {
+        if (view == null) {
+            return;
         }
-        return false;
+        ViewParent parent = view.getParent();
+        if (parent instanceof ViewGroup) {
+            try {
+                ((ViewGroup) parent).removeView(view);
+            } catch (RuntimeException ignored) {
+                // 极端情况下 parent 已销毁，忽略后由 getParent()==null 守卫
+            }
+        }
     }
 
     private void registerNativeAdAfterLayout() {
@@ -736,81 +723,69 @@ public class LaughTaleNativeAdapter {
     }
 
     private void showNativeAdHalfOverlay() {
-        applyHalfCloseSide();
-        resetHalfCountdownUi();
+        resetCloseCountdownUi();
+        applyHalfTemplateLayout(LaughTale_nativeAdView);
+        startHalfCtaAnimation(LaughTale_nativeAdView);
 
+        // 对齐历史 b2x：底部留出 Banner 高度，#b3000000 不盖住 Banner
+        int bannerReservePx = LaughTaleMediationManager.getInstance().LaughTaleGetBannerReserveHeightPx();
         FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM);
+                ViewGroup.LayoutParams.MATCH_PARENT);
+        overlayParams.bottomMargin = Math.max(0, bannerReservePx);
         attachOrReuseOverlay(overlayParams);
+        // 遮罩色在 half layout 根上（#b3000000），overlay 保持透明
         LaughTale_overlayRoot.setBackgroundColor(Color.TRANSPARENT);
         attachNativeAdViewToOverlay(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp2px(LaughTale_activity, LaughTaleNativeAdConstants.HALF_HEIGHT_DP)));
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        // Banner 提到最前，底部露出来的区域可点
+        LaughTaleMediationManager.getInstance().LaughTaleBringBannerToFront();
         registerNativeAdAfterLayout();
-        startHalfCountdown();
+        startCloseCountdown();
     }
 
-    private void startFullscreenCountdown() {
+    private void startHalfCtaAnimation(NativeAdView nativeAdView) {
+        if (nativeAdView == null) {
+            return;
+        }
+        View streamer = nativeAdView.findViewById(R.id.xa_inters_streamer_img);
+        if (streamer == null || !(streamer.getBackground() instanceof AnimationDrawable)) {
+            return;
+        }
+        AnimationDrawable anim = (AnimationDrawable) streamer.getBackground();
+        anim.stop();
+        anim.start();
+    }
+
+    private void startCloseCountdown() {
         cancelCountdown();
-        final int seconds = LaughTaleNativeAdConstants.COUNTDOWN_FULLSCREEN_SEC;
+        resetCloseCountdownUi();
+        final boolean half = LaughTale_displayMode == DisplayMode.HALF;
+        final int seconds = half
+                ? LaughTaleNativeAdConstants.COUNTDOWN_HALF_SEC
+                : LaughTaleNativeAdConstants.COUNTDOWN_FULLSCREEN_SEC;
         countdownTimer = new CountDownTimer(seconds * 1000L, 1000L) {
             @Override
             public void onTick(long millisUntilFinished) {
-                if (fullscreenCountdownView != null) {
+                if (countdownView != null) {
                     long sec = Math.max(1, (millisUntilFinished + 999) / 1000);
-                    fullscreenCountdownView.setText(sec + "s");
+                    countdownView.setText(sec + "s");
                 }
             }
 
             @Override
             public void onFinish() {
                 LaughTale_countdownFinished = true;
-                if (fullscreenCountdownView != null) {
-                    fullscreenCountdownView.setVisibility(View.GONE);
+                if (countdownView != null) {
+                    countdownView.setVisibility(View.GONE);
                 }
-                if (fullscreenCloseIcon != null) {
-                    fullscreenCloseIcon.setVisibility(View.VISIBLE);
-                }
-            }
-        };
-        countdownTimer.start();
-    }
-
-    /** 半屏：一侧倒计时 3→2→1，结束后另一侧显示 X 并可关。 */
-    private void startHalfCountdown() {
-        cancelCountdown();
-        resetHalfCountdownUi();
-        final int seconds = LaughTaleNativeAdConstants.COUNTDOWN_HALF_SEC;
-        countdownTimer = new CountDownTimer(seconds * 1000L, 1000L) {
-            @Override
-            public void onTick(long millisUntilFinished) {
-                if (halfCountdownView != null) {
-                    long sec = Math.max(1, (millisUntilFinished + 999) / 1000);
-                    halfCountdownView.setText(String.valueOf(sec));
-                }
-            }
-
-            @Override
-            public void onFinish() {
-                LaughTale_countdownFinished = true;
-                // 倒计时结束：藏倒计时圆，对侧显示 X 并可点
-                if (halfCardCountdown != null) {
-                    halfCardCountdown.setVisibility(View.INVISIBLE);
-                }
-                if (halfCountdownView != null) {
-                    halfCountdownView.setVisibility(View.GONE);
-                }
-                if (halfCardAction != null) {
-                    halfCardAction.setVisibility(View.VISIBLE);
-                }
-                if (halfCloseIcon != null) {
-                    halfCloseIcon.setVisibility(View.VISIBLE);
-                }
-                if (halfCloseButton != null) {
-                    halfCloseButton.setClickable(true);
-                    halfCloseButton.setFocusable(true);
+                if (half) {
+                    if (closeFrame != null) {
+                        closeFrame.setVisibility(View.VISIBLE);
+                    }
+                } else if (closeIcon != null) {
+                    closeIcon.setVisibility(View.VISIBLE);
                 }
             }
         };
@@ -883,13 +858,7 @@ public class LaughTaleNativeAdapter {
     }
 
     private void detachFromParent(View view) {
-        if (view == null) {
-            return;
-        }
-        ViewGroup parent = (ViewGroup) view.getParent();
-        if (parent != null) {
-            parent.removeView(view);
-        }
+        safeRemoveFromParent(view);
     }
 
     private void tryDestroyAd() {

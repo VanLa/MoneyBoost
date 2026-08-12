@@ -24,7 +24,6 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class LaughTaleMediationManager implements LaughTaleInterstitialListener, LaughTaleRewardVideoListener,
         LaughTaleNativeListener, LaughTaleSplashListener {
@@ -88,8 +87,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     private static final long COLD_SPLASH_WAIT_TIMEOUT_MS = 12000L;
 
     private static final String PREF_NATIVE_FULL_INTER_SHOW_COUNT = "native_full_inter_show_count";
-    /** 竞品 CountNativeCollab：半屏展示次数，用于关闭钮左右切换 */
-    private static final String PREF_COUNT_NATIVE_COLLAB = "count_native_collab";
 
     private boolean LaughTale_needPopAD = true;
 
@@ -121,29 +118,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     /** CollapsibleBanner 正在播半屏 Native（Unity 走 NATIVE_*） */
     private boolean LaughTale_showingCollapsibleAsNative = false;
     private LaughTaleNativeAdapter LaughTale_collapsibleShowingAdapter = null;
-    private int LaughTale_collapsibleRoundRobin = 0;
-    /**
-     * 竞品 double：ShowNativeCollapsible 关完后立刻 ShowNativeCollapsible2（关钮左右对调）。
-     * 一次 CollapsibleBanner 请求开启链路，第二条关掉后结束。
-     */
-    private boolean LaughTale_collapsibleDoublePending = false;
-    private LaughTaleNativeAdapter LaughTale_pendingCollapsibleDoubleAdapter = null;
-    /** 本轮第一条关闭钮所在侧，供第二条推算：倒计时在其对侧 */
-    private boolean LaughTale_collapsibleFirstCloseOnLeft = false;
-    private final Runnable collapsibleDoubleShowRunnable = new Runnable() {
-        @Override
-        public void run() {
-            LaughTaleNativeAdapter next = LaughTale_pendingCollapsibleDoubleAdapter;
-            LaughTale_pendingCollapsibleDoubleAdapter = null;
-            LaughTale_collapsibleDoublePending = false;
-            if (next == null || LaughTale_isDestroyed || !LaughTale_isAppForeground) {
-                LaughTaleSyncBannerVisibility();
-                return;
-            }
-            // 第二条：倒计时与关闭都在左
-            LaughTaleShowCollapsibleHalfNative(next, true);
-        }
-    };
 
     private boolean LaughTale_rewardVideoInSession = false;
     private boolean LaughTale_rewardCloseDispatched = false;
@@ -323,12 +297,15 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                 LaughTale_nativeKey,
                 LaughTaleNativeAdapter.DisplayMode.FULLSCREEN,
                 LaughTale_fullscreenNativeList,
-                activity);
+                activity,
+                0);
+        // 半屏只保留 1 个广告位（忽略 ; 后的 collapse2）
         LaughTaleCreateNativeAdapters(
                 LaughTale_collapsibleNativeKey,
                 LaughTaleNativeAdapter.DisplayMode.HALF,
                 LaughTale_collapsibleNativeList,
-                activity);
+                activity,
+                1);
 
         LaughTale_bannerAdapter = new LaughTaleBannerAdapter();
         LaughTale_bannerAdapter.LaughTale_activity = activity;
@@ -360,11 +337,15 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTaleRebuildAllNativeAdaptersCache();
     }
 
+    /**
+     * @param maxCount 0=不限制；半屏传 1，忽略 ; 分隔的第 2 个及以后 ID。
+     */
     private void LaughTaleCreateNativeAdapters(
             String keyCsv,
             LaughTaleNativeAdapter.DisplayMode mode,
             List<LaughTaleNativeAdapter> out,
-            Activity activity) {
+            Activity activity,
+            int maxCount) {
         if (keyCsv == null || keyCsv.trim().isEmpty()) {
             return;
         }
@@ -376,6 +357,9 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             String id = raw.trim();
             if (id.isEmpty()) {
                 continue;
+            }
+            if (maxCount > 0 && out.size() >= maxCount) {
+                break;
             }
             LaughTaleNativeAdapter adapter = new LaughTaleNativeAdapter();
             adapter.LaughTale_activity = activity;
@@ -674,8 +658,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         if (interReady) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
                     "===ShowInterFormat");
-            LaughTaleCancelCollapsibleDoubleShow();
-            LaughTale_showingInterAsNative = false;
+                LaughTale_showingInterAsNative = false;
             LaughTale_interNativeAdapter = null;
             LaughTaleCloseAllOpenNativeAds();
             // 允许本次 show 失败时再发 CLOSE，避免 Unity 等不到回调
@@ -692,7 +675,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
 
     private void LaughTaleShowInterAsFullscreenNative(LaughTaleNativeAdapter adapter) {
         // 先静默关掉其它 Native，再置 inter flag，避免误走 INTERSTITIAL_CLOSE
-        LaughTaleCancelCollapsibleDoubleShow();
         LaughTaleCloseOtherOpenNativeAds(adapter);
         LaughTale_showingInterAsNative = true;
         LaughTale_interNativeAdapter = adapter;
@@ -826,6 +808,21 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTaleSyncBannerVisibility();
     }
 
+    /** 半屏遮罩底部预留，避免挡住 Banner */
+    public int LaughTaleGetBannerReserveHeightPx() {
+        if (LaughTale_bannerAdapter == null) {
+            return 0;
+        }
+        return LaughTale_bannerAdapter.LaughTaleGetBannerReserveHeightPx();
+    }
+
+    public void LaughTaleBringBannerToFront() {
+        if (LaughTale_bannerAdapter == null) {
+            return;
+        }
+        LaughTale_bannerAdapter.LaughTaleBringBannerToFront();
+    }
+
     private void LaughTaleReconcileFullscreenAdRefCount() {
         if (LaughTale_fullscreenAdRefCount <= 0) {
             return;
@@ -848,12 +845,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         if (LaughTale_fullscreenAdRefCount > 0) {
             return true;
         }
-        // 半屏不走 fullscreen refcount，避免 double 间隙 Banner 闪现；用状态位挡
-        if (LaughTale_showingCollapsibleAsNative
-                || LaughTale_collapsibleDoublePending
-                || LaughTaleHasOpenCollapsibleNative()) {
-            return true;
-        }
+        // 半屏 b2x 居中卡片不挡 Banner
         return LaughTaleIsFullscreenAdShowing() || LaughTaleIsSplashAdShowing();
     }
 
@@ -965,63 +957,8 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         return LaughTalePickReadyFromList(LaughTale_fullscreenNativeList);
     }
 
-    private int LaughTaleGetCountNativeCollab() {
-        if (LaughTale_dataPrefs == null) {
-            return 0;
-        }
-        return LaughTale_dataPrefs.getInt(PREF_COUNT_NATIVE_COLLAB, 0);
-    }
-
-    private int LaughTaleBumpCountNativeCollab() {
-        if (LaughTale_dataPrefs == null) {
-            return 0;
-        }
-        int next = LaughTaleGetCountNativeCollab() + 1;
-        LaughTale_dataPrefs.edit().putInt(PREF_COUNT_NATIVE_COLLAB, next).apply();
-        return next;
-    }
-
-    /**
-     * 半屏多 ID：优先按 CountNativeCollab 选对应槽位（collapsible_1 / _2），
-     * 不可用再找其他 ready；exclude 用于 double 第二条第二条。
-     */
-    private LaughTaleNativeAdapter LaughTalePickReadyCollapsibleNative(LaughTaleNativeAdapter exclude) {
-        int size = LaughTale_collapsibleNativeList.size();
-        if (size == 0) {
-            return null;
-        }
-        int preferred = Math.floorMod(LaughTaleGetCountNativeCollab(), size);
-        LaughTaleNativeAdapter preferredAdapter = LaughTale_collapsibleNativeList.get(preferred);
-        if (preferredAdapter != exclude) {
-            preferredAdapter.LaughTaleRefreshStaleInventoryIfNeeded();
-            if (!preferredAdapter.LaughTale_isOpen
-                    && preferredAdapter.LaughTaleCanShowNativeAd()
-                    && preferredAdapter.LaughTaleGetADPrice() > 0) {
-                LaughTale_collapsibleRoundRobin = preferred + 1;
-                return preferredAdapter;
-            }
-        }
-        int start = Math.floorMod(LaughTale_collapsibleRoundRobin, size);
-        for (int i = 0; i < size; i++) {
-            int idx = (start + i) % size;
-            LaughTaleNativeAdapter adapter = LaughTale_collapsibleNativeList.get(idx);
-            if (adapter == exclude) {
-                continue;
-            }
-            adapter.LaughTaleRefreshStaleInventoryIfNeeded();
-            if (adapter.LaughTale_isOpen) {
-                continue;
-            }
-            if (adapter.LaughTaleCanShowNativeAd() && adapter.LaughTaleGetADPrice() > 0) {
-                LaughTale_collapsibleRoundRobin = idx + 1;
-                return adapter;
-            }
-        }
-        return null;
-    }
-
     private LaughTaleNativeAdapter LaughTalePickReadyCollapsibleNative() {
-        return LaughTalePickReadyCollapsibleNative(null);
+        return LaughTalePickReadyFromList(LaughTale_collapsibleNativeList);
     }
 
     private boolean LaughTaleHasOpenNativeAd() {
@@ -1055,19 +992,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         }
     }
 
-    private void LaughTaleCancelCollapsibleDoubleShow() {
-        mainHandler.removeCallbacks(collapsibleDoubleShowRunnable);
-        LaughTale_pendingCollapsibleDoubleAdapter = null;
-        LaughTale_collapsibleDoublePending = false;
-    }
-
-    private void LaughTaleScheduleCollapsibleDoubleShow(LaughTaleNativeAdapter next) {
-        LaughTale_pendingCollapsibleDoubleAdapter = next;
-        LaughTale_collapsibleDoublePending = true;
-        mainHandler.removeCallbacks(collapsibleDoubleShowRunnable);
-        mainHandler.post(collapsibleDoubleShowRunnable);
-    }
-
     @Override
     public void LaughTaleOnNativeAdClosed(boolean clickedCloseButton, boolean silentClose) {
         if (LaughTale_showingInterAsNative) {
@@ -1082,37 +1006,21 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         }
         if (LaughTale_showingCollapsibleAsNative) {
             LaughTale_showingCollapsibleAsNative = false;
-            LaughTaleNativeAdapter closed = LaughTale_collapsibleShowingAdapter;
             LaughTale_collapsibleShowingAdapter = null;
             if (silentClose) {
-                // 后台 / 被顶掉：结束 double，不再弹第二条
-                LaughTaleCancelCollapsibleDoubleShow();
                 LaughTaleSyncBannerVisibility();
                 LaughTaleRetryPendingColdSplashIfNeeded();
                 return;
             }
             LaughTaleDispatchNativeCloseCallbackNow();
-            LaughTaleBumpCountNativeCollab();
-            // 竞品 double：关完立刻出另一条半屏，关闭钮换边；pending 保持到下一条展示，避免 Banner 闪现
-            if (LaughTale_collapsibleDoublePending) {
-                LaughTaleNativeAdapter next = LaughTalePickReadyCollapsibleNative(closed);
-                if (next != null) {
-                    LaughTaleScheduleCollapsibleDoubleShow(next);
-                    LaughTaleSyncBannerVisibility();
-                    return;
-                }
-                LaughTaleCancelCollapsibleDoubleShow();
-            }
             LaughTaleSyncBannerVisibility();
             LaughTaleRetryPendingColdSplashIfNeeded();
             return;
         }
-        // 静默关闭（被顶掉的无关 Native）不派发 Unity 回调
         if (silentClose) {
             LaughTaleSyncBannerVisibility();
             return;
         }
-        // 兜底：未知路径关闭
         LaughTaleOnFullscreenAdClosed();
         LaughTaleDispatchNativeCloseCallbackNow();
         LaughTaleClearAoaResumeEligibility();
@@ -1160,41 +1068,21 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         if (LaughTale_showingCollapsibleAsNative) {
             LaughTale_showingCollapsibleAsNative = false;
             LaughTale_collapsibleShowingAdapter = null;
-            LaughTaleCancelCollapsibleDoubleShow();
             LaughTaleSyncBannerVisibility();
         }
     }
 
-    /**
-     * @param secondOfPair false=本轮第一条：倒计时随机左右，关闭在对侧；
-     *                     true=第二条：倒计时在第一条关闭的对侧，关闭与倒计时同侧。
-     */
-    private void LaughTaleShowCollapsibleHalfNative(LaughTaleNativeAdapter adapter, boolean secondOfPair) {
+    private void LaughTaleShowCollapsibleHalfNative(LaughTaleNativeAdapter adapter) {
         LaughTale_showingCollapsibleAsNative = true;
         LaughTale_collapsibleShowingAdapter = adapter;
         LaughTaleCloseOtherOpenNativeAds(adapter);
-        boolean countdownOnLeft;
-        boolean closeOnLeft;
-        if (!secondOfPair) {
-            countdownOnLeft = ThreadLocalRandom.current().nextBoolean();
-            closeOnLeft = !countdownOnLeft;
-            LaughTale_collapsibleFirstCloseOnLeft = closeOnLeft;
-        } else {
-            countdownOnLeft = !LaughTale_collapsibleFirstCloseOnLeft;
-            closeOnLeft = countdownOnLeft;
-        }
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
-                "===ShowCollapsibleHalf secondOfPair=" + secondOfPair
-                        + " countdownOnLeft=" + countdownOnLeft
-                        + " closeOnLeft=" + closeOnLeft
-                        + " count=" + LaughTaleGetCountNativeCollab()
-                        + " unit=" + adapter.LaughTale_ad_unit);
-        adapter.LaughTaleShowNativeAdHalf(countdownOnLeft, closeOnLeft);
+                "===ShowCollapsibleHalf unit=" + adapter.LaughTale_ad_unit);
+        adapter.LaughTaleShowNativeAdHalf();
     }
 
     /**
-     * CollapsibleBanner = 半屏 Native（竞品 ShowNativeCollapsible / ShowNativeCollapsible2）。
-     * 双 ID：第一条倒计时随机边、关闭对侧；第二条倒计时在第一条关闭对侧、关闭与倒计时同侧。
+     * CollapsibleBanner = 半屏 Native（单广告位、FSN 样式、无 double）。
      */
     public void LaughTaleShowCollapsibleBannerView(boolean needHighValue){
         if (LaughTaleHasOpenCollapsibleNative()) {
@@ -1214,14 +1102,12 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
                     "=====LaughTaleMediatonManager", "===ShowCollapsibleSkipped not ready");
             return;
         }
-        LaughTale_collapsibleDoublePending = LaughTalePickReadyCollapsibleNative(adapter) != null;
-        LaughTaleShowCollapsibleHalfNative(adapter, false);
+        LaughTaleShowCollapsibleHalfNative(adapter);
     }
 
     public void LaughTaleHideCollapsibleBannerView(){
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
                 "=====LaughTaleMediatonManager", "===HideCollapsibleBannerView");
-        LaughTaleCancelCollapsibleDoubleShow();
         for (LaughTaleNativeAdapter adapter : LaughTale_collapsibleNativeList) {
             if (adapter.LaughTale_isOpen) {
                 adapter.LaughTaleAutoHideNativeAd();
@@ -1746,7 +1632,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         }
         LaughTaleStopAdTick();
         mainHandler.removeCallbacks(mrecHideRunnable);
-        LaughTaleCancelCollapsibleDoubleShow();
         LaughTaleCancelPendingColdSplashOnBackground();
         LaughTaleCancelPendingHotSplashOnBackground();
         LaughTaleHideAllNativeAdsOnBackground();
@@ -1760,7 +1645,6 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
         LaughTale_wentToBackground = false;
         mainHandler.removeCallbacks(mrecHideRunnable);
         LaughTaleCancelStaggeredAdLoads();
-        LaughTaleCancelCollapsibleDoubleShow();
         mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
         mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
         LaughTaleStopAdTick();

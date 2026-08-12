@@ -7,13 +7,10 @@ public final class LaughTaleNativeAdConstants {
 
     /** FsnAd 全屏 Native 关闭倒计时（秒） */
     public static final int COUNTDOWN_FULLSCREEN_SEC = 3;
-    /**
-     * 竞品 RC native_collap_countdown_time：半屏关闭倒计时（秒）。
-     * Unity EnableButtonCloseCollapsible 延后可点；默认按 3s 对齐用户实机。
-     */
+    /** 半屏关闭倒计时（秒）；对齐历史 b2x delayTime=3 */
     public static final int COUNTDOWN_HALF_SEC = 3;
-    /** 半屏高度（含 Ad 排 + 关闭排 + icon/media/CTA） */
-    public static final int HALF_HEIGHT_DP = 430;
+    /** 半屏卡片高度参考（b2x DEFAULT 合计约 444dp） */
+    public static final int HALF_HEIGHT_DP = 444;
     /** CountShowNativeFullInter：连续全屏 Native 优先次数上限 */
     public static final int NATIVE_FULL_COUNT_BEFORE_INTER_MAX = 3;
 
