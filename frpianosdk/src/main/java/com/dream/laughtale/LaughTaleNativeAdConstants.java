@@ -11,8 +11,8 @@ public final class LaughTaleNativeAdConstants {
     public static final int COUNTDOWN_HALF_SEC = 3;
     /** 半屏卡片高度参考（b2x DEFAULT 合计约 444dp） */
     public static final int HALF_HEIGHT_DP = 444;
-    /** CountShowNativeFullInter：连续全屏 Native 优先次数上限 */
-    public static final int NATIVE_FULL_COUNT_BEFORE_INTER_MAX = 3;
+    /** CountShowNativeFullInter：全屏 Native 与 Inter 按 1:1 交替 */
+    public static final int NATIVE_FULL_COUNT_BEFORE_INTER_MAX = 1;
 
     /**
      * 竞品 open_ad_startup_on_off：冷启动是否出开屏。
