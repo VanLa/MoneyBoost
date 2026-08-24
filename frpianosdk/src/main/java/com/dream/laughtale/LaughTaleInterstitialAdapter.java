@@ -22,7 +22,7 @@ public class LaughTaleInterstitialAdapter {
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     public LaughTaleInterstitialListener LaughTale_InterstitialListener;
-    private double LaughTale_adPrice = 0;
+    private boolean LaughTale_adReady = false;
     private boolean LaughTale_isShowing = false;
     private boolean LaughTale_isLoading = false;
     private ScheduledFuture<?> LaughTale_retryFuture;
@@ -31,7 +31,7 @@ public class LaughTaleInterstitialAdapter {
         public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADINTERLoaded");
             LaughTale_isLoading = false;
-            LaughTale_adPrice = 0.01;
+            LaughTale_adReady = true;
             LaughTale_interRetryAttempt = 0;
             LaughTaleCancelRetry();
         }
@@ -40,7 +40,7 @@ public class LaughTaleInterstitialAdapter {
         public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADINTERFailed");
             LaughTale_isLoading = false;
-            LaughTale_adPrice = 0;
+            LaughTale_adReady = false;
             LaughTale_interRetryAttempt++;
             long delay = (long) Math.pow(2, Math.min(6, LaughTale_interRetryAttempt));
             LaughTaleCancelRetry();
@@ -91,11 +91,8 @@ public class LaughTaleInterstitialAdapter {
         return InterstitialAdPreloader.start(unitId, preloadConfig, LaughTale_preloadCallback);
     }
 
-    public double LaughTaleGetADPrice() {
-        if (!LaughTaleIsAdAvailable()) {
-            return 0;
-        }
-        return LaughTale_adPrice > 0 ? LaughTale_adPrice : 0.01;
+    public boolean LaughTaleIsReady() {
+        return LaughTale_adReady && LaughTaleIsAdAvailable();
     }
 
     public void LaughTaleShowInterstitialAd() {
@@ -129,7 +126,7 @@ public class LaughTaleInterstitialAdapter {
                     }
                     return;
                 }
-                LaughTale_adPrice = 0;
+                LaughTale_adReady = false;
                 interstitialAd.setAdEventCallback(new InterstitialAdEventCallback() {
                     @Override
                     public void onAdShowedFullScreenContent() {
@@ -189,7 +186,7 @@ public class LaughTaleInterstitialAdapter {
         LaughTaleCancelRetry();
         LaughTale_isLoading = false;
         LaughTale_isShowing = false;
-        LaughTale_adPrice = 0;
+        LaughTale_adReady = false;
         String unitId = LaughTaleUnitId();
         if (unitId != null) {
             InterstitialAdPreloader.destroy(unitId);

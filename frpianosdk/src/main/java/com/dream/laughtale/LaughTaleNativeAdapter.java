@@ -58,12 +58,13 @@ public class LaughTaleNativeAdapter {
 
     private NativeAd LaughTale_nativeAd;
     private NativeAdView LaughTale_nativeAdView;
+    /** 只有完成 attach/layout/register 后才算真正可展示。 */
+    private boolean LaughTale_nativeRegistered = false;
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     public LaughTaleNativeListener LaughTale_nativeListener;
     /** FULLSCREEN 或 HALF，初始化时设定 */
     public DisplayMode LaughTale_displayMode = DisplayMode.FULLSCREEN;
-    private double LaughTale_adPrice = 0;
     private View closeFrame;
     private TextView countdownView;
     private ImageView closeIcon;
@@ -297,7 +298,6 @@ public class LaughTaleNativeAdapter {
             return;
         }
         LaughTale_loadState = LoadState.UNLOAD;
-        LaughTale_adPrice = 0;
     }
 
     public void LaughTaleLoadNativeAdView() {
@@ -336,7 +336,6 @@ public class LaughTaleNativeAdapter {
                     // 避免永久卡在 LOADING，导致 tick/关后补货再也不进
                     if (LaughTale_loadState == LoadState.LOADING) {
                         LaughTale_loadState = LoadState.UNLOAD;
-                        LaughTale_adPrice = 0;
                     }
                     return;
                 }
@@ -349,7 +348,6 @@ public class LaughTaleNativeAdapter {
                     return;
                 }
                 LaughTale_loadState = LoadState.UNLOAD;
-                LaughTale_adPrice = 0;
                 LaughTaleScheduleRetry();
                 LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
                         "=========", "LOADNativeFailed " + adError.getMessage());
@@ -365,7 +363,7 @@ public class LaughTaleNativeAdapter {
         cancelRetry();
         LaughTale_nativeAdView = createNativeAdView();
         LaughTale_nativeAd = nativeAd;
-        LaughTale_adPrice = 0.02;
+        LaughTale_nativeRegistered = false;
         LaughTale_loadState = LoadState.LOADED;
         // 仅预填文案；registerNativeAd 必须在 View 附着并完成 layout 后调用，
         // 否则校验器会报 Advertiser assets outside native ad view。
@@ -457,6 +455,7 @@ public class LaughTaleNativeAdapter {
         }
         // 竞品不 setAdChoicesView：由 SDK 按 AdChoicesPlacement 自动插入
         nativeAdView.registerNativeAd(nativeAd, mediaView);
+        LaughTale_nativeRegistered = true;
     }
 
     private void bindHalfAssetTexts(@NonNull NativeAd nativeAd, @NonNull NativeAdView nativeAdView) {
@@ -519,19 +518,15 @@ public class LaughTaleNativeAdapter {
             mediaView.setImageScaleType(ImageView.ScaleType.CENTER_CROP);
         }
         nativeAdView.registerNativeAd(nativeAd, mediaView);
-    }
-
-    public double LaughTaleGetADPrice() {
-        if (LaughTale_loadState != LoadState.LOADED || LaughTale_isOpen) {
-            return 0;
-        }
-        return LaughTale_adPrice;
+        LaughTale_nativeRegistered = true;
     }
 
     public boolean LaughTaleCanShowNativeAd() {
         if (LaughTale_loadState != LoadState.LOADED || LaughTale_isOpen) {
             return false;
         }
+        // registerNativeAd 在展示流程中、View attach/layout 后执行；不能把它作为
+        // 加载 ready 条件，否则会出现“未 register -> 不展示 -> 永远无法 register”的死循环。
         return LaughTale_nativeAd != null && LaughTale_nativeAdView != null;
     }
 
@@ -568,7 +563,6 @@ public class LaughTaleNativeAdapter {
             // 库存不可用：清掉并补货，避免 UNLOAD 却残留旧 View
             clearLoadedInventory();
             LaughTale_loadState = LoadState.UNLOAD;
-            LaughTale_adPrice = 0;
             notifyNativeAdShowSkipped();
             LaughTaleLoadNativeAdView();
             return;
@@ -871,16 +865,15 @@ public class LaughTaleNativeAdapter {
     }
 
     private void clearLoadedInventory() {
+        LaughTale_nativeRegistered = false;
         tryDestroyAd();
         LaughTale_nativeAd = null;
         LaughTale_nativeAdView = null;
-        LaughTale_adPrice = 0;
     }
 
     private void onNativeAdClosed(boolean clickedCloseButton, boolean silentClose) {
         clearLoadedInventory();
         LaughTale_loadState = LoadState.UNLOAD;
-        LaughTale_adPrice = 0;
         if (LaughTale_nativeListener != null) {
             LaughTale_nativeListener.LaughTaleOnNativeAdClosed(clickedCloseButton, silentClose);
         }

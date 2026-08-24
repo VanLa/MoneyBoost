@@ -595,7 +595,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     private boolean LaughTaleIsInterFormatReady() {
-        return LaughTale_interAdapter != null && LaughTale_interAdapter.LaughTaleGetADPrice() > 0;
+        return LaughTale_interAdapter != null && LaughTale_interAdapter.LaughTaleIsReady();
     }
 
     private boolean LaughTaleIsFullscreenNativeReady() {
@@ -728,7 +728,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     public boolean LaughTaleIsRewardADReady(String scene){
-        boolean rewardReady = LaughTale_rewardAdapter != null && LaughTale_rewardAdapter.LaughTaleGetADPrice() > 0;
+        boolean rewardReady = LaughTale_rewardAdapter != null && LaughTale_rewardAdapter.LaughTaleIsReady();
         LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleMediatonManager",
                 "===IsRewardADReady=" + rewardReady);
         return rewardReady;
@@ -742,7 +742,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("reward_show",object.toString());
         }catch (Exception e){
         }
-        if (LaughTale_rewardAdapter == null || LaughTale_rewardAdapter.LaughTaleGetADPrice() <= 0) {
+        if (LaughTale_rewardAdapter == null || !LaughTale_rewardAdapter.LaughTaleIsReady()) {
             return;
         }
         LaughTale_rewardAdapter.LaughTaleShowRewardVideoAd();
@@ -946,7 +946,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
             if (adapter.LaughTale_isOpen) {
                 continue;
             }
-            if (adapter.LaughTaleCanShowNativeAd() && adapter.LaughTaleGetADPrice() > 0) {
+            if (adapter.LaughTaleCanShowNativeAd()) {
                 return adapter;
             }
         }
@@ -1759,7 +1759,7 @@ public class LaughTaleMediationManager implements LaughTaleInterstitialListener,
     }
 
     public boolean LaughTaleDebugIsRewardVideoReady() {
-        return LaughTale_rewardAdapter != null && LaughTale_rewardAdapter.LaughTaleGetADPrice() > 0;
+        return LaughTale_rewardAdapter != null && LaughTale_rewardAdapter.LaughTaleIsReady();
     }
 
     public boolean LaughTaleDebugIsSplashReady() {

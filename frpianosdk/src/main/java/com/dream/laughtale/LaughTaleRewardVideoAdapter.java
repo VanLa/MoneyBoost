@@ -24,7 +24,7 @@ public class LaughTaleRewardVideoAdapter {
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     public LaughTaleRewardVideoListener LaughTale_rewardVideoListener;
-    private double LaughTale_adPrice = 0;
+    private boolean LaughTale_adReady = false;
     private boolean LaughTale_isShowing = false;
     private boolean LaughTale_isLoading = false;
     private ScheduledFuture<?> LaughTale_retryFuture;
@@ -34,7 +34,7 @@ public class LaughTaleRewardVideoAdapter {
         public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADREWARDLoaded");
             LaughTale_isLoading = false;
-            LaughTale_adPrice = 0.01;
+            LaughTale_adReady = true;
             LaughTale_rewardRetryAttempt = 0;
             LaughTaleCancelRetry();
         }
@@ -43,7 +43,7 @@ public class LaughTaleRewardVideoAdapter {
         public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADREWARDFailed");
             LaughTale_isLoading = false;
-            LaughTale_adPrice = 0;
+            LaughTale_adReady = false;
             LaughTale_rewardRetryAttempt++;
             long delay = (long) Math.pow(2, Math.min(6, LaughTale_rewardRetryAttempt));
             LaughTaleCancelRetry();
@@ -112,7 +112,7 @@ public class LaughTaleRewardVideoAdapter {
                     LaughTaleLoadRewardVideoAd();
                     return;
                 }
-                LaughTale_adPrice = 0;
+                LaughTale_adReady = false;
                 rewardedAd.setAdEventCallback(new RewardedAdEventCallback() {
                     @Override
                     public void onAdShowedFullScreenContent() {
@@ -125,6 +125,7 @@ public class LaughTaleRewardVideoAdapter {
                     @Override
                     public void onAdDismissedFullScreenContent() {
                         LaughTale_isShowing = false;
+                        LaughTale_adReady = false;
                         rewardedAd.destroy();
                         if (LaughTale_rewardVideoListener != null) {
                             LaughTale_rewardVideoListener.LaughTaleOnRewardVideoAdClosed();
@@ -135,6 +136,7 @@ public class LaughTaleRewardVideoAdapter {
                     @Override
                     public void onAdFailedToShowFullScreenContent(
                             @NonNull com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError fullScreenContentError) {
+                        LaughTale_adReady = false;
                         if (!LaughTale_isShowing) {
                             rewardedAd.destroy();
                             LaughTaleLoadRewardVideoAd();
@@ -174,18 +176,15 @@ public class LaughTaleRewardVideoAdapter {
         });
     }
 
-    public double LaughTaleGetADPrice() {
-        if (!LaughTaleIsAdAvailable()) {
-            return 0;
-        }
-        return LaughTale_adPrice > 0 ? LaughTale_adPrice : 0.01;
+    public boolean LaughTaleIsReady() {
+        return LaughTale_adReady && LaughTaleIsAdAvailable();
     }
 
     public void LaughTaleOnDestroy() {
         LaughTaleCancelRetry();
         LaughTale_isLoading = false;
         LaughTale_isShowing = false;
-        LaughTale_adPrice = 0;
+        LaughTale_adReady = false;
         String unitId = LaughTaleUnitId();
         if (unitId != null) {
             RewardedAdPreloader.destroy(unitId);

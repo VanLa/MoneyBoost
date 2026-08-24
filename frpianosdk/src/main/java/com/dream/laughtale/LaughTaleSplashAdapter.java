@@ -25,7 +25,7 @@ public class LaughTaleSplashAdapter {
     public String LaughTale_ad_unit;
     public Activity LaughTale_activity;
     public LaughTaleSplashListener LaughTale_splashListener;
-    private double LaughTale_adPrice = 0;
+    private boolean LaughTale_adReady = false;
     private boolean LaughTale_isShowing = false;
     private boolean LaughTale_isLoading = false;
     private ScheduledFuture<?> LaughTale_retryFuture;
@@ -52,7 +52,7 @@ public class LaughTaleSplashAdapter {
         public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADSPLASHLoaded");
             LaughTale_isLoading = false;
-            LaughTale_adPrice = 0.01;
+            LaughTale_adReady = true;
             LaughTale_splashRetryAttempt = 0;
             LaughTaleCancelRetry();
             LaughTalePostToMain(() -> {
@@ -66,7 +66,7 @@ public class LaughTaleSplashAdapter {
         public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
             LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=========", "LOADSPLASHFailed");
             LaughTale_isLoading = false;
-            LaughTale_adPrice = 0;
+            LaughTale_adReady = false;
             LaughTale_splashRetryAttempt++;
             long delay = (long) Math.pow(2, Math.min(6, LaughTale_splashRetryAttempt));
             LaughTaleCancelRetry();
@@ -112,16 +112,9 @@ public class LaughTaleSplashAdapter {
         return AppOpenAdPreloader.start(unitId, preloadConfig, LaughTale_preloadCallback);
     }
 
-    public double LaughTaleGetADPrice() {
-        if (!LaughTaleIsReady()) {
-            return 0;
-        }
-        return LaughTale_adPrice > 0 ? LaughTale_adPrice : 0.01;
-    }
-
     public boolean LaughTaleIsReady() {
         String unitId = LaughTaleUnitId();
-        return unitId != null && AppOpenAdPreloader.isAdAvailable(unitId);
+        return LaughTale_adReady && unitId != null && AppOpenAdPreloader.isAdAvailable(unitId);
     }
 
     public void LaughTaleShowSplashAd() {
@@ -154,7 +147,7 @@ public class LaughTaleSplashAdapter {
                 }
                 return;
             }
-            LaughTale_adPrice = 0;
+            LaughTale_adReady = false;
             appOpenAd.setAdEventCallback(new AppOpenAdEventCallback() {
                 @Override
                 public void onAdShowedFullScreenContent() {
@@ -169,6 +162,7 @@ public class LaughTaleSplashAdapter {
                 @Override
                 public void onAdDismissedFullScreenContent() {
                     LaughTale_isShowing = false;
+                    LaughTale_adReady = false;
                     appOpenAd.destroy();
                     LaughTalePostToMain(() -> {
                         if (LaughTale_splashListener != null) {
@@ -182,6 +176,7 @@ public class LaughTaleSplashAdapter {
                 public void onAdFailedToShowFullScreenContent(
                         @NonNull FullScreenContentError fullScreenContentError) {
                     LaughTale_isShowing = false;
+                    LaughTale_adReady = false;
                     appOpenAd.destroy();
                     LaughTalePostToMain(() -> {
                         if (LaughTale_splashListener != null) {
@@ -208,7 +203,7 @@ public class LaughTaleSplashAdapter {
         LaughTaleCancelRetry();
         LaughTale_isLoading = false;
         LaughTale_isShowing = false;
-        LaughTale_adPrice = 0;
+        LaughTale_adReady = false;
         String unitId = LaughTaleUnitId();
         if (unitId != null) {
             AppOpenAdPreloader.destroy(unitId);
