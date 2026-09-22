@@ -50,7 +50,6 @@ dependencies {
     implementation 'com.google.firebase:firebase-config:22.0.1'
 
     // --- 业务 / Play / 隐私
-    implementation 'com.aliyun.dpa:oss-android-sdk:2.9.18'
     implementation 'com.google.android.play:review:2.0.2'
     implementation 'com.google.android.ump:user-messaging-platform:4.0.0'
 

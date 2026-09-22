@@ -60,10 +60,10 @@
         </activity>
 
         <receiver
-            android:name="com.dream.moneyboost.MoneyBoostPushManager$NotificationReceiver"
+            android:name="com.joyboost.moneyboost.MoneyBoostPushManager$NotificationReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.dream.moneyboost.SEND_NOTIFICATION" />
+                <action android:name="com.joyboost.moneyboost.SEND_NOTIFICATION" />
             </intent-filter>
         </receiver>
     </application>

@@ -1,4 +1,4 @@
-package com.dream.moneyboost;
+package com.joyboost.moneyboost;
 
 import android.Manifest;
 import android.app.Activity;
@@ -47,7 +47,7 @@ public class MoneyBoostPushManager {
         intent.putExtra("content", content);
         intent.putExtra("iconName", iconName);
         intent.putExtra("targetActivity", targetActivity);  // 传递目标Activity的类名
-        intent.setAction("com.dream.moneyboost.SEND_NOTIFICATION"); // 添加 Action
+        intent.setAction("com.joyboost.moneyboost.SEND_NOTIFICATION"); // 添加 Action
         PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);

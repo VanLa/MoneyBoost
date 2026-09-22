@@ -1,4 +1,4 @@
-package com.dream.moneyboost;
+package com.joyboost.moneyboost;
 
 import android.app.Activity;
 import android.content.Context;
@@ -11,13 +11,6 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
-import com.alibaba.sdk.android.oss.ClientException;
-import com.alibaba.sdk.android.oss.OSSClient;
-import com.alibaba.sdk.android.oss.ServiceException;
-import com.alibaba.sdk.android.oss.callback.OSSCompletedCallback;
-import com.alibaba.sdk.android.oss.common.auth.OSSPlainTextAKSKCredentialProvider;
-import com.alibaba.sdk.android.oss.model.GetObjectRequest;
-import com.alibaba.sdk.android.oss.model.GetObjectResult;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.analytics.FirebaseAnalytics;
@@ -27,11 +20,6 @@ import org.jetbrains.annotations.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -42,22 +30,11 @@ public class MoneyBoostFirebaseManager {
     private FirebaseRemoteConfig MoneyBoostFirebaseRemoteConfig;
     private FirebaseAnalytics MoneyBoostFirebaseAnalytics;
     private Context mContext;
-    private String MoneyBoost_resource_dic = "";
-    private String MoneyBoost_resource_root = "";
-    private OSSClient oss;
-    private String MoneyBoost_Endpoint = "";
-    private String MoneyBoost_AccessKeyId = "";
-    private String MoneyBoost_AccessKeySecret = "";
 
     public String MoneyBoost_cp_config = "";
     private SharedPreferences MoneyBoost_taichiPref;
     private SharedPreferences.Editor MoneyBoost_taichiSharedPreferencesEditor;
 
-
-    public interface StorageLoadListener{
-        void onLoadSuccess(String path);
-        void onLoadFailure(String error);
-    }
 
     public interface ConfigLoadListener{
         void onLoadSuccess(String json);
@@ -87,104 +64,6 @@ public class MoneyBoostFirebaseManager {
 
         //获取firebase
         MoneyBoostFetchRemoteConfig(context);
-    }
-
-    public void MoneyBoostInitStorage(Context context){
-        mContext = context;
-        OSSPlainTextAKSKCredentialProvider provider = new OSSPlainTextAKSKCredentialProvider(MoneyBoost_AccessKeyId,MoneyBoost_AccessKeySecret);
-        oss = new OSSClient(mContext,MoneyBoost_Endpoint,provider);
-    }
-
-    public void MoneyBoostGetStorageFireWithFilePath(String fileName,String fileSuf,StorageLoadListener listener){
-        File finalFile = new File(mContext.getExternalCacheDir(),fileName+"."+fileSuf);
-        try {
-            finalFile.createNewFile();
-            try {
-                // 创建一个 FileOutputStream 实例，第二个参数为 false 表示不追加内容
-                FileOutputStream fos = new FileOutputStream(finalFile, false);
-                // 关闭 FileOutputStream
-                fos.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            String pathName = fileName;
-            if (MoneyBoost_resource_dic.equals("")){
-                try {
-                    ApplicationInfo appInfo = mContext.getPackageManager()
-                            .getApplicationInfo(mContext.getPackageName(),
-                                    PackageManager.GET_META_DATA);
-                    MoneyBoost_resource_root = appInfo.metaData.getString("MoneyBoost_RESOURCE_PROJECT") + "/";
-                    MoneyBoost_resource_dic = appInfo.metaData.getString("MoneyBoost_RESOURCE_ROOT") + "/";
-                }catch (Exception e){
-                }
-            }
-            pathName = MoneyBoost_resource_root + MoneyBoost_resource_dic + pathName;
-
-            GetObjectRequest get = new GetObjectRequest("musemania-casual",pathName+"."+fileSuf);
-            oss.asyncGetObject(get, new OSSCompletedCallback<GetObjectRequest, GetObjectResult>() {
-                @Override
-                public void onSuccess(GetObjectRequest request, GetObjectResult result) {
-                    // 开始读取数据。
-                    long length = result.getContentLength();
-                    if (length > 0) {
-                        byte[] buffer = new byte[(int) length];
-                        int readCount = 0;
-                        while (readCount < length) {
-                            try{
-                                readCount += result.getObjectContent().read(buffer, readCount, (int) length - readCount);
-                            }catch (Exception e){
-                            }
-                        }
-                        // 将下载后的文件存放在指定的本地路径，例如D:\\localpath\\exampleobject.jpg。
-                        try {
-                            FileOutputStream fout = new FileOutputStream(finalFile);
-                            fout.write(buffer);
-                            fout.close();
-                            listener.onLoadSuccess(finalFile.getPath());
-                        } catch (Exception e) {
-                        }
-                    }
-                }
-
-                @Override
-                public void onFailure(GetObjectRequest request, ClientException clientException, ServiceException serviceException) {
-                    // 请求异常。
-                    if (clientException != null) {
-                        // 本地异常，如网络异常等。
-                        clientException.printStackTrace();
-                    }
-                    if (serviceException != null) {
-                        // 服务异常。
-                        Log.e("ErrorCode", serviceException.getErrorCode());
-                        Log.e("RequestId", serviceException.getRequestId());
-                        Log.e("HostId", serviceException.getHostId());
-                        Log.e("RawMessage", serviceException.getRawMessage());
-                    }
-                    if(fileSuf.equals("ogg") == false){
-                        MoneyBoostCopyAssetGetFilePath(fileName+"."+fileSuf);
-                        File cacheFile = new File(mContext.getExternalCacheDir(),fileName+"."+fileSuf);
-                        try {
-                            if (cacheFile.exists() && MoneyBoostGetFileSize(cacheFile)>0){
-                                listener.onLoadSuccess(cacheFile.getPath());
-                            }else {
-                                listener.onLoadFailure("=====GetObjectFailure:"+fileName);
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            });
-        }catch (IOException ex){
-            MoneyBoostCopyAssetGetFilePath(fileName+"."+fileSuf);
-            File cacheFile = new File(mContext.getExternalCacheDir(),fileName+"."+fileSuf);
-            if (cacheFile == null){
-                return;
-            }
-            if (cacheFile.exists()){
-                listener.onLoadSuccess(cacheFile.getPath());
-            }
-        }
     }
 
     public void MoneyBoostApplyConsentFromUmp(boolean canRequestAds, boolean personalizedAllowed) {
@@ -241,52 +120,6 @@ public class MoneyBoostFirebaseManager {
                         }
                     });
         }catch (Exception e){
-        }
-    }
-
-    private static long MoneyBoostGetFileSize(File file) throws Exception
-    {
-        long size = 0;
-        if (file.exists()){
-            FileInputStream fis = null;
-            fis = new FileInputStream(file);
-            size = fis.available();
-        }
-        return size;
-    }
-
-    private void MoneyBoostCopyAssetGetFilePath(String fileName) {
-        try {
-            File cacheDir = mContext.getExternalCacheDir();
-            if (cacheDir == null){
-                return;
-            }
-            if (!cacheDir.exists()) {
-                cacheDir.mkdirs();
-            }
-            File outFile = new File(cacheDir, fileName);
-            if (outFile == null){
-                return;
-            }
-            if (!outFile.exists()) {
-                boolean res = outFile.createNewFile();
-            } else {
-                if (outFile.length() > 5) {//表示已经写入一次
-                    return;
-                }
-            }
-            InputStream is = mContext.getAssets().open(fileName);
-            FileOutputStream fos = new FileOutputStream(outFile);
-            byte[] buffer = new byte[1024];
-            int byteCount;
-            while ((byteCount = is.read(buffer)) != -1) {
-                fos.write(buffer, 0, byteCount);
-            }
-            fos.flush();
-            is.close();
-            fos.close();
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 

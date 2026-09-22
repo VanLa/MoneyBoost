@@ -1,8 +1,7 @@
-package com.dream.moneyboost;
+package com.joyboost.moneyboost;
 //import com.unity3d.player.UnityPlayer;
 
 import android.app.Activity;
-import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -205,7 +204,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     //////////////////////////////////////////////////////////////////////初始化////////////////////////////////////////////////////////////////////////////////
 
-    public void MoneyBoostInit(Context context,Activity activity,ADInitListener initListener){
+    public void MoneyBoostInit(Activity activity, ADInitListener initListener){
         this.MoneyBoost_activity = activity;
         MoneyBoost_dataPrefs = activity.getSharedPreferences("data", Activity.MODE_PRIVATE);
         MoneyBoostGetUserNoPopAd();
@@ -715,18 +714,18 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_mrecAdapter.MoneyBoostHideMRECView();
     }
 
-    public void MoneyBoostShowMRECBannerViewPublic(int type, boolean needFix, String reason) {
+    public void MoneyBoostShowMRECBannerViewPublic(int type, boolean needFix) {
         MoneyBoostShowMRECBannerView(type, needFix);
     }
 
-    public void MoneyBoostHideMRECBannerViewPublic(String reason) {
+    public void MoneyBoostHideMRECBannerViewPublic() {
         MoneyBoostHideMRECBannerView();
     }
 
     //////////////////////////////////////////////////////////////////////Collapsible Banner////////////////////////////////////////////////////////////////////////////////
 
     /** Requests and displays an AdMob collapsible banner (bottom anchored). */
-    public void MoneyBoostShowCollapsibleBannerView(boolean needHighValue){
+    public void MoneyBoostShowCollapsibleBannerView(){
         if (MoneyBoost_bannerAdapter == null || MoneyBoost_activity == null) {
             return;
         }
@@ -1005,7 +1004,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         }
     }
 
-    private void MoneyBoostFinishSplashSession(boolean unusedApplyCooldown) {
+    private void MoneyBoostFinishSplashSession() {
         mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
         mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
         MoneyBoostClearAoaResumeEligibility();
@@ -1102,7 +1101,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         if (MoneyBoost_splashOpenDispatched) {
             MoneyBoostNotifySplashClose();
         }
-        MoneyBoostFinishSplashSession(true);
+        MoneyBoostFinishSplashSession();
     }
 
     @Override
@@ -1110,7 +1109,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_splashSessionActive = false;
         if (MoneyBoost_splashOpenDispatched) {
             MoneyBoostNotifySplashClose();
-            MoneyBoostFinishSplashSession(true);
+            MoneyBoostFinishSplashSession();
             return;
         }
         MoneyBoostFinishHotStartSplashAttemptNotReady();
@@ -1240,7 +1239,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoostHideMrecOnBackgroundIfNeeded();
     }
 
-    public void MoneyBoostOnAppDestroy(Activity activity) {
+    public void MoneyBoostOnAppDestroy() {
         MoneyBoost_isAppForeground = false;
         MoneyBoost_isDestroyed = true;
         MoneyBoost_wentToBackground = false;
@@ -1272,9 +1271,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         }
         MoneyBoost_isInitSuccess = false;
         MoneyBoost_isInitializing = false;
-        if (MoneyBoost_activity == activity) {
-            MoneyBoost_activity = null;
-        }
+        MoneyBoost_activity = null;
     }
 
     //////////////////////////////////////////////////////////////////////Unity交互////////////////////////////////////////////////////////////////////////////////
