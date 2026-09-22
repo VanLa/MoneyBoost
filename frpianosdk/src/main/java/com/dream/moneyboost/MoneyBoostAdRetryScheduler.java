@@ -1,4 +1,4 @@
-package com.dream.laughtale;
+package com.dream.moneyboost;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -9,15 +9,15 @@ import java.util.concurrent.TimeUnit;
  * 各广告位加载失败重试共用单线程调度，避免每个 Adapter 各自 new 线程池。
  * 返回 {@link ScheduledFuture} 以便 Destroy / 新一次 load 时取消旧任务。
  */
-final class LaughTaleAdRetryScheduler {
+final class MoneyBoostAdRetryScheduler {
 
     private static final ScheduledExecutorService SCHEDULER = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "LaughTale-AdRetry");
+        Thread t = new Thread(r, "MoneyBoost-AdRetry");
         t.setDaemon(true);
         return t;
     });
 
-    private LaughTaleAdRetryScheduler() {
+    private MoneyBoostAdRetryScheduler() {
     }
 
     static ScheduledFuture<?> scheduleSeconds(Runnable task, long delaySeconds) {

@@ -12,18 +12,18 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
-import com.dream.laughtale.LaughTaleFirebaseManager;
-import com.dream.laughtale.LaughTaleMediationManager;
-import com.dream.laughtale.LaughTaleToolsManager;
+import com.dream.moneyboost.MoneyBoostFirebaseManager;
+import com.dream.moneyboost.MoneyBoostMediationManager;
+import com.dream.moneyboost.MoneyBoostToolsManager;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String TAG = "LaughTaleDemo";
+    private static final String TAG = "MoneyBoostDemo";
     private static final long STATUS_POLL_INTERVAL_MS = 500L;
     /** 对齐 Quiz Loading：等开屏最多 12s，超时后仍显示 Banner */
     private static final long SPLASH_WAIT_TIMEOUT_MS = 12000L;
 
-    private LaughTaleMediationManager mediationManager;
+    private MoneyBoostMediationManager mediationManager;
     private final Handler statusHandler = new Handler(Looper.getMainLooper());
     private Button btnCollapsibleBanner;
     private Button btnInterstitial;
@@ -70,24 +70,24 @@ public class MainActivity extends AppCompatActivity {
         btnMrec4 = findViewById(R.id.btn_mrec_4);
         tvAdLoadStatus = findViewById(R.id.tv_ad_load_status);
 
-        LaughTaleToolsManager.instance().LaughTale_isDebug = BuildConfig.DEBUG;
-        LaughTaleFirebaseManager.instance().LaughTaleInitFirebaseAnalytics(this);
+        MoneyBoostToolsManager.instance().MoneyBoost_isDebug = BuildConfig.DEBUG;
+        MoneyBoostFirebaseManager.instance().MoneyBoostInitFirebaseAnalytics(this);
 
-        mediationManager = LaughTaleMediationManager.getInstance();
+        mediationManager = MoneyBoostMediationManager.getInstance();
 
-        mediationManager.LaughTaleSetDebugCallbackListener(callback -> {
+        mediationManager.MoneyBoostSetDebugCallbackListener(callback -> {
             Log.i(TAG, "UnityCallback: " + callback);
-            if ("LaughTale_SPLASH_OPEN".equals(callback)) {
+            if ("MoneyBoost_SPLASH_OPEN".equals(callback)) {
                 statusHandler.removeCallbacks(splashWaitTimeoutRunnable);
-            } else if ("LaughTale_SPLASH_CLOSE".equals(callback)) {
+            } else if ("MoneyBoost_SPLASH_CLOSE".equals(callback)) {
                 finishSplashFlowAndShowBanner();
             }
         });
 
-        mediationManager.LaughTaleInit(this, this, () -> {
-            Log.i(TAG, "Init ok, request cold splash. " + mediationManager.LaughTaleDebugSplashStateText());
+        mediationManager.MoneyBoostInit(this, this, () -> {
+            Log.i(TAG, "Init ok, request cold splash. " + mediationManager.MoneyBoostDebugSplashStateText());
             // 先开屏，Banner 等开屏结束/超时后再出（避免干扰观察开屏）
-            mediationManager.LaughTaleShowSplashADWithUnity("launch");
+            mediationManager.MoneyBoostShowSplashADWithUnity("launch");
             statusHandler.removeCallbacks(splashWaitTimeoutRunnable);
             statusHandler.postDelayed(splashWaitTimeoutRunnable, SPLASH_WAIT_TIMEOUT_MS);
         });
@@ -102,13 +102,13 @@ public class MainActivity extends AppCompatActivity {
         }
         splashFlowFinished = true;
         statusHandler.removeCallbacks(splashWaitTimeoutRunnable);
-        mediationManager.LaughTaleShowBannerView();
-        Log.i(TAG, "Banner shown after splash flow. " + mediationManager.LaughTaleDebugSplashStateText());
+        mediationManager.MoneyBoostShowBannerView();
+        Log.i(TAG, "Banner shown after splash flow. " + mediationManager.MoneyBoostDebugSplashStateText());
     }
 
     /** 用户开始点测广告按钮 = 进入「玩法」，取消排队中的冷启动开屏 */
     private void cancelSplashIfUserStartedPlaying() {
-        mediationManager.LaughTaleCancelSplashADWithUnity();
+        mediationManager.MoneyBoostCancelSplashADWithUnity();
         finishSplashFlowAndShowBanner();
     }
 
@@ -121,26 +121,26 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        mediationManager.LaughTaleOnAppStart(this);
+        mediationManager.MoneyBoostOnAppStart(this);
         statusHandler.post(statusUpdater);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        mediationManager.LaughTaleOnAppResume();
+        mediationManager.MoneyBoostOnAppResume();
     }
 
     @Override
     protected void onPause() {
-        mediationManager.LaughTaleOnAppPause();
+        mediationManager.MoneyBoostOnAppPause();
         super.onPause();
     }
 
     @Override
     protected void onStop() {
         statusHandler.removeCallbacks(statusUpdater);
-        mediationManager.LaughTaleOnAppStop();
+        mediationManager.MoneyBoostOnAppStop();
         super.onStop();
     }
 
@@ -148,7 +148,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         statusHandler.removeCallbacks(splashWaitTimeoutRunnable);
         if (mediationManager != null) {
-            mediationManager.LaughTaleOnAppDestroy(this);
+            mediationManager.MoneyBoostOnAppDestroy(this);
         }
         super.onDestroy();
     }
@@ -156,66 +156,66 @@ public class MainActivity extends AppCompatActivity {
     private void setupButtons() {
         btnCollapsibleBanner.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.LaughTaleShowCollapsibleBannerView(true);
+            mediationManager.MoneyBoostShowCollapsibleBannerView(true);
         });
 
         btnInterstitial.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.LaughTaleShowInterstitialUnity("test");
+            mediationManager.MoneyBoostShowInterstitialUnity("test");
         });
 
         btnRewarded.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.LaughTaleShowRewardAdUnity("test");
+            mediationManager.MoneyBoostShowRewardAdUnity("test");
         });
 
         btnMrec1.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.LaughTaleShowMRECBannerViewPublic(1, false, "test");
+            mediationManager.MoneyBoostShowMRECBannerViewPublic(1, false, "test");
         });
 
         btnMrec2.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.LaughTaleShowMRECBannerViewPublic(2, false, "test");
+            mediationManager.MoneyBoostShowMRECBannerViewPublic(2, false, "test");
         });
 
         btnMrec3.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.LaughTaleShowMRECBannerViewPublic(3, false, "test");
+            mediationManager.MoneyBoostShowMRECBannerViewPublic(3, false, "test");
         });
 
         btnMrec4.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.LaughTaleShowMRECBannerViewPublic(4, false, "test");
+            mediationManager.MoneyBoostShowMRECBannerViewPublic(4, false, "test");
         });
 
         findViewById(R.id.btn_hide_mrec).setOnClickListener(v ->
-                mediationManager.LaughTaleHideMRECBannerViewPublic("test_hide"));
+                mediationManager.MoneyBoostHideMRECBannerViewPublic("test_hide"));
     }
 
     private void refreshAdButtonStatus() {
         refreshAdLoadStatus();
         updateAdButton(btnCollapsibleBanner,
-                mediationManager.LaughTaleDebugIsCollapsibleReady(),
-                mediationManager.LaughTaleDebugIsCollapsibleShowing());
+                mediationManager.MoneyBoostDebugIsCollapsibleReady(),
+                mediationManager.MoneyBoostDebugIsCollapsibleShowing());
         updateAdButton(btnInterstitial,
-                mediationManager.LaughTaleDebugIsInterReady(),
-                mediationManager.LaughTaleDebugIsInterShowing());
+                mediationManager.MoneyBoostDebugIsInterReady(),
+                mediationManager.MoneyBoostDebugIsInterShowing());
         updateAdButton(btnRewarded,
-                mediationManager.LaughTaleDebugIsRewardReady(),
-                mediationManager.LaughTaleDebugIsRewardShowing());
+                mediationManager.MoneyBoostDebugIsRewardReady(),
+                mediationManager.MoneyBoostDebugIsRewardShowing());
         updateAdButton(btnMrec1,
-                mediationManager.LaughTaleDebugIsMrecReady(),
-                mediationManager.LaughTaleDebugIsMrecShowing());
+                mediationManager.MoneyBoostDebugIsMrecReady(),
+                mediationManager.MoneyBoostDebugIsMrecShowing());
         updateAdButton(btnMrec2,
-                mediationManager.LaughTaleDebugIsMrecReady(),
-                mediationManager.LaughTaleDebugIsMrecShowing());
+                mediationManager.MoneyBoostDebugIsMrecReady(),
+                mediationManager.MoneyBoostDebugIsMrecShowing());
         updateAdButton(btnMrec3,
-                mediationManager.LaughTaleDebugIsMrecReady(),
-                mediationManager.LaughTaleDebugIsMrecShowing());
+                mediationManager.MoneyBoostDebugIsMrecReady(),
+                mediationManager.MoneyBoostDebugIsMrecShowing());
         updateAdButton(btnMrec4,
-                mediationManager.LaughTaleDebugIsMrecReady(),
-                mediationManager.LaughTaleDebugIsMrecShowing());
+                mediationManager.MoneyBoostDebugIsMrecReady(),
+                mediationManager.MoneyBoostDebugIsMrecShowing());
     }
 
     private void updateAdButton(Button button, boolean ready, boolean showing) {
@@ -238,11 +238,10 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         tvAdLoadStatus.setText(
-                "Native: " + loadStatusText(mediationManager.LaughTaleDebugIsNativeReady()) + "\n"
-                        + "Inter: " + loadStatusText(mediationManager.LaughTaleDebugIsInterReady()) + "\n"
-                        + "Rewarded: " + loadStatusText(mediationManager.LaughTaleDebugIsRewardVideoReady()) + "\n"
-                        + "Splash: " + loadStatusText(mediationManager.LaughTaleDebugIsSplashReady()) + "\n"
-                        + mediationManager.LaughTaleDebugSplashStateText());
+"Inter: " + loadStatusText(mediationManager.MoneyBoostDebugIsInterReady()) + "\n"
+                        + "Rewarded: " + loadStatusText(mediationManager.MoneyBoostDebugIsRewardVideoReady()) + "\n"
+                        + "Splash: " + loadStatusText(mediationManager.MoneyBoostDebugIsSplashReady()) + "\n"
+                        + mediationManager.MoneyBoostDebugSplashStateText());
     }
 
     private String loadStatusText(boolean ready) {

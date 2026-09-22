@@ -1,4 +1,4 @@
-package com.dream.laughtale;
+package com.dream.moneyboost;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -6,18 +6,18 @@ import android.content.SharedPreferences;
 import java.util.Calendar;
 import java.util.Random;
 
-public class LaughTaleBankManager {
+public class MoneyBoostBankManager {
 
     private Context mContext;
-    public static LaughTaleBankManager instance;
+    public static MoneyBoostBankManager instance;
     private SharedPreferences preferences;
     private SharedPreferences userDayPreferences;
 
-    public static LaughTaleBankManager instance() {
+    public static MoneyBoostBankManager instance() {
         if (instance == null) {
-            synchronized (LaughTaleBankManager.class) {
+            synchronized (MoneyBoostBankManager.class) {
                 if (instance == null) {
-                    instance = new LaughTaleBankManager();
+                    instance = new MoneyBoostBankManager();
                 }
             }
         }
@@ -45,8 +45,8 @@ public class LaughTaleBankManager {
 
     private static final double THRESHOLD_ECPM = 1.0; // Default threshold for adjusting the template
 
-    private int LaughTale_userDayCount = 0;
-    private int LaughTale_launchCount = 0; // 新增：启动次数
+    private int MoneyBoost_userDayCount = 0;
+    private int MoneyBoost_launchCount = 0; // 新增：启动次数
     private float mShowRate = 1.0f;
     private float mThreshold = 0.2f;
     private float mAdjustPercentage = 0.8f;
@@ -60,7 +60,7 @@ public class LaughTaleBankManager {
     }
 
     // 初始化广告管理器
-    public void LaughTaleInitBankManager(Context context) {
+    public void MoneyBoostInitBankManager(Context context) {
         mContext = context;
         preferences = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         userDayPreferences = mContext.getSharedPreferences(USER_DAY_PREFS_NAME, Context.MODE_PRIVATE);
@@ -76,14 +76,14 @@ public class LaughTaleBankManager {
 
     // 新增：增加启动次数
     private void increaseLaunchCount() {
-        LaughTale_launchCount = userDayPreferences.getInt(LAUNCH_COUNT_KEY, 0) + 1;
+        MoneyBoost_launchCount = userDayPreferences.getInt(LAUNCH_COUNT_KEY, 0) + 1;
 
         SharedPreferences.Editor editor = userDayPreferences.edit();
-        editor.putInt(LAUNCH_COUNT_KEY, LaughTale_launchCount);
+        editor.putInt(LAUNCH_COUNT_KEY, MoneyBoost_launchCount);
         editor.apply();
 
         // 打印日志
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleBankManager", "=== Launch count increased: " + LaughTale_launchCount);
+        MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostBankManager", "=== Launch count increased: " + MoneyBoost_launchCount);
     }
 
     // 从本地缓存加载 adjustConfig 参数
@@ -152,7 +152,7 @@ public class LaughTaleBankManager {
     }
 
     public boolean getIsOldUser(){
-        if (LaughTale_userDayCount >= 2) {
+        if (MoneyBoost_userDayCount >= 2) {
             return true;
         }else {
             return false;
@@ -166,7 +166,7 @@ public class LaughTaleBankManager {
         boolean modMode = false;
 
         // 打印日志
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleBankManager", "===LaughTaleShowDecision for adType: " + adType + ", eCPM: " + ecpm);
+        MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostBankManager", "===MoneyBoostShowDecision for adType: " + adType + ", eCPM: " + ecpm);
 
         // 判断 eCPM
         if (adType.equals("inter")) {
@@ -182,7 +182,7 @@ public class LaughTaleBankManager {
         }
 
         // 根据 mShowRate 判断是否进入 modMode
-        if (mShowRate < mLowTarget && LaughTale_userDayCount >= 1) {
+        if (mShowRate < mLowTarget && MoneyBoost_userDayCount >= 1) {
             modMode = true;
         }
 
@@ -190,7 +190,7 @@ public class LaughTaleBankManager {
         result[1] = modMode;
 
         // 打印日志
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleBankManager", "===NeedShow: " + needShow + ", modMode: " + modMode);
+        MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostBankManager", "===NeedShow: " + needShow + ", modMode: " + modMode);
 
         return result;
     }
@@ -200,12 +200,12 @@ public class LaughTaleBankManager {
         boolean needShow = true; // 默认值为true
 
         // 打印日志
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleBankManager", "===HandleShowDecision for adType: " + adType + ", eCPM: " + ecpm);
+        MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostBankManager", "===HandleShowDecision for adType: " + adType + ", eCPM: " + ecpm);
 
         if (ecpm < (1 - mThreshold)) {
             // 低于下限，减少展示概率
             mShowRate *= mAdjustPercentage;
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleBankManager", "===eCPM < (1 - mThreshold), Adjusted mShowRate: " + mShowRate);
+            MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostBankManager", "===eCPM < (1 - mThreshold), Adjusted mShowRate: " + mShowRate);
             if (new Random().nextFloat() < mShowRate) {
                 needShow = true;
             } else {
@@ -217,7 +217,7 @@ public class LaughTaleBankManager {
             if (mShowRate > 1) {
                 mShowRate = 1.0f;
             }
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleBankManager", "===eCPM > (1 + mThreshold), Adjusted mShowRate: " + mShowRate);
+            MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostBankManager", "===eCPM > (1 + mThreshold), Adjusted mShowRate: " + mShowRate);
             if (new Random().nextFloat() < mShowRate) {
                 needShow = true;
             } else {
@@ -247,19 +247,19 @@ public class LaughTaleBankManager {
         if (savedDay != currentDay) {
             // 是新的一天
             // 增加用户天数计数器
-            LaughTale_userDayCount = userDayPreferences.getInt(USER_DAY_COUNT_KEY, 0) + 1;
+            MoneyBoost_userDayCount = userDayPreferences.getInt(USER_DAY_COUNT_KEY, 0) + 1;
 
             // 打印日志，显示新的一天
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleBankManager", "=== New day detected. CurrentDay: " + currentDay + ", SavedDay: " + savedDay + ", UserDayCount: " + LaughTale_userDayCount);
+            MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostBankManager", "=== New day detected. CurrentDay: " + currentDay + ", SavedDay: " + savedDay + ", UserDayCount: " + MoneyBoost_userDayCount);
 
             // 保存新的日期和天数
             SharedPreferences.Editor editor = userDayPreferences.edit();
             editor.putInt(LAST_OPEN_DATE_KEY, currentDay);
-            editor.putInt(USER_DAY_COUNT_KEY, LaughTale_userDayCount);
+            editor.putInt(USER_DAY_COUNT_KEY, MoneyBoost_userDayCount);
             editor.apply();
         } else {
             // 不是新的一天
-            LaughTale_userDayCount = userDayPreferences.getInt(USER_DAY_COUNT_KEY, 0);
+            MoneyBoost_userDayCount = userDayPreferences.getInt(USER_DAY_COUNT_KEY, 0);
         }
     }
 //
@@ -280,7 +280,7 @@ public class LaughTaleBankManager {
 //        adjustConfigEditor.apply();
 //
 //        // 打印重置日志
-//        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleBankManager", "=== Local parameters have been reset for the new day");
+//        MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostBankManager", "=== Local parameters have been reset for the new day");
 //    }
 
 }

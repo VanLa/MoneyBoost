@@ -6,7 +6,7 @@ apply plugin: 'com.android.library'
 apply from: 'upload.gradle'
 
 android {
-    compileSdkVersion 34
+    compileSdkVersion 35
 
     defaultConfig {
         minSdkVersion 24
@@ -54,19 +54,13 @@ dependencies {
 
     // --- GMA Next-Gen SDK（AdMob 主聚合；Google 库存内置，无需再加 google-adapter）
     // https://developers.google.com/admob/android/next-gen/quick-start
-    implementation 'com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.2.1'
+    implementation 'com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.4.0'
 
-    // --- AdMob Mediation（对应原 MAX：AppLovin / Meta / Mintegral / Pangle / Unity Ads / Vungle）
-    // 版本均按 ads-mobile-sdk:1.2.1 官方验证线锁定；勿随意升到仅适配 1.3.x 的 adapter
-    // Meta 6.21 在未升 R8 时 AGP 7.4.2 mergeExtDex 会挂；本仓库根工程已 classpath r8:8.1.56
-    // AppLovin adapter 13.6.3.0 官方验证：Next-Gen 1.2.1 + AppLovin SDK 13.6.3
-    implementation 'com.google.ads.mediation:applovin:13.6.3.0'
+    // --- AdMob mediation: Google demand plus Facebook
     implementation 'com.google.ads.mediation:facebook:6.21.0.4'
-    implementation 'com.google.ads.mediation:mintegral:17.1.61.1'
-    implementation 'com.google.ads.mediation:pangle:8.1.0.4.0'
-    implementation 'com.unity3d.ads:unity-ads:4.19.0'
-    implementation 'com.google.ads.mediation:unity:4.19.0.0'
-    implementation 'com.google.ads.mediation:vungle:7.7.4.0'
+
+    // --- Google Play Billing
+    implementation 'com.android.billingclient:billing:8.0.0'
 
     // --- AndroidX（与 compileSdk 34、Java 11、minSdk 24 兼容）
     implementation 'androidx.appcompat:appcompat:1.6.1'

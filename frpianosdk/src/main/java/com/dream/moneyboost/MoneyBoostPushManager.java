@@ -1,4 +1,4 @@
-package com.dream.laughtale;
+package com.dream.moneyboost;
 
 import android.Manifest;
 import android.app.Activity;
@@ -19,15 +19,15 @@ import androidx.core.content.ContextCompat;
 
 import java.util.Calendar;
 
-public class LaughTalePushManager {
+public class MoneyBoostPushManager {
 
     private static final String CHANNEL_ID = "game_notifications_channel";
 
-    public static LaughTalePushManager instance;
+    public static MoneyBoostPushManager instance;
 
-    public static LaughTalePushManager instance() {
+    public static MoneyBoostPushManager instance() {
         if (null == instance) {
-            instance = new LaughTalePushManager();
+            instance = new MoneyBoostPushManager();
         }
         return instance;
     }
@@ -47,7 +47,7 @@ public class LaughTalePushManager {
         intent.putExtra("content", content);
         intent.putExtra("iconName", iconName);
         intent.putExtra("targetActivity", targetActivity);  // 传递目标Activity的类名
-        intent.setAction("com.dream.laughtale.SEND_NOTIFICATION"); // 添加 Action
+        intent.setAction("com.dream.moneyboost.SEND_NOTIFICATION"); // 添加 Action
         PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);

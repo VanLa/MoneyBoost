@@ -1,15 +1,15 @@
-package com.dream.laughtale;
+package com.dream.moneyboost;
 
 import java.lang.reflect.Method;
 
 /**
  * 缓存 UnitySendMessage 反射，避免每次回调都 Class.forName / getMethod。
  */
-final class LaughTaleUnityBridge {
+final class MoneyBoostUnityBridge {
 
     private static volatile Method unitySendMessage;
 
-    private LaughTaleUnityBridge() {
+    private MoneyBoostUnityBridge() {
     }
 
     static void send(String gameObject, String methodName, String data) {

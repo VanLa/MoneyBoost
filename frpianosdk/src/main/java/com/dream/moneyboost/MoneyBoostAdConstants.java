@@ -1,9 +1,9 @@
-package com.dream.laughtale;
+package com.dream.moneyboost;
 
 /**
  * 对齐竞品反编译默认参数（FsnAd.countDownSec、native_collapse 高度、RemoteConfig 未知项等）。
  */
-public final class LaughTaleNativeAdConstants {
+public final class MoneyBoostAdConstants {
 
     /** FsnAd 全屏 Native 关闭倒计时（秒） */
     public static final int COUNTDOWN_FULLSCREEN_SEC = 3;
@@ -29,6 +29,6 @@ public final class LaughTaleNativeAdConstants {
     /** FSN 默认非静音；对齐竞品 VideoOptions.setStartMuted */
     public static final boolean START_MUTE_VIDEO = false;
 
-    private LaughTaleNativeAdConstants() {
+    private MoneyBoostAdConstants() {
     }
 }

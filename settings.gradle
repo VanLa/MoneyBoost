@@ -1,3 +1,3 @@
-rootProject.name = "LaughTaleMusicSDK"
+rootProject.name = "MoneyBoostMusicSDK"
 include ':app'
 include ':frpianosdk'

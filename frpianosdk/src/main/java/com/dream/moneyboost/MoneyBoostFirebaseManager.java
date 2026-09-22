@@ -1,4 +1,4 @@
-package com.dream.laughtale;
+package com.dream.moneyboost;
 
 import android.app.Activity;
 import android.content.Context;
@@ -37,31 +37,21 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-public class LaughTaleFirebaseManager {
-    public static LaughTaleFirebaseManager instance;
-    private FirebaseRemoteConfig LaughTaleFirebaseRemoteConfig;
-    private FirebaseAnalytics LaughTaleFirebaseAnalytics;
+public class MoneyBoostFirebaseManager {
+    public static MoneyBoostFirebaseManager instance;
+    private FirebaseRemoteConfig MoneyBoostFirebaseRemoteConfig;
+    private FirebaseAnalytics MoneyBoostFirebaseAnalytics;
     private Context mContext;
-    private String LaughTale_resource_dic = "";
-    private String LaughTale_resource_root = "";
+    private String MoneyBoost_resource_dic = "";
+    private String MoneyBoost_resource_root = "";
     private OSSClient oss;
-    private String LaughTale_Endpoint = "https://musemania.top";
-    private String LaughTale_AccessKeyId = "REDACTED_ALIBABA_ACCESS_KEY_ID";
-    private String LaughTale_AccessKeySecret = "REDACTED_ALIBABA_ACCESS_KEY_SECRET";
+    private String MoneyBoost_Endpoint = "";
+    private String MoneyBoost_AccessKeyId = "";
+    private String MoneyBoost_AccessKeySecret = "";
 
-    public String LaughTale_cp_config = "";
-    public double LaughTale_p_weekday = 1.0;
-    public double LaughTale_p_weekend = 1.0;
-
-    /** Native 关闭钮尺寸 Remote Config 原始 JSON，key: native_close_size_config */
-    public String LaughTale_native_close_size_config = "";
-    /** 统一关闭钮尺寸（dp），不区分 Meta */
-    public float LaughTale_native_close_size = LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_DP;
-
-    private static final String RC_KEY_NATIVE_CLOSE_SIZE_CONFIG = "native_close_size_config";
-
-    private SharedPreferences LaughTale_taichiPref;
-    private SharedPreferences.Editor LaughTale_taichiSharedPreferencesEditor;
+    public String MoneyBoost_cp_config = "";
+    private SharedPreferences MoneyBoost_taichiPref;
+    private SharedPreferences.Editor MoneyBoost_taichiSharedPreferencesEditor;
 
 
     public interface StorageLoadListener{
@@ -73,48 +63,39 @@ public class LaughTaleFirebaseManager {
         void onLoadSuccess(String json);
     }
 
-    public static LaughTaleFirebaseManager instance() {
+    public static MoneyBoostFirebaseManager instance() {
         if (null == instance) {
-            instance = new LaughTaleFirebaseManager();
+            instance = new MoneyBoostFirebaseManager();
         }
         return instance;
     }
 
-    public void LaughTaleInitFirebaseAnalytics(Context context){
+    public void MoneyBoostInitFirebaseAnalytics(Context context){
         mContext = context;
-        LaughTaleFirebaseAnalytics = FirebaseAnalytics.getInstance(context);
-        LaughTaleFirebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
+        MoneyBoostFirebaseAnalytics = FirebaseAnalytics.getInstance(context);
+        MoneyBoostFirebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
         //上报内存
-        String ram = LaughTaleToolsManager.instance().LaughTaleGetTotalRam();
-        LaughTaleLogFirebaseUserProperty("Ram",ram);
+        String ram = MoneyBoostToolsManager.instance().MoneyBoostGetTotalRam();
+        MoneyBoostLogFirebaseUserProperty("Ram",ram);
 
         //上报是否新用户
-        String isNew = LaughTaleToolsManager.instance().LaughTaleGetIsNewUser(context);
-        LaughTaleLogFirebaseUserProperty("IsNew",isNew);
+        String isNew = MoneyBoostToolsManager.instance().MoneyBoostGetIsNewUser(context);
+        MoneyBoostLogFirebaseUserProperty("IsNew",isNew);
 
-        LaughTale_taichiPref = context.getApplicationContext().getSharedPreferences("TaichiTroasCache",0);
-        LaughTale_taichiSharedPreferencesEditor = LaughTale_taichiPref.edit();
+        MoneyBoost_taichiPref = context.getApplicationContext().getSharedPreferences("TaichiTroasCache",0);
+        MoneyBoost_taichiSharedPreferencesEditor = MoneyBoost_taichiPref.edit();
 
-        LaughTaleSyncNativeLayoutFromPrefs();
         //获取firebase
-        LaughTaleFetchRemoteConfig(context);
+        MoneyBoostFetchRemoteConfig(context);
     }
 
-    private void LaughTaleSyncNativeLayoutFromPrefs() {
-        if (mContext == null) {
-            return;
-        }
-        LaughTaleLayoutSize size = new LaughTaleLayoutSize(mContext);
-        LaughTale_native_close_size = size.closeSize;
-    }
-
-    public void LaughTaleInitStorage(Context context){
+    public void MoneyBoostInitStorage(Context context){
         mContext = context;
-        OSSPlainTextAKSKCredentialProvider provider = new OSSPlainTextAKSKCredentialProvider(LaughTale_AccessKeyId,LaughTale_AccessKeySecret);
-        oss = new OSSClient(mContext,LaughTale_Endpoint,provider);
+        OSSPlainTextAKSKCredentialProvider provider = new OSSPlainTextAKSKCredentialProvider(MoneyBoost_AccessKeyId,MoneyBoost_AccessKeySecret);
+        oss = new OSSClient(mContext,MoneyBoost_Endpoint,provider);
     }
 
-    public void LaughTaleGetStorageFireWithFilePath(String fileName,String fileSuf,StorageLoadListener listener){
+    public void MoneyBoostGetStorageFireWithFilePath(String fileName,String fileSuf,StorageLoadListener listener){
         File finalFile = new File(mContext.getExternalCacheDir(),fileName+"."+fileSuf);
         try {
             finalFile.createNewFile();
@@ -127,17 +108,17 @@ public class LaughTaleFirebaseManager {
                 e.printStackTrace();
             }
             String pathName = fileName;
-            if (LaughTale_resource_dic.equals("")){
+            if (MoneyBoost_resource_dic.equals("")){
                 try {
                     ApplicationInfo appInfo = mContext.getPackageManager()
                             .getApplicationInfo(mContext.getPackageName(),
                                     PackageManager.GET_META_DATA);
-                    LaughTale_resource_root = appInfo.metaData.getString("LaughTale_RESOURCE_PROJECT") + "/";
-                    LaughTale_resource_dic = appInfo.metaData.getString("LaughTale_RESOURCE_ROOT") + "/";
+                    MoneyBoost_resource_root = appInfo.metaData.getString("MoneyBoost_RESOURCE_PROJECT") + "/";
+                    MoneyBoost_resource_dic = appInfo.metaData.getString("MoneyBoost_RESOURCE_ROOT") + "/";
                 }catch (Exception e){
                 }
             }
-            pathName = LaughTale_resource_root + LaughTale_resource_dic + pathName;
+            pathName = MoneyBoost_resource_root + MoneyBoost_resource_dic + pathName;
 
             GetObjectRequest get = new GetObjectRequest("musemania-casual",pathName+"."+fileSuf);
             oss.asyncGetObject(get, new OSSCompletedCallback<GetObjectRequest, GetObjectResult>() {
@@ -180,10 +161,10 @@ public class LaughTaleFirebaseManager {
                         Log.e("RawMessage", serviceException.getRawMessage());
                     }
                     if(fileSuf.equals("ogg") == false){
-                        LaughTaleCopyAssetGetFilePath(fileName+"."+fileSuf);
+                        MoneyBoostCopyAssetGetFilePath(fileName+"."+fileSuf);
                         File cacheFile = new File(mContext.getExternalCacheDir(),fileName+"."+fileSuf);
                         try {
-                            if (cacheFile.exists() && LaughTaleGetFileSize(cacheFile)>0){
+                            if (cacheFile.exists() && MoneyBoostGetFileSize(cacheFile)>0){
                                 listener.onLoadSuccess(cacheFile.getPath());
                             }else {
                                 listener.onLoadFailure("=====GetObjectFailure:"+fileName);
@@ -195,7 +176,7 @@ public class LaughTaleFirebaseManager {
                 }
             });
         }catch (IOException ex){
-            LaughTaleCopyAssetGetFilePath(fileName+"."+fileSuf);
+            MoneyBoostCopyAssetGetFilePath(fileName+"."+fileSuf);
             File cacheFile = new File(mContext.getExternalCacheDir(),fileName+"."+fileSuf);
             if (cacheFile == null){
                 return;
@@ -206,8 +187,8 @@ public class LaughTaleFirebaseManager {
         }
     }
 
-    public void LaughTaleApplyConsentFromUmp(boolean canRequestAds, boolean personalizedAllowed) {
-        if (LaughTaleFirebaseAnalytics == null) {
+    public void MoneyBoostApplyConsentFromUmp(boolean canRequestAds, boolean personalizedAllowed) {
+        if (MoneyBoostFirebaseAnalytics == null) {
             return;
         }
         FirebaseAnalytics.ConsentStatus adStatus = canRequestAds
@@ -220,22 +201,22 @@ public class LaughTaleFirebaseManager {
                 new EnumMap<>(FirebaseAnalytics.ConsentType.class);
         consentMap.put(FirebaseAnalytics.ConsentType.AD_STORAGE, adStatus);
         consentMap.put(FirebaseAnalytics.ConsentType.ANALYTICS_STORAGE, analyticsStatus);
-        LaughTaleFirebaseAnalytics.setConsent(consentMap);
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase",
+        MoneyBoostFirebaseAnalytics.setConsent(consentMap);
+        MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostFirebase",
                 "ApplyConsentFromUmp canRequestAds=" + canRequestAds
                         + " personalized=" + personalizedAllowed
                         + " analytics=" + analyticsStatus);
     }
 
-    public void LaughTaleFetchFirebaseRemoteJson(Context context, String key, ConfigLoadListener listener){
+    public void MoneyBoostFetchFirebaseRemoteJson(Context context, String key, ConfigLoadListener listener){
         try {
-            LaughTaleFirebaseRemoteConfig.fetchAndActivate()
+            MoneyBoostFirebaseRemoteConfig.fetchAndActivate()
                     .addOnCompleteListener((Activity) context, new OnCompleteListener<Boolean>() {
                         @Override
                         public void onComplete(@NonNull Task<Boolean> task) {
                             if (task.isSuccessful()) {
-                                String json = LaughTaleFirebaseRemoteConfig.getString(key);
-                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===",json);
+                                String json = MoneyBoostFirebaseRemoteConfig.getString(key);
+                                MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("===MoneyBoostFirebaseRemoteConfig===",json);
                                 listener.onLoadSuccess(json);
                             }
                         }
@@ -245,22 +226,17 @@ public class LaughTaleFirebaseManager {
         }
     }
 
-    private void LaughTaleFetchRemoteConfig(Context context){
+    private void MoneyBoostFetchRemoteConfig(Context context){
         try {
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","LaughTaleFetchCPRemoteJson");
-            LaughTaleFirebaseRemoteConfig.fetchAndActivate()
+            MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("===MoneyBoostFirebaseRemoteConfig===:","MoneyBoostFetchCPRemoteJson");
+            MoneyBoostFirebaseRemoteConfig.fetchAndActivate()
                     .addOnCompleteListener((Activity) context, new OnCompleteListener<Boolean>() {
                         @Override
                         public void onComplete(@NonNull Task<Boolean> task) {
                             if (task.isSuccessful()) {
-                                String json = LaughTaleFirebaseRemoteConfig.getString("cp_config");
-                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:",json);
-                                LaughTale_cp_config = json;
-                                LaughTale_p_weekend = LaughTaleFirebaseRemoteConfig.getDouble("p_value_weekend");
-                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekend===:"+LaughTale_p_weekend+"");
-                                LaughTale_p_weekday = LaughTaleFirebaseRemoteConfig.getDouble("p_value_weekday");
-                                LaughTaleToolsManager.instance().LaughTaleLogWithDebug("===LaughTaleFirebaseRemoteConfig===:","===p_value_weekday===:"+LaughTale_p_weekday+"");
-                                LaughTaleApplyNativeLayoutRemoteConfig();
+                                String json = MoneyBoostFirebaseRemoteConfig.getString("cp_config");
+                                MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("===MoneyBoostFirebaseRemoteConfig===:",json);
+                                MoneyBoost_cp_config = json;
                             }
                         }
                     });
@@ -268,48 +244,7 @@ public class LaughTaleFirebaseManager {
         }
     }
 
-    /**
-     * Remote Config key: native_close_size_config（String JSON）
-     * {"closeSize":25}（兼容旧字段 closeSize_0，但忽略 Meta 分支，只用 closeSize）
-     * 未配置或取不到时沿用 {@link LaughTaleLayoutSize} 写死默认值。
-     */
-    private void LaughTaleApplyNativeLayoutRemoteConfig() {
-        if (mContext == null) {
-            return;
-        }
-        String json = LaughTaleFirebaseRemoteConfig.getString(RC_KEY_NATIVE_CLOSE_SIZE_CONFIG);
-        if (json == null || json.trim().isEmpty()) {
-            LaughTaleSyncNativeLayoutFromPrefs();
-            return;
-        }
-        LaughTale_native_close_size_config = json;
-        try {
-            JSONObject object = new JSONObject(json);
-            float closeSize = LaughTaleParseLayoutSizeValue(
-                    object, "closeSize", LaughTaleLayoutSize.DEFAULT_CLOSE_SIZE_DP);
-            LaughTale_native_close_size = closeSize;
-            new LaughTaleLayoutSize(mContext).updateFromRemote(closeSize);
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
-                    "===LaughTaleFirebaseRemoteConfig===",
-                    "===native_close_size_config=== " + json);
-        } catch (JSONException e) {
-            LaughTaleSyncNativeLayoutFromPrefs();
-            LaughTaleToolsManager.instance().LaughTaleLogWithDebug(
-                    "===LaughTaleFirebaseRemoteConfig===",
-                    "===native_close_size_config parse error=== " + e.getMessage());
-        }
-    }
-
-    private static float LaughTaleParseLayoutSizeValue(JSONObject object, String key, float defaultValue)
-            throws JSONException {
-        if (!object.has(key)) {
-            return defaultValue;
-        }
-        float value = (float) object.getDouble(key);
-        return value > 0f ? value : defaultValue;
-    }
-
-    private static long LaughTaleGetFileSize(File file) throws Exception
+    private static long MoneyBoostGetFileSize(File file) throws Exception
     {
         long size = 0;
         if (file.exists()){
@@ -320,7 +255,7 @@ public class LaughTaleFirebaseManager {
         return size;
     }
 
-    private void LaughTaleCopyAssetGetFilePath(String fileName) {
+    private void MoneyBoostCopyAssetGetFilePath(String fileName) {
         try {
             File cacheDir = mContext.getExternalCacheDir();
             if (cacheDir == null){
@@ -355,19 +290,19 @@ public class LaughTaleFirebaseManager {
         }
     }
 
-    public void LaughTaleLogFirebaseEvent(String eventName, @Nullable String parameters){
+    public void MoneyBoostLogFirebaseEvent(String eventName, @Nullable String parameters){
         try {
             if (eventName != null){
                 if (parameters != null){
-                    Bundle bundle = LaughTaleJsonStringToBundle(parameters);
-                    LaughTaleFirebaseAnalytics.logEvent(eventName,bundle);
+                    Bundle bundle = MoneyBoostJsonStringToBundle(parameters);
+                    MoneyBoostFirebaseAnalytics.logEvent(eventName,bundle);
 //                    com.posthog.android.Properties props = jsonToProperties(parameters);
 //                    PostHog.with(mContext).capture(eventName,props);
-                    LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase","logFirebaseEvent:"+eventName+"==="+bundle.toString());
+                    MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostFirebase","logFirebaseEvent:"+eventName+"==="+bundle.toString());
                 }else {
-                    LaughTaleFirebaseAnalytics.logEvent(eventName,null);
+                    MoneyBoostFirebaseAnalytics.logEvent(eventName,null);
 //                    PostHog.with(mContext).capture(eventName);
-                    LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase","logFirebaseEvent:"+eventName);
+                    MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostFirebase","logFirebaseEvent:"+eventName);
                 }
             }
         }catch (Exception e){
@@ -375,7 +310,7 @@ public class LaughTaleFirebaseManager {
         }
     }
 
-    public static Bundle LaughTaleJsonStringToBundle(String jsonString){
+    public static Bundle MoneyBoostJsonStringToBundle(String jsonString){
         try {
             JSONObject jsonObject = toJsonObject(jsonString);
             return jsonToBundle(jsonObject);
@@ -398,22 +333,22 @@ public class LaughTaleFirebaseManager {
         return bundle;
     }
 
-    public void LaughTaleLogFirebaseUserProperty(String key,String value){
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase","UserProperty:"+key +"==="+value);
-        LaughTaleFirebaseAnalytics.setUserProperty(key, value);
+    public void MoneyBoostLogFirebaseUserProperty(String key,String value){
+        MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostFirebase","UserProperty:"+key +"==="+value);
+        MoneyBoostFirebaseAnalytics.setUserProperty(key, value);
         HashMap<String, Object> userProps = new HashMap<String, Object>();
         userProps.put(key, value);
 //        PostHog.with(mContext).capture("setUserProps",new Properties().putValue("$set",userProps));
     }
 
-    public void LaughTaleLogFirebaseRevenue(Double revenue, String ad_format, String network_name, String unit_id){
+    public void MoneyBoostLogFirebaseRevenue(Double revenue, String ad_format, String network_name, String unit_id){
         if (revenue == null) {
             return;
         }
-        if (LaughTaleFirebaseAnalytics == null && mContext != null) {
-            LaughTaleFirebaseAnalytics = FirebaseAnalytics.getInstance(mContext);
+        if (MoneyBoostFirebaseAnalytics == null && mContext != null) {
+            MoneyBoostFirebaseAnalytics = FirebaseAnalytics.getInstance(mContext);
         }
-        if (LaughTaleFirebaseAnalytics == null) {
+        if (MoneyBoostFirebaseAnalytics == null) {
             return;
         }
         double currentImpressionRevenue = revenue;
@@ -424,15 +359,15 @@ public class LaughTaleFirebaseManager {
         params.putString(FirebaseAnalytics.Param.AD_UNIT_NAME, unit_id);
         params.putDouble(FirebaseAnalytics.Param.VALUE, revenue);
         params.putString(FirebaseAnalytics.Param.CURRENCY, "USD");
-        LaughTaleToolsManager.instance().LaughTaleLogWithDebug("=====LaughTaleFirebase","Ad_Impression_Revenue:"+ad_format+"==="+revenue);
+        MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostFirebase","Ad_Impression_Revenue:"+ad_format+"==="+revenue);
         //Aro
-        LaughTaleFirebaseAnalytics.logEvent(FirebaseAnalytics.Event.AD_IMPRESSION, params);
+        MoneyBoostFirebaseAnalytics.logEvent(FirebaseAnalytics.Event.AD_IMPRESSION, params);
         //Taichi
-        LaughTaleFirebaseAnalytics.logEvent("Ad_Impression_Revenue", params);// 给Taichi用
-        if (LaughTale_taichiPref == null || LaughTale_taichiSharedPreferencesEditor == null) {
+        MoneyBoostFirebaseAnalytics.logEvent("Ad_Impression_Revenue", params);// 给Taichi用
+        if (MoneyBoost_taichiPref == null || MoneyBoost_taichiSharedPreferencesEditor == null) {
             return;
         }
-        float previousTaichiTroasCache = LaughTale_taichiPref.getFloat("TaichiTroasCache", 0); //App本地存储用于累计tROAS的缓存值,sharedPref只是作为事例，可以选择其它本地存储的方式
+        float previousTaichiTroasCache = MoneyBoost_taichiPref.getFloat("TaichiTroasCache", 0); //App本地存储用于累计tROAS的缓存值,sharedPref只是作为事例，可以选择其它本地存储的方式
         float currentTaichiTroasCache = (float) (previousTaichiTroasCache +
                 currentImpressionRevenue);//累加tROAS的缓存值
 //check是否应该发送TaichitROAS事件
@@ -441,12 +376,12 @@ public class LaughTaleFirebaseManager {
             roasbundle.putDouble(FirebaseAnalytics.Param.VALUE,
                     currentTaichiTroasCache);//(Required)tROAS事件必须带Double类型的Value
             roasbundle.putString(FirebaseAnalytics.Param.CURRENCY, "USD");//(Required)tROAS事件必须 带Currency的币种，如果是USD的话，就写USD，如果不是USD，务必把其他币种换算成USD
-            LaughTaleFirebaseAnalytics.logEvent("Total_Avenue_001", roasbundle); // 给Taichi用
-            LaughTale_taichiSharedPreferencesEditor.putFloat("TaichiTroasCache", 0);//重新清零，开始计算
+            MoneyBoostFirebaseAnalytics.logEvent("Total_Avenue_001", roasbundle); // 给Taichi用
+            MoneyBoost_taichiSharedPreferencesEditor.putFloat("TaichiTroasCache", 0);//重新清零，开始计算
         } else {
-            LaughTale_taichiSharedPreferencesEditor.putFloat("TaichiTroasCache", currentTaichiTroasCache);//先存着直到超过0.01才发送
+            MoneyBoost_taichiSharedPreferencesEditor.putFloat("TaichiTroasCache", currentTaichiTroasCache);//先存着直到超过0.01才发送
         }
-        LaughTale_taichiSharedPreferencesEditor.apply();
+        MoneyBoost_taichiSharedPreferencesEditor.apply();
     }
 
 }

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 半屏外轮廓：#483E89，需配合 padding 避免 Media 盖住描边 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#F7F5F2" />
-    <stroke
-        android:width="2dp"
-        android:color="#483E89" />
-</shape>

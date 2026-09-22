@@ -1,4 +1,4 @@
-package com.dream.laughtale;
+package com.dream.moneyboost;
 
 import android.app.Activity;
 import android.app.Service;
@@ -25,23 +25,23 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.util.List;
 
-public class LaughTaleToolsManager {
-    public static LaughTaleToolsManager instance;
+public class MoneyBoostToolsManager {
+    public static MoneyBoostToolsManager instance;
 
-    public boolean LaughTale_isDebug = false;
-    public static LaughTaleToolsManager instance(){
+    public boolean MoneyBoost_isDebug = false;
+    public static MoneyBoostToolsManager instance(){
         if (null == instance){
-            instance = new LaughTaleToolsManager();
+            instance = new MoneyBoostToolsManager();
         }
         return instance;
     }
 
-    public void LaughTaleVibrator(Activity activity, long time){
+    public void MoneyBoostVibrator(Activity activity, long time){
         Vibrator vib = (Vibrator) activity.getSystemService(Service.VIBRATOR_SERVICE);
         vib.vibrate(time);
     }
 
-    public String LaughTaleGetVersionName(Activity activity) throws Exception
+    public String MoneyBoostGetVersionName(Activity activity) throws Exception
     {
         PackageManager packageManager = activity.getPackageManager();
         PackageInfo packInfo = packageManager.getPackageInfo(activity.getPackageName(),0);
@@ -49,7 +49,7 @@ public class LaughTaleToolsManager {
         return versionName;
     }
 
-    public void LaughTaleTurnToStoreDetail(Activity activity){
+    public void MoneyBoostTurnToStoreDetail(Activity activity){
         try {
             ReviewManager manager = ReviewManagerFactory.create(activity);
             Task<ReviewInfo> request = manager.requestReviewFlow();
@@ -72,25 +72,25 @@ public class LaughTaleToolsManager {
         }
     }
 
-    public String LaughTaleGetCPRemoteConfig(Activity activity) throws Exception
+    public String MoneyBoostGetCPRemoteConfig(Activity activity) throws Exception
     {
-        LaughTaleLogWithDebug("=======","LaughTaleGetCPRemoteConfig");
-        if (LaughTaleFirebaseManager.instance().LaughTale_cp_config != null){
-            LaughTaleLogWithDebug("=======","CPRemoteConfigCallback:"+ LaughTaleFirebaseManager.instance().LaughTale_cp_config);
-            return LaughTaleFirebaseManager.instance().LaughTale_cp_config;
+        MoneyBoostLogWithDebug("=======","MoneyBoostGetCPRemoteConfig");
+        if (MoneyBoostFirebaseManager.instance().MoneyBoost_cp_config != null){
+            MoneyBoostLogWithDebug("=======","CPRemoteConfigCallback:"+ MoneyBoostFirebaseManager.instance().MoneyBoost_cp_config);
+            return MoneyBoostFirebaseManager.instance().MoneyBoost_cp_config;
         }else {
-            LaughTaleLogWithDebug("=======","CPRemoteConfigCallback:");
+            MoneyBoostLogWithDebug("=======","CPRemoteConfigCallback:");
             return "";
         }
     }
 
-    public void LaughTaleTurnToPromotion(Activity activity,String appPackageName) {
+    public void MoneyBoostTurnToPromotion(Activity activity,String appPackageName) {
         try {
             // 打点（可选）
             try {
                 JSONObject object = new JSONObject();
                 object.put("app_bundle",appPackageName);
-                LaughTaleFirebaseManager.instance().LaughTaleLogFirebaseEvent("click_promotion", object.toString());
+                MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("click_promotion", object.toString());
             } catch (Exception e) {
                 // 可忽略
             }
@@ -124,11 +124,11 @@ public class LaughTaleToolsManager {
      * RAM内存大小, 返回1GB/2GB/3GB/4GB/8G/16G
      * @return
      */
-    private static volatile String LaughTale_cachedTotalRam;
+    private static volatile String MoneyBoost_cachedTotalRam;
 
-    public String LaughTaleGetTotalRam(){
-        if (LaughTale_cachedTotalRam != null) {
-            return LaughTale_cachedTotalRam;
+    public String MoneyBoostGetTotalRam(){
+        if (MoneyBoost_cachedTotalRam != null) {
+            return MoneyBoost_cachedTotalRam;
         }
         String path = "/proc/meminfo";
         String ramMemorySize = null;
@@ -144,11 +144,11 @@ public class LaughTaleToolsManager {
         if (ramMemorySize != null) {
             totalRam = (int) Math.ceil((Float.parseFloat(ramMemorySize) / (1024 * 1024)));
         }
-        LaughTale_cachedTotalRam = totalRam + "GB";
-        return LaughTale_cachedTotalRam;
+        MoneyBoost_cachedTotalRam = totalRam + "GB";
+        return MoneyBoost_cachedTotalRam;
     }
 
-    public String LaughTaleGetIsNewUser(Context context){
+    public String MoneyBoostGetIsNewUser(Context context){
         long currentTime=System.currentTimeMillis();
         long firstInstallTime = 0;
         try {
@@ -168,8 +168,8 @@ public class LaughTaleToolsManager {
      * 判断当前设备是否为3GB以下的低端机
      * @return true 表示是低端机
      */
-    public boolean LaughTaleIsLowEndDevice() {
-        String ram = LaughTaleGetTotalRam();
+    public boolean MoneyBoostIsLowEndDevice() {
+        String ram = MoneyBoostGetTotalRam();
         try {
             // 解析数字部分，支持 "2GB", "3GB", "4GB"
             int gb = Integer.parseInt(ram.replace("GB", "").trim());
@@ -181,13 +181,13 @@ public class LaughTaleToolsManager {
     }
 
 
-    public void LaughTaleLogWithDebug(String tag, String message){
-        if (LaughTale_isDebug){
+    public void MoneyBoostLogWithDebug(String tag, String message){
+        if (MoneyBoost_isDebug){
             Log.e(tag,message);
         }
     }
 
-    public float LaughTaleGetStatusBarHeight(Activity activity){
+    public float MoneyBoostGetStatusBarHeight(Activity activity){
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             View decorView = activity.getWindow().getDecorView();
             DisplayCutout displayCutout = decorView.getRootWindowInsets().getDisplayCutout();
@@ -202,7 +202,7 @@ public class LaughTaleToolsManager {
         return 0.0f;
     }
 
-    public void LaughTaleShareToOtherApp(Activity activity){
+    public void MoneyBoostShareToOtherApp(Activity activity){
         // 获取当前应用的包名
         String packageName = activity.getPackageName();
         // 构建 Google Play 链接
