@@ -7,15 +7,13 @@ import androidx.annotation.NonNull;
 import com.google.android.libraries.ads.mobile.sdk.common.AdRequest;
 import com.google.android.libraries.ads.mobile.sdk.common.AdSourceResponseInfo;
 import com.google.android.libraries.ads.mobile.sdk.common.AdValue;
+import com.google.android.libraries.ads.mobile.sdk.common.AdLoadCallback;
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError;
-import com.google.android.libraries.ads.mobile.sdk.common.PreloadCallback;
-import com.google.android.libraries.ads.mobile.sdk.common.PreloadConfiguration;
 import com.google.android.libraries.ads.mobile.sdk.common.ResponseInfo;
 import com.google.android.libraries.ads.mobile.sdk.rewarded.OnUserEarnedRewardListener;
 import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardItem;
 import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAd;
 import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAdEventCallback;
-import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAdPreloader;
 
 import java.util.concurrent.ScheduledFuture;
 
@@ -29,21 +27,26 @@ public class MoneyBoostRewardVideoAdapter {
     private boolean MoneyBoost_isLoading = false;
     private ScheduledFuture<?> MoneyBoost_retryFuture;
 
-    private final PreloadCallback MoneyBoost_preloadCallback = new PreloadCallback() {
+    private RewardedAd MoneyBoost_rewardedAd;
+    private final AdLoadCallback<RewardedAd> MoneyBoost_loadCallback = new AdLoadCallback<RewardedAd>() {
         @Override
-        public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
+        public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADREWARDLoaded");
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = true;
+            MoneyBoost_rewardedAd = rewardedAd;
             MoneyBoost_rewardRetryAttempt = 0;
             MoneyBoostCancelRetry();
         }
 
         @Override
-        public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
-            MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADREWARDFailed");
+        public void onAdFailedToLoad(@NonNull LoadAdError adError) {
+            MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========",
+                    "LOADREWARDFailed code=" + adError.getCode()
+                            + " message=" + adError.getMessage());
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = false;
+            MoneyBoost_rewardedAd = null;
             MoneyBoost_rewardRetryAttempt++;
             long delay = (long) Math.pow(2, Math.min(6, MoneyBoost_rewardRetryAttempt));
             MoneyBoostCancelRetry();
@@ -61,8 +64,7 @@ public class MoneyBoostRewardVideoAdapter {
     }
 
     public boolean MoneyBoostIsAdAvailable() {
-        String unitId = MoneyBoostUnitId();
-        return unitId != null && RewardedAdPreloader.isAdAvailable(unitId);
+        return MoneyBoost_rewardedAd != null;
     }
 
     public void MoneyBoostInitRewardVideoAdapter() {
@@ -77,21 +79,14 @@ public class MoneyBoostRewardVideoAdapter {
         if (unitId == null) {
             return;
         }
-        if (MoneyBoost_isLoading || MoneyBoost_isShowing || RewardedAdPreloader.isAdAvailable(unitId)) {
+        if (MoneyBoost_isLoading || MoneyBoost_isShowing || MoneyBoost_rewardedAd != null) {
             return;
         }
         MoneyBoostCancelRetry();
         MoneyBoost_isLoading = true;
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADREWARD");
-        if (!MoneyBoostStartRewardPreloading(unitId)) {
-            MoneyBoost_isLoading = false;
-        }
-    }
-
-    private boolean MoneyBoostStartRewardPreloading(String unitId) {
         AdRequest adRequest = new AdRequest.Builder(unitId).build();
-        PreloadConfiguration preloadConfig = new PreloadConfiguration(adRequest);
-        return RewardedAdPreloader.start(unitId, preloadConfig, MoneyBoost_preloadCallback);
+        RewardedAd.load(adRequest, MoneyBoost_loadCallback);
     }
 
     public void MoneyBoostShowRewardVideoAd() {
@@ -102,12 +97,13 @@ public class MoneyBoostRewardVideoAdapter {
         if (unitId == null) {
             return;
         }
-        if (!RewardedAdPreloader.isAdAvailable(unitId)) {
+        if (MoneyBoost_rewardedAd == null) {
             return;
         }
         MoneyBoost_activity.runOnUiThread(new Runnable() {
             public void run() {
-                final RewardedAd rewardedAd = RewardedAdPreloader.pollAd(unitId);
+                final RewardedAd rewardedAd = MoneyBoost_rewardedAd;
+                MoneyBoost_rewardedAd = null;
                 if (rewardedAd == null) {
                     MoneyBoostLoadRewardVideoAd();
                     return;
@@ -177,7 +173,7 @@ public class MoneyBoostRewardVideoAdapter {
     }
 
     public boolean MoneyBoostIsReady() {
-        return MoneyBoost_adReady && MoneyBoostIsAdAvailable();
+        return MoneyBoost_adReady && MoneyBoost_rewardedAd != null;
     }
 
     public void MoneyBoostOnDestroy() {
@@ -185,9 +181,9 @@ public class MoneyBoostRewardVideoAdapter {
         MoneyBoost_isLoading = false;
         MoneyBoost_isShowing = false;
         MoneyBoost_adReady = false;
-        String unitId = MoneyBoostUnitId();
-        if (unitId != null) {
-            RewardedAdPreloader.destroy(unitId);
+        if (MoneyBoost_rewardedAd != null) {
+            MoneyBoost_rewardedAd.destroy();
+            MoneyBoost_rewardedAd = null;
         }
         MoneyBoost_activity = null;
         MoneyBoost_rewardVideoListener = null;

@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- 竞品 FsnAd layout_fsn_dialog -->
-    <dimen name="fsn_close_btn_size">25dp</dimen>
-    <!-- 竞品 fsn_ad_choice_size：safeRootView 顶部至少留这么高，避开 AdChoices -->
-    <dimen name="fsn_ad_choice_size">20dp</dimen>
-    <dimen name="moneyboost_close_btn_size">25dp</dimen>
-</resources>

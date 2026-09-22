@@ -1,4 +1,4 @@
-package com.ad4game.admobadapter;
+package com.a4g.googlesdkadapter;
 
 import android.os.Bundle;
 import android.view.View;

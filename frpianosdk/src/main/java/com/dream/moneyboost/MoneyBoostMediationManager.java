@@ -27,7 +27,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     private ConsentInformation consentInformation;
     // Use an atomic boolean to initialize the Google Mobile Ads SDK and load ads once.
-    private static MoneyBoostMediationManager instance;
+    private static volatile MoneyBoostMediationManager instance;
 
     private Activity MoneyBoost_activity;
 
@@ -188,10 +188,17 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public static MoneyBoostMediationManager getInstance() {
-        if (instance == null) {
-            instance = new MoneyBoostMediationManager();
+        MoneyBoostMediationManager current = instance;
+        if (current == null) {
+            synchronized (MoneyBoostMediationManager.class) {
+                current = instance;
+                if (current == null) {
+                    current = new MoneyBoostMediationManager();
+                    instance = current;
+                }
+            }
         }
-        return instance;
+        return current;
     }
     private MoneyBoostMediationManager() {
     }
@@ -330,7 +337,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                         + " fallback=" + umpPermissiveFallback);
     }
 
-    /** 初始化 GMA Next-Gen SDK（后台线程），完成后再加载广告。 */
+    /** 初始化 GMA Next-Gen SDK（主线程），完成后再加载广告。 */
     private void MoneyBoostInitGmaSdk(Activity activity, ADInitListener initListener, String admobAppId,
                                      boolean umpPermissiveFallback) {
         if (MoneyBoost_isInitSuccess || MoneyBoost_isInitializing) {
@@ -348,13 +355,23 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_isInitializing = true;
         final String appId = admobAppId.trim();
 
-        new Thread(() -> {
+        // GMA SDK 的初始化入口必须从主线程调用。后台线程调用时，部分版本会直接
+        // 抛出主线程校验异常，或导致初始化回调不再返回，后续广告自然不会发起请求。
+        mainHandler.post(() -> {
+            if (MoneyBoost_isDestroyed || activity.isFinishing() || activity.isDestroyed()) {
+                MoneyBoost_isInitializing = false;
+                return;
+            }
             try {
                 MobileAds.initialize(
                         activity,
                         new InitializationConfig.Builder(appId).build(),
                         initializationStatus -> {
                             mainHandler.post(() -> {
+                                if (MoneyBoost_isDestroyed) {
+                                    MoneyBoost_isInitializing = false;
+                                    return;
+                                }
                                 MoneyBoostInitAdAdapters(activity);
                                 MoneyBoost_isInitSuccess = true;
                                 MoneyBoost_isInitializing = false;
@@ -372,12 +389,10 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                         });
             } catch (Exception e) {
                 Log.e("=====GMA", "MobileAds.initialize failed", e);
-                mainHandler.post(() -> {
-                    MoneyBoost_isInitializing = false;
-                    MoneyBoost_isInitSuccess = false;
-                });
+                MoneyBoost_isInitializing = false;
+                MoneyBoost_isInitSuccess = false;
             }
-        }, "MoneyBoost-GMA-Init").start();
+        });
     }
 
     private void MoneyBoostStartAdTick() {
@@ -721,6 +736,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_bannerEnabled = true;
         MoneyBoost_bannerAdapter.MoneyBoostLoadCollapsibleBannerView();
         MoneyBoost_bannerAdapter.MoneyBoostShowBannerView();
+        // 该入口代表用户已经进入主界面，立即解除可能残留的开屏遮挡状态。
+        MoneyBoostSyncBannerVisibility();
     }
 
     public void MoneyBoostHideCollapsibleBannerView(){
@@ -1042,6 +1059,14 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     public void MoneyBoostCancelSplashADWithUnity() {
         MoneyBoost_unityColdSplashPending = false;
         mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
+        // 用户主动进入玩法时，失败/取消回调可能尚未到达；不能让残留的
+        // splashSessionActive 或全屏引用继续把 Banner 隐藏起来。
+        MoneyBoost_splashSessionActive = false;
+        MoneyBoost_splashOpenDispatched = false;
+        if (MoneyBoost_fullscreenAdRefCount > 0
+                && !MoneyBoostIsFullscreenAdShowing()) {
+            MoneyBoost_fullscreenAdRefCount = 0;
+        }
         MoneyBoostFinishColdStartSplashFlow();
     }
 
