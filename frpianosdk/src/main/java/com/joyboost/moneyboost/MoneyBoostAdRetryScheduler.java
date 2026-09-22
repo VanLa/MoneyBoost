@@ -1,4 +1,4 @@
-package com.dream.moneyboost;
+package com.joyboost.moneyboost;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;

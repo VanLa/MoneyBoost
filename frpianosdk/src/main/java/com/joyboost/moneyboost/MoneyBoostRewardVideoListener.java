@@ -1,4 +1,4 @@
-package com.dream.moneyboost;
+package com.joyboost.moneyboost;
 
 public interface MoneyBoostRewardVideoListener {
     void MoneyBoostOnRewardVideoAdClosed();

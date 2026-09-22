@@ -12,9 +12,9 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
-import com.dream.moneyboost.MoneyBoostFirebaseManager;
-import com.dream.moneyboost.MoneyBoostMediationManager;
-import com.dream.moneyboost.MoneyBoostToolsManager;
+import com.joyboost.moneyboost.MoneyBoostFirebaseManager;
+import com.joyboost.moneyboost.MoneyBoostMediationManager;
+import com.joyboost.moneyboost.MoneyBoostToolsManager;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -84,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        mediationManager.MoneyBoostInit(this, this, () -> {
+        mediationManager.MoneyBoostInit(this, () -> {
             Log.i(TAG, "Init ok, request cold splash. " + mediationManager.MoneyBoostDebugSplashStateText());
             // 先开屏，Banner 等开屏结束/超时后再出（避免干扰观察开屏）
             mediationManager.MoneyBoostShowSplashADWithUnity("launch");
@@ -148,7 +148,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         statusHandler.removeCallbacks(splashWaitTimeoutRunnable);
         if (mediationManager != null) {
-            mediationManager.MoneyBoostOnAppDestroy(this);
+            mediationManager.MoneyBoostOnAppDestroy();
         }
         super.onDestroy();
     }
@@ -156,7 +156,7 @@ public class MainActivity extends AppCompatActivity {
     private void setupButtons() {
         btnCollapsibleBanner.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.MoneyBoostShowCollapsibleBannerView(true);
+            mediationManager.MoneyBoostShowCollapsibleBannerView();
         });
 
         btnInterstitial.setOnClickListener(v -> {
@@ -171,26 +171,26 @@ public class MainActivity extends AppCompatActivity {
 
         btnMrec1.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.MoneyBoostShowMRECBannerViewPublic(1, false, "test");
+            mediationManager.MoneyBoostShowMRECBannerViewPublic(1, false);
         });
 
         btnMrec2.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.MoneyBoostShowMRECBannerViewPublic(2, false, "test");
+            mediationManager.MoneyBoostShowMRECBannerViewPublic(2, false);
         });
 
         btnMrec3.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.MoneyBoostShowMRECBannerViewPublic(3, false, "test");
+            mediationManager.MoneyBoostShowMRECBannerViewPublic(3, false);
         });
 
         btnMrec4.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            mediationManager.MoneyBoostShowMRECBannerViewPublic(4, false, "test");
+            mediationManager.MoneyBoostShowMRECBannerViewPublic(4, false);
         });
 
         findViewById(R.id.btn_hide_mrec).setOnClickListener(v ->
-                mediationManager.MoneyBoostHideMRECBannerViewPublic("test_hide"));
+                mediationManager.MoneyBoostHideMRECBannerViewPublic());
     }
 
     private void refreshAdButtonStatus() {

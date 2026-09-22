@@ -1,4 +1,4 @@
-package com.dream.moneyboost;
+package com.joyboost.moneyboost;
 
 /**
  * 对齐竞品反编译默认参数（FsnAd.countDownSec、native_collapse 高度、RemoteConfig 未知项等）。

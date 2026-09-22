@@ -1,4 +1,4 @@
-package com.dream.moneyboost;
+package com.joyboost.moneyboost;
 
 import android.app.Activity;
 import android.os.Bundle;
