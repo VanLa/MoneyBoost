@@ -33,6 +33,7 @@ public class MoneyBoostBannerAdapter {
     private boolean MoneyBoost_isLoaded = false;
     private boolean MoneyBoost_isLoading = false;
     private boolean MoneyBoost_collapsibleRequest = false;
+    private int MoneyBoost_loadGeneration = 0;
 
     public boolean MoneyBoostIsLoaded() {
         return MoneyBoost_isLoaded;
@@ -109,18 +110,30 @@ public class MoneyBoostBannerAdapter {
             MoneyBoost_collapsibleRequest = false;
         }
         BannerAdRequest adRequest = requestBuilder.build();
+        final int generation = MoneyBoost_loadGeneration;
+        final Activity requestActivity = MoneyBoost_activity;
         MoneyBoost_adView.loadAd(adRequest, new AdLoadCallback<BannerAd>() {
             @Override
             public void onAdLoaded(@NonNull BannerAd bannerAd) {
-                MoneyBoost_isLoading = false;
-                MoneyBoost_onBannerLoaded(bannerAd);
+                requestActivity.runOnUiThread(() -> {
+                    if (generation != MoneyBoost_loadGeneration) {
+                        bannerAd.destroy();
+                        return;
+                    }
+                    MoneyBoost_isLoading = false;
+                    MoneyBoost_onBannerLoaded(bannerAd);
+                });
             }
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError adError) {
-                MoneyBoost_isLoading = false;
-                MoneyBoost_isLoaded = false;
-                MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "BannerLoadFailed" + adError.getMessage());
+                requestActivity.runOnUiThread(() -> {
+                    if (generation != MoneyBoost_loadGeneration) return;
+                    MoneyBoost_isLoading = false;
+                    MoneyBoost_isLoaded = false;
+                    MoneyBoostMediationManager.getInstance().MoneyBoostOnBannerAdFailedToLoad(MoneyBoostBannerAdapter.this);
+                    MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "BannerLoadFailed" + adError.getMessage());
+                });
             }
         });
     }
@@ -261,6 +274,8 @@ public class MoneyBoostBannerAdapter {
     }
 
     public void MoneyBoostOnDestroy() {
+        MoneyBoost_loadGeneration++;
+        MoneyBoost_collapsibleRequest = false;
         MoneyBoost_isLoaded = false;
         MoneyBoost_isLoading = false;
         if (MoneyBoost_bannerAd != null) {

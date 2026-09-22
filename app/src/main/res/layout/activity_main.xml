@@ -57,56 +57,11 @@
             android:layout_marginBottom="16dp"
             android:text="Show Rewarded" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:text="Show MREC"
-            android:textSize="16sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btn_mrec_1"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:layout_weight="1"
-                android:text="1" />
-
-            <Button
-                android:id="@+id/btn_mrec_2"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:layout_weight="1"
-                android:text="2" />
-
-            <Button
-                android:id="@+id/btn_mrec_3"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:layout_weight="1"
-                android:text="3" />
-
-            <Button
-                android:id="@+id/btn_mrec_4"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="4" />
-        </LinearLayout>
-
         <Button
-            android:id="@+id/btn_hide_mrec"
+            android:id="@+id/btn_hide_collapsible_banner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Hide MREC" />
+            android:text="Hide CollapsibleBanner" />
 
     </LinearLayout>
 </ScrollView>

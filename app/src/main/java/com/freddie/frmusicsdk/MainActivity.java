@@ -28,10 +28,6 @@ public class MainActivity extends AppCompatActivity {
     private Button btnCollapsibleBanner;
     private Button btnInterstitial;
     private Button btnRewarded;
-    private Button btnMrec1;
-    private Button btnMrec2;
-    private Button btnMrec3;
-    private Button btnMrec4;
     private TextView tvAdLoadStatus;
     private int colorNotReady;
     private int colorShowing;
@@ -64,10 +60,6 @@ public class MainActivity extends AppCompatActivity {
         btnCollapsibleBanner = findViewById(R.id.btn_collapsible_banner);
         btnInterstitial = findViewById(R.id.btn_interstitial);
         btnRewarded = findViewById(R.id.btn_rewarded);
-        btnMrec1 = findViewById(R.id.btn_mrec_1);
-        btnMrec2 = findViewById(R.id.btn_mrec_2);
-        btnMrec3 = findViewById(R.id.btn_mrec_3);
-        btnMrec4 = findViewById(R.id.btn_mrec_4);
         tvAdLoadStatus = findViewById(R.id.tv_ad_load_status);
 
         MoneyBoostToolsManager.instance().MoneyBoost_isDebug = BuildConfig.DEBUG;
@@ -154,6 +146,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupButtons() {
+        findViewById(R.id.btn_hide_collapsible_banner).setOnClickListener(v ->
+                mediationManager.MoneyBoostHideCollapsibleBannerView());
         btnCollapsibleBanner.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
             mediationManager.MoneyBoostShowCollapsibleBannerView();
@@ -169,28 +163,10 @@ public class MainActivity extends AppCompatActivity {
             mediationManager.MoneyBoostShowRewardAdUnity("test");
         });
 
-        btnMrec1.setOnClickListener(v -> {
-            cancelSplashIfUserStartedPlaying();
-            mediationManager.MoneyBoostShowMRECBannerViewPublic(1, false);
-        });
 
-        btnMrec2.setOnClickListener(v -> {
-            cancelSplashIfUserStartedPlaying();
-            mediationManager.MoneyBoostShowMRECBannerViewPublic(2, false);
-        });
 
-        btnMrec3.setOnClickListener(v -> {
-            cancelSplashIfUserStartedPlaying();
-            mediationManager.MoneyBoostShowMRECBannerViewPublic(3, false);
-        });
 
-        btnMrec4.setOnClickListener(v -> {
-            cancelSplashIfUserStartedPlaying();
-            mediationManager.MoneyBoostShowMRECBannerViewPublic(4, false);
-        });
 
-        findViewById(R.id.btn_hide_mrec).setOnClickListener(v ->
-                mediationManager.MoneyBoostHideMRECBannerViewPublic());
     }
 
     private void refreshAdButtonStatus() {
@@ -204,18 +180,6 @@ public class MainActivity extends AppCompatActivity {
         updateAdButton(btnRewarded,
                 mediationManager.MoneyBoostDebugIsRewardReady(),
                 mediationManager.MoneyBoostDebugIsRewardShowing());
-        updateAdButton(btnMrec1,
-                mediationManager.MoneyBoostDebugIsMrecReady(),
-                mediationManager.MoneyBoostDebugIsMrecShowing());
-        updateAdButton(btnMrec2,
-                mediationManager.MoneyBoostDebugIsMrecReady(),
-                mediationManager.MoneyBoostDebugIsMrecShowing());
-        updateAdButton(btnMrec3,
-                mediationManager.MoneyBoostDebugIsMrecReady(),
-                mediationManager.MoneyBoostDebugIsMrecShowing());
-        updateAdButton(btnMrec4,
-                mediationManager.MoneyBoostDebugIsMrecReady(),
-                mediationManager.MoneyBoostDebugIsMrecShowing());
     }
 
     private void updateAdButton(Button button, boolean ready, boolean showing) {

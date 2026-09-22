@@ -44,7 +44,6 @@
         <meta-data android:name="MoneyBoost_INTERSTITIAL_ID" android:value="ca-app-pub-3940256099942544/1033173712"/>
         <meta-data android:name="MoneyBoost_REWARDED_ID" android:value="ca-app-pub-3940256099942544/5224354917"/>
         <meta-data android:name="MoneyBoost_BANNER_ID" android:value="ca-app-pub-3940256099942544/9214589741"/>
-        <meta-data android:name="MoneyBoost_MREC_ID" android:value="ca-app-pub-3940256099942544/9214589741"/>
         <meta-data android:name="MoneyBoost_SPLASH_ID" android:value="ca-app-pub-3940256099942544/9257395921"/>
 
         <activity

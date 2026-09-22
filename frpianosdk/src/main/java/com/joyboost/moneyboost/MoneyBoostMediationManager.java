@@ -34,9 +34,9 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     private MoneyBoostRewardVideoAdapter MoneyBoost_rewardAdapter;
 
-    private MoneyBoostMRECBannerAdapter MoneyBoost_mrecAdapter;
 
     private MoneyBoostBannerAdapter MoneyBoost_bannerAdapter;
+    private MoneyBoostBannerAdapter MoneyBoost_collapsibleAdapter;
 
     /** 标准 App Open 开屏，来自 MoneyBoost_SPLASH_ID */
     private MoneyBoostSplashAdapter MoneyBoost_splashAdapter;
@@ -55,18 +55,15 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     private String MoneyBoost_interKey = "";
     private String MoneyBoost_rewardKey = "";
-    private String MoneyBoost_mrecKey = "";
     private String MoneyBoost_bannerKey = "";
     private String MoneyBoost_splashKey = "";
 
     private static final long LOAD_DELAY_INTER_MS = 800L;
     private static final long LOAD_DELAY_REWARD_MS = 1200L;
     private static final long LOAD_DELAY_BANNER_MS = 1500L;
-    private static final long LOAD_DELAY_MREC_MS = 3000L;
     private static final long LOAD_DELAY_INTER_LOW_END_MS = 1400L;
     private static final long LOAD_DELAY_REWARD_LOW_END_MS = 2000L;
     private static final long LOAD_DELAY_BANNER_LOW_END_MS = 2500L;
-    private static final long LOAD_DELAY_MREC_LOW_END_MS = 5000L;
     private static final long AD_TICK_INTERVAL_MS = 5000L;
     private static final long COLD_SPLASH_WAIT_TIMEOUT_MS = 12000L;
 
@@ -98,6 +95,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     private boolean MoneyBoost_rewardVideoInSession = false;
     private boolean MoneyBoost_rewardCloseDispatched = false;
     private boolean MoneyBoost_interstitialInSession = false;
+    private boolean MoneyBoost_interstitialShowPending = false;
     private boolean MoneyBoost_interstitialCloseDispatched = false;
 
     /** Unity 冷启动开屏请求中（ShowSplashADWithUnity） */
@@ -107,16 +105,11 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     private int MoneyBoost_fullscreenAdRefCount = 0;
     /** Unity 已调用 showBanner，后续由 SDK 自行管理 Banner 显示/隐藏 */
     private boolean MoneyBoost_bannerEnabled = false;
+    private boolean MoneyBoost_collapsibleActive = false;
 
     private SharedPreferences MoneyBoost_dataPrefs;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final Runnable mrecHideRunnable = new Runnable() {
-        @Override
-        public void run() {
-            MoneyBoostHideMRECBannerView();
-        }
-    };
     private final Runnable coldSplashTimeoutRunnable = new Runnable() {
         @Override
         public void run() {
@@ -163,12 +156,6 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         @Override
         public void run() {
             MoneyBoostLoadBannerView();
-        }
-    };
-    private final Runnable mrecLoadRunnable = new Runnable() {
-        @Override
-        public void run() {
-            MoneyBoostLoadMRECBannerView();
         }
     };
 
@@ -218,7 +205,6 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             MoneyBoost_rewardKey = appInfo.metaData.getString("MoneyBoost_REWARDED_ID");
             MoneyBoost_splashKey = appInfo.metaData.getString("MoneyBoost_SPLASH_ID");
             MoneyBoost_bannerKey = appInfo.metaData.getString("MoneyBoost_BANNER_ID");
-            MoneyBoost_mrecKey = appInfo.metaData.getString("MoneyBoost_MREC_ID");
             admobAppId = appInfo.metaData.getString("com.google.android.gms.ads.APPLICATION_ID");
         }catch (Exception e){
         }
@@ -283,10 +269,6 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_splashAdapter.MoneyBoost_splashListener = this;
         MoneyBoost_splashAdapter.MoneyBoostInitSplashAdapter();
 
-        MoneyBoost_mrecAdapter = new MoneyBoostMRECBannerAdapter();
-        MoneyBoost_mrecAdapter.MoneyBoost_activity = activity;
-        MoneyBoost_mrecAdapter.MoneyBoost_ad_unit = MoneyBoost_mrecKey;
-        MoneyBoost_mrecAdapter.MoneyBoostInitBannerAdapter();
     }
 
     private boolean MoneyBoostCanRequestAdsFromUmp() {
@@ -435,7 +417,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     /**
-     * 冷启动错峰：Splash 立刻；Inter → Reward → Banner → MREC。
+     * 冷启动错峰：Splash 立刻；Inter → Reward → Banner。
      * 低端机再拉长间隔，减轻主线程与网络并发。
      */
     private void MoneyBoostScheduleStaggeredAdLoads() {
@@ -445,19 +427,16 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         long interDelay = lowEnd ? LOAD_DELAY_INTER_LOW_END_MS : LOAD_DELAY_INTER_MS;
         long rewardDelay = lowEnd ? LOAD_DELAY_REWARD_LOW_END_MS : LOAD_DELAY_REWARD_MS;
         long bannerDelay = lowEnd ? LOAD_DELAY_BANNER_LOW_END_MS : LOAD_DELAY_BANNER_MS;
-        long mrecDelay = lowEnd ? LOAD_DELAY_MREC_LOW_END_MS : LOAD_DELAY_MREC_MS;
 
         mainHandler.postDelayed(interLoadRunnable, interDelay);
         mainHandler.postDelayed(rewardLoadRunnable, rewardDelay);
         mainHandler.postDelayed(bannerLoadRunnable, bannerDelay);
-        mainHandler.postDelayed(mrecLoadRunnable, mrecDelay);
     }
 
     private void MoneyBoostCancelStaggeredAdLoads() {
         mainHandler.removeCallbacks(interLoadRunnable);
         mainHandler.removeCallbacks(rewardLoadRunnable);
         mainHandler.removeCallbacks(bannerLoadRunnable);
-        mainHandler.removeCallbacks(mrecLoadRunnable);
     }
 
     //////////////////////////////////////////////////////////////////////Interstitial////////////////////////////////////////////////////////////////////////////////
@@ -494,6 +473,13 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public void MoneyBoostShowInterstitialUnity(String scene) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(() -> MoneyBoostShowInterstitialUnity(scene));
+            return;
+        }
+        if (!MoneyBoost_needPopAD || !MoneyBoost_isAppForeground || MoneyBoost_isDestroyed
+                || MoneyBoost_interstitialShowPending || MoneyBoost_interstitialInSession
+                || MoneyBoostIsFullscreenAdShowing() || MoneyBoostIsSplashAdShowing()) return;
         if (!MoneyBoostIsIntertitialADReadyLog(scene) || MoneyBoost_interAdapter == null) {
             return;
         }
@@ -503,11 +489,17 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("inter_show", object.toString());
         } catch (Exception ignored) { }
         MoneyBoost_interstitialCloseDispatched = false;
+        MoneyBoost_interstitialShowPending = true;
         MoneyBoost_interAdapter.MoneyBoostShowInterstitialAd();
     }
 
     @Override
     public void MoneyBoostOnInterstitialAdClosed() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostOnInterstitialAdClosed);
+            return;
+        }
+        MoneyBoost_interstitialShowPending = false;
         MoneyBoostOnFullscreenAdClosed();
         MoneyBoostClearAoaResumeEligibility();
         MoneyBoost_interstitialInSession = false;
@@ -517,6 +509,11 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     @Override
     public void MoneyBoostOnInterstitialAdFailedToShow() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostOnInterstitialAdFailedToShow);
+            return;
+        }
+        MoneyBoost_interstitialShowPending = false;
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug(
                 "=====MoneyBoostMediatonManager", "===InterFailedToShow");
         MoneyBoostOnFullscreenAdClosed();
@@ -528,6 +525,11 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     @Override
     public void MoneyBoostOnInterstitialAdDisplayed() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostOnInterstitialAdDisplayed);
+            return;
+        }
+        MoneyBoost_interstitialShowPending = false;
         if (MoneyBoost_interstitialInSession) {
             return;
         }
@@ -620,10 +622,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     public void MoneyBoostHideBannerView(){
         MoneyBoost_bannerEnabled = false;
-        if (MoneyBoost_bannerAdapter == null) {
-            return;
-        }
-        MoneyBoost_bannerAdapter.MoneyBoostHideBannerView();
+        MoneyBoostHideCollapsibleBannerView();
+        MoneyBoostSyncBannerVisibility();
     }
 
     /** Banner 加载完成后再按 bannerEnabled / 全屏状态 Sync，避免 Init 前 ShowBanner 永久不显示 */
@@ -644,7 +644,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     private boolean MoneyBoostShouldBlockBannerDisplay() {
-        if (!MoneyBoost_bannerEnabled) {
+        if (!MoneyBoost_bannerEnabled || !MoneyBoost_needPopAD || MoneyBoost_isDestroyed) {
             return true;
         }
         if (!MoneyBoost_isAppForeground) {
@@ -667,14 +667,23 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             return;
         }
         MoneyBoostReconcileFullscreenAdRefCount();
-        if (MoneyBoostShouldBlockBannerDisplay()) {
+        boolean blocked = MoneyBoostShouldBlockBannerDisplay();
+        boolean collapsibleReady = MoneyBoost_collapsibleActive
+                && MoneyBoost_collapsibleAdapter != null && MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded();
+        // Keep the regular banner cached. Only one banner view is visible at a time.
+        if (blocked || collapsibleReady) {
             MoneyBoost_bannerAdapter.MoneyBoostHideBannerView();
         } else {
             MoneyBoost_bannerAdapter.MoneyBoostShowBannerView();
         }
+        if (MoneyBoost_collapsibleAdapter != null) {
+            if (!blocked && collapsibleReady) MoneyBoost_collapsibleAdapter.MoneyBoostShowBannerView();
+            else MoneyBoost_collapsibleAdapter.MoneyBoostHideBannerView();
+        }
     }
 
     private void MoneyBoostOnFullscreenAdShow() {
+        MoneyBoostHideCollapsibleBannerView();
         MoneyBoost_fullscreenAdRefCount++;
         MoneyBoostSyncBannerVisibility();
     }
@@ -686,63 +695,53 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoostSyncBannerVisibility();
     }
 
-    //////////////////////////////////////////////////////////////////////MREC////////////////////////////////////////////////////////////////////////////////
-
-    private void MoneyBoostLoadMRECBannerView(){
-        if (MoneyBoost_mrecAdapter == null) {
-            return;
-        }
-        MoneyBoost_mrecAdapter.MoneyBoostLoadMRECView();
-    }
-
-    private void MoneyBoostShowMRECBannerView(int type , boolean needFix){
-        if (MoneyBoost_mrecAdapter == null) {
-            return;
-        }
-        if (type != 2 && needFix == false){
-            mainHandler.removeCallbacks(mrecHideRunnable);
-            mainHandler.postDelayed(mrecHideRunnable, 1500L);
-        }
-        MoneyBoost_mrecAdapter.MoneyBoostShowMRECView(type);
-    }
-
-    private void MoneyBoostHideMRECBannerView(){
-        mainHandler.removeCallbacks(mrecHideRunnable);
-        if (MoneyBoost_mrecAdapter == null) {
-            return;
-        }
-        MoneyBoost_mrecAdapter.MoneyBoostHideMRECView();
-    }
-
-    public void MoneyBoostShowMRECBannerViewPublic(int type, boolean needFix) {
-        MoneyBoostShowMRECBannerView(type, needFix);
-    }
-
-    public void MoneyBoostHideMRECBannerViewPublic() {
-        MoneyBoostHideMRECBannerView();
-    }
-
     //////////////////////////////////////////////////////////////////////Collapsible Banner////////////////////////////////////////////////////////////////////////////////
 
-    /** Requests and displays an AdMob collapsible banner (bottom anchored). */
+    /** Explicit bottom-anchored expansion; prevent duplicate requests while active. */
     public void MoneyBoostShowCollapsibleBannerView(){
-        if (MoneyBoost_bannerAdapter == null || MoneyBoost_activity == null) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostShowCollapsibleBannerView);
             return;
         }
+        if (MoneyBoost_bannerAdapter == null || MoneyBoost_activity == null
+                || MoneyBoost_isDestroyed || !MoneyBoost_needPopAD || !MoneyBoost_isAppForeground
+                || MoneyBoostIsFullscreenAdShowing() || MoneyBoostIsSplashAdShowing()) {
+            return;
+        }
+        if (MoneyBoost_collapsibleActive) {
+            return;
+        }
+        // Preserve the normal banner so Hide can restore it without a new network load.
+        MoneyBoost_collapsibleAdapter = new MoneyBoostBannerAdapter();
+        MoneyBoost_collapsibleAdapter.MoneyBoost_activity = MoneyBoost_activity;
+        MoneyBoost_collapsibleAdapter.MoneyBoost_ad_unit = MoneyBoost_bannerKey;
+        MoneyBoost_collapsibleAdapter.MoneyBoostInitBannerAdapter();
+        MoneyBoost_collapsibleActive = true;
+        MoneyBoost_bannerEnabled = true;
         try {
             MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("collapsibleBanner_should_show", null);
         } catch (Exception ignored) { }
-        MoneyBoost_bannerEnabled = true;
-        MoneyBoost_bannerAdapter.MoneyBoostLoadCollapsibleBannerView();
-        MoneyBoost_bannerAdapter.MoneyBoostShowBannerView();
-        // 该入口代表用户已经进入主界面，立即解除可能残留的开屏遮挡状态。
+        MoneyBoost_collapsibleAdapter.MoneyBoostLoadCollapsibleBannerView();
         MoneyBoostSyncBannerVisibility();
     }
 
     public void MoneyBoostHideCollapsibleBannerView(){
-        MoneyBoost_bannerEnabled = false;
-        if (MoneyBoost_bannerAdapter != null) {
-            MoneyBoost_bannerAdapter.MoneyBoostHideBannerView();
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostHideCollapsibleBannerView);
+            return;
+        }
+        MoneyBoost_collapsibleActive = false;
+        if (MoneyBoost_collapsibleAdapter != null) {
+            MoneyBoost_collapsibleAdapter.MoneyBoostOnDestroy();
+            MoneyBoost_collapsibleAdapter = null;
+        }
+        // Keep the persistent banner enabled when the expanded placement ends.
+        MoneyBoostSyncBannerVisibility();
+    }
+
+    public void MoneyBoostOnBannerAdFailedToLoad(MoneyBoostBannerAdapter adapter) {
+        if (adapter == MoneyBoost_collapsibleAdapter) {
+            MoneyBoostHideCollapsibleBannerView();
         }
     }
 
@@ -1142,8 +1141,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         if (MoneyBoost_bannerAdapter != null) {
             MoneyBoost_bannerAdapter.MoneyBoost_activity = activity;
         }
-        if (MoneyBoost_mrecAdapter != null) {
-            MoneyBoost_mrecAdapter.MoneyBoost_activity = activity;
+        if (MoneyBoost_collapsibleAdapter != null) {
+            MoneyBoost_collapsibleAdapter.MoneyBoost_activity = activity;
         }
         if (MoneyBoost_splashAdapter != null) {
             MoneyBoost_splashAdapter.MoneyBoost_activity = activity;
@@ -1162,31 +1161,17 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     public void MoneyBoostOnAppResume() {
         MoneyBoost_isAppForeground = true;
         MoneyBoostSyncBannerVisibility();
-        if (MoneyBoost_wentToBackground) {
-            MoneyBoostHideMRECBannerView();
-        } else if (MoneyBoost_mrecAdapter != null) {
-            MoneyBoost_mrecAdapter.MoneyBoostResumeAutoRefresh();
-        }
         if (MoneyBoost_isInitSuccess && !MoneyBoost_isDestroyed) {
             MoneyBoostStartAdTick();
         }
         MoneyBoostResumeSplashOnForegroundDeferred();
     }
 
-    private void MoneyBoostHideMrecOnBackgroundIfNeeded() {
-        if (MoneyBoost_mrecAdapter == null) {
-            return;
-        }
-        if (MoneyBoost_mrecAdapter.MoneyBoostIsVisible() || MoneyBoost_mrecAdapter.MoneyBoostIsShowRequested()) {
-            MoneyBoostHideMRECBannerView();
-        }
-    }
 
     public void MoneyBoostOnAppPause() {
         if (MoneyBoost_isDestroyed) {
             return;
         }
-        MoneyBoostHideMrecOnBackgroundIfNeeded();
     }
 
     private void MoneyBoostCancelPendingHotSplashOnBackground() {
@@ -1232,18 +1217,17 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             MoneyBoost_canShowAoaResume = true;
         }
         MoneyBoostStopAdTick();
-        mainHandler.removeCallbacks(mrecHideRunnable);
         MoneyBoostCancelPendingColdSplashOnBackground();
         MoneyBoostCancelPendingHotSplashOnBackground();
         MoneyBoostSyncBannerVisibility();
-        MoneyBoostHideMrecOnBackgroundIfNeeded();
     }
 
     public void MoneyBoostOnAppDestroy() {
+        MoneyBoost_interstitialShowPending = false;
+        MoneyBoost_collapsibleActive = false;
         MoneyBoost_isAppForeground = false;
         MoneyBoost_isDestroyed = true;
         MoneyBoost_wentToBackground = false;
-        mainHandler.removeCallbacks(mrecHideRunnable);
         MoneyBoostCancelStaggeredAdLoads();
         mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
         mainHandler.removeCallbacks(hotStartSplashTimeoutRunnable);
@@ -1261,13 +1245,13 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             MoneyBoost_splashAdapter.MoneyBoostOnDestroy();
             MoneyBoost_splashAdapter = null;
         }
-        if (MoneyBoost_mrecAdapter != null) {
-            MoneyBoost_mrecAdapter.MoneyBoostOnDestroy();
-            MoneyBoost_mrecAdapter = null;
-        }
         if (MoneyBoost_bannerAdapter != null) {
             MoneyBoost_bannerAdapter.MoneyBoostOnDestroy();
             MoneyBoost_bannerAdapter = null;
+        }
+        if (MoneyBoost_collapsibleAdapter != null) {
+            MoneyBoost_collapsibleAdapter.MoneyBoostOnDestroy();
+            MoneyBoost_collapsibleAdapter = null;
         }
         MoneyBoost_isInitSuccess = false;
         MoneyBoost_isInitializing = false;
@@ -1294,8 +1278,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_needPopAD = false;
         MoneyBoost_bannerEnabled = false;
         //关闭现在的广告
+        MoneyBoostHideCollapsibleBannerView();
         MoneyBoostHideBannerView();
-        MoneyBoostHideMRECBannerView();
     }
 
     public void MoneyBoostGetUserNoPopAd(){
@@ -1313,11 +1297,11 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     //////////////////////////////////////////////////////////////////////Debug status (test app) ////////////////////////////////////////////////////////////////
 
     public boolean MoneyBoostDebugIsCollapsibleReady() {
-        return MoneyBoost_bannerAdapter != null && MoneyBoost_bannerAdapter.MoneyBoostIsLoaded();
+        return MoneyBoost_collapsibleAdapter != null && MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded();
     }
 
     public boolean MoneyBoostDebugIsCollapsibleShowing() {
-        return MoneyBoost_bannerAdapter != null && MoneyBoost_bannerAdapter.MoneyBoostIsVisible();
+        return MoneyBoost_collapsibleActive && MoneyBoost_collapsibleAdapter != null && MoneyBoost_collapsibleAdapter.MoneyBoostIsVisible();
     }
 
     public boolean MoneyBoostDebugIsRewardReady() {
@@ -1328,13 +1312,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         return MoneyBoost_rewardAdapter != null && MoneyBoost_rewardAdapter.MoneyBoostIsShowing();
     }
 
-    public boolean MoneyBoostDebugIsMrecReady() {
-        return MoneyBoost_mrecAdapter != null && MoneyBoost_mrecAdapter.MoneyBoostIsLoaded();
-    }
 
-    public boolean MoneyBoostDebugIsMrecShowing() {
-        return MoneyBoost_mrecAdapter != null && MoneyBoost_mrecAdapter.MoneyBoostIsVisible();
-    }
 
     public boolean MoneyBoostDebugIsInterReady() {
         return MoneyBoostIsInterFormatReady();
