@@ -93,6 +93,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
 
     private boolean MoneyBoost_rewardVideoInSession = false;
+    private boolean MoneyBoost_rewardShowPending = false;
+    private String MoneyBoost_rewardShowScene = "";
     private boolean MoneyBoost_rewardCloseDispatched = false;
     private boolean MoneyBoost_interstitialInSession = false;
     private boolean MoneyBoost_interstitialShowPending = false;
@@ -161,6 +163,15 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     public interface ADInitListener {
         void onAdInitSuccess();
+        default void onAdInitFailed(String reason) { }
+    }
+
+    private void MoneyBoostNotifyInitFailed(ADInitListener listener, String reason) {
+        mainHandler.post(() -> {
+            if (MoneyBoost_isDestroyed) return;
+            if (listener != null) listener.onAdInitFailed(reason);
+            MoneyBoostSendUnityMsg("MoneyBoostADManager", "MoneyBoostCallback", "MoneyBoost_INIT_FAILED");
+        });
     }
 
     public interface DebugCallbackListener {
@@ -330,6 +341,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             Log.e("=====GMA", "com.google.android.gms.ads.APPLICATION_ID not configured, skip MobileAds init");
             MoneyBoost_isInitializing = false;
             MoneyBoost_isInitSuccess = false;
+            MoneyBoostNotifyInitFailed(initListener, "AdMob App ID missing");
             return;
         }
 
@@ -341,6 +353,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         mainHandler.post(() -> {
             if (MoneyBoost_isDestroyed || activity.isFinishing() || activity.isDestroyed()) {
                 MoneyBoost_isInitializing = false;
+                if (!MoneyBoost_isDestroyed) MoneyBoostNotifyInitFailed(initListener, "Activity unavailable");
                 return;
             }
             try {
@@ -372,6 +385,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                 Log.e("=====GMA", "MobileAds.initialize failed", e);
                 MoneyBoost_isInitializing = false;
                 MoneyBoost_isInitSuccess = false;
+                MoneyBoostNotifyInitFailed(initListener, e.getMessage());
             }
         });
     }
@@ -479,6 +493,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         }
         if (!MoneyBoost_needPopAD || !MoneyBoost_isAppForeground || MoneyBoost_isDestroyed
                 || MoneyBoost_interstitialShowPending || MoneyBoost_interstitialInSession
+                || MoneyBoost_rewardShowPending
                 || MoneyBoostIsFullscreenAdShowing() || MoneyBoostIsSplashAdShowing()) return;
         if (!MoneyBoostIsIntertitialADReadyLog(scene) || MoneyBoost_interAdapter == null) {
             return;
@@ -560,36 +575,74 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public void MoneyBoostShowRewardAdUnity(String scene){
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(() -> MoneyBoostShowRewardAdUnity(scene));
+            return;
+        }
         try {
             JSONObject object = new JSONObject();
             object.put("scene",scene);
             MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("reward_should_show",object.toString());
-            MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("reward_show",object.toString());
         }catch (Exception e){
         }
-        if (MoneyBoost_rewardAdapter == null || !MoneyBoost_rewardAdapter.MoneyBoostIsReady()) {
+        if (!MoneyBoost_needPopAD || !MoneyBoost_isAppForeground || MoneyBoost_isDestroyed
+                || MoneyBoost_rewardShowPending || MoneyBoost_rewardVideoInSession
+                || MoneyBoost_interstitialShowPending || MoneyBoostIsFullscreenAdShowing()
+                || MoneyBoostIsSplashAdShowing()
+                || MoneyBoost_rewardAdapter == null || !MoneyBoost_rewardAdapter.MoneyBoostIsReady()) {
             return;
         }
+        MoneyBoost_rewardCloseDispatched = false;
+        MoneyBoost_rewardShowScene = scene;
+        MoneyBoost_rewardShowPending = true;
         MoneyBoost_rewardAdapter.MoneyBoostShowRewardVideoAd();
     }
 
     @Override
     public void MoneyBoostOnRewardVideoAdClosed() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostOnRewardVideoAdClosed);
+            return;
+        }
+        MoneyBoost_rewardShowPending = false;
         MoneyBoostOnFullscreenAdClosed();
         MoneyBoostClearAoaResumeEligibility();
         MoneyBoost_rewardVideoInSession = false;
         MoneyBoostDispatchRewardCloseCallbacksNow();
+        MoneyBoostRetryPendingColdSplashIfNeeded();
+    }
+
+    @Override
+    public void MoneyBoostOnRewardVideoAdFailedToShow() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostOnRewardVideoAdFailedToShow);
+            return;
+        }
+        MoneyBoost_rewardShowPending = false;
+        MoneyBoost_rewardVideoInSession = false;
+        MoneyBoostDispatchRewardCloseCallbacksNow();
+        MoneyBoostRetryPendingColdSplashIfNeeded();
     }
 
     @Override
     public void MoneyBoostOnRewardVideoAdDisplayed() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostOnRewardVideoAdDisplayed);
+            return;
+        }
         if (MoneyBoost_rewardVideoInSession) {
             return;
         }
+        MoneyBoost_rewardShowPending = false;
         MoneyBoost_rewardVideoInSession = true;
         MoneyBoost_rewardCompleteDispatched = false;
         MoneyBoost_rewardCloseDispatched = false;
         MoneyBoostOnFullscreenAdShow();
+        try {
+            JSONObject object = new JSONObject();
+            object.put("scene", MoneyBoost_rewardShowScene);
+            MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("reward_show", object.toString());
+        } catch (Exception ignored) { }
         MoneyBoostSendUnityMsg("MoneyBoostADManager", "MoneyBoostCallback", "MoneyBoost_REWARD_OPEN");
     }
 
@@ -599,6 +652,10 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     @Override
     public void MoneyBoostOnRewardVideoAdCompleted() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostOnRewardVideoAdCompleted);
+            return;
+        }
         if (MoneyBoost_rewardCompleteDispatched) {
             return;
         }
@@ -805,7 +862,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         if (MoneyBoostIsSplashAdShowing()) {
             return true;
         }
-        if (MoneyBoost_rewardVideoInSession || MoneyBoost_interstitialInSession) {
+        if (MoneyBoost_rewardShowPending || MoneyBoost_rewardVideoInSession
+                || MoneyBoost_interstitialShowPending || MoneyBoost_interstitialInSession) {
             return true;
         }
         if (MoneyBoost_interAdapter != null && MoneyBoost_interAdapter.MoneyBoostIsShowing()) {
@@ -1224,6 +1282,15 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     public void MoneyBoostOnAppDestroy() {
         MoneyBoost_interstitialShowPending = false;
+        MoneyBoost_interstitialInSession = false;
+        MoneyBoost_interstitialCloseDispatched = false;
+        MoneyBoost_rewardShowPending = false;
+        MoneyBoost_rewardVideoInSession = false;
+        MoneyBoost_rewardCloseDispatched = false;
+        MoneyBoost_rewardCompleteDispatched = false;
+        MoneyBoost_splashSessionActive = false;
+        MoneyBoost_splashOpenDispatched = false;
+        MoneyBoost_fullscreenAdRefCount = 0;
         MoneyBoost_collapsibleActive = false;
         MoneyBoost_isAppForeground = false;
         MoneyBoost_isDestroyed = true;

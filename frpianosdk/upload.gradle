@@ -22,7 +22,7 @@ afterEvaluate {
             release(MavenPublication) {
                 groupId = 'com.joyboost'
                 artifactId = 'moneyboost'
-                version = '0.0.1'
+                version = '0.6.7'
                 //aar 文件
                 def projectName = project.getName()
                 artifact "build/outputs/aar/${projectName}-release.aar"

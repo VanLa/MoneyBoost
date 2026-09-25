@@ -91,13 +91,16 @@ public class MoneyBoostRewardVideoAdapter {
 
     public void MoneyBoostShowRewardVideoAd() {
         if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
+            MoneyBoostNotifyFailedToShow();
             return;
         }
         final String unitId = MoneyBoostUnitId();
         if (unitId == null) {
+            MoneyBoostNotifyFailedToShow();
             return;
         }
         if (MoneyBoost_rewardedAd == null) {
+            MoneyBoostNotifyFailedToShow();
             return;
         }
         MoneyBoost_activity.runOnUiThread(new Runnable() {
@@ -105,6 +108,7 @@ public class MoneyBoostRewardVideoAdapter {
                 final RewardedAd rewardedAd = MoneyBoost_rewardedAd;
                 MoneyBoost_rewardedAd = null;
                 if (rewardedAd == null) {
+                    MoneyBoostNotifyFailedToShow();
                     MoneyBoostLoadRewardVideoAd();
                     return;
                 }
@@ -135,6 +139,7 @@ public class MoneyBoostRewardVideoAdapter {
                         MoneyBoost_adReady = false;
                         if (!MoneyBoost_isShowing) {
                             rewardedAd.destroy();
+                            MoneyBoostNotifyFailedToShow();
                             MoneyBoostLoadRewardVideoAd();
                             return;
                         }
@@ -160,20 +165,33 @@ public class MoneyBoostRewardVideoAdapter {
                                 revenue, "REWARDED", MoneyBoostResolveNetworkName(rewardedAd), unitId);
                     }
                 });
-                rewardedAd.show(MoneyBoost_activity, new OnUserEarnedRewardListener() {
-                    @Override
-                    public void onUserEarnedReward(@NonNull RewardItem rewardItem) {
-                        if (MoneyBoost_rewardVideoListener != null) {
-                            MoneyBoost_rewardVideoListener.MoneyBoostOnRewardVideoAdCompleted();
+                try {
+                    rewardedAd.show(MoneyBoost_activity, new OnUserEarnedRewardListener() {
+                        @Override
+                        public void onUserEarnedReward(@NonNull RewardItem rewardItem) {
+                            if (MoneyBoost_rewardVideoListener != null) {
+                                MoneyBoost_rewardVideoListener.MoneyBoostOnRewardVideoAdCompleted();
+                            }
                         }
-                    }
-                });
+                    });
+                } catch (RuntimeException e) {
+                    MoneyBoost_isShowing = false;
+                    rewardedAd.destroy();
+                    MoneyBoostNotifyFailedToShow();
+                    MoneyBoostLoadRewardVideoAd();
+                }
             }
         });
     }
 
     public boolean MoneyBoostIsReady() {
         return MoneyBoost_adReady && MoneyBoost_rewardedAd != null;
+    }
+
+    private void MoneyBoostNotifyFailedToShow() {
+        if (MoneyBoost_rewardVideoListener != null) {
+            MoneyBoost_rewardVideoListener.MoneyBoostOnRewardVideoAdFailedToShow();
+        }
     }
 
     public void MoneyBoostOnDestroy() {
