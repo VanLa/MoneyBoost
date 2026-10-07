@@ -57,8 +57,13 @@ dependencies {
     // https://developers.google.com/admob/android/next-gen/quick-start
     implementation 'com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.4.0'
 
-    // --- AdMob mediation: Google demand plus Facebook
+    // --- Meta Audience Network bidding via the AdMob Next-Gen-compatible adapter.
+    // Adapter 6.21.0.4 uses Java 11 bytecode and brings Audience Network SDK 6.21.0.
+    // Keep AGP 7.4.2 / Gradle 7.5.1 / Java source+target 11 unchanged.
+    // Do not add facebook-android-sdk (login/social SDK) or the legacy GMA SDK.
+    // https://developers.google.com/admob/android/next-gen/mediation/meta
     implementation 'com.google.ads.mediation:facebook:6.21.0.4'
+    implementation 'com.facebook.android:audience-network-sdk:6.21.0'
 
     // --- Google Play Billing
     implementation 'com.android.billingclient:billing:8.0.0'

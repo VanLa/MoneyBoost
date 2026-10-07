@@ -4,6 +4,7 @@ package com.joyboost.moneyboost;
 import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import com.google.android.libraries.ads.mobile.sdk.MobileAds;
 import com.google.android.libraries.ads.mobile.sdk.initialization.InitializationConfig;
@@ -21,6 +22,7 @@ import android.util.Log;
 import org.json.JSONObject;
 
 import java.util.List;
+import java.util.ArrayList;
 
 public class MoneyBoostMediationManager implements MoneyBoostInterstitialListener, MoneyBoostRewardVideoListener, MoneyBoostSplashListener {
 
@@ -52,6 +54,12 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     private boolean MoneyBoost_isInitSuccess = false;
     private boolean MoneyBoost_isInitializing = false;
+    private boolean MoneyBoost_initFailed = false;
+    private int MoneyBoost_initGeneration = 0;
+    private static final String INIT_TAG = "MoneyBoostInit";
+    private static final long INIT_TIMEOUT_MS = 45000L;
+    private final List<ADInitListener> MoneyBoost_initListeners = new ArrayList<>();
+    private Runnable MoneyBoost_initTimeout;
 
     private String MoneyBoost_interKey = "";
     private String MoneyBoost_rewardKey = "";
@@ -103,6 +111,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     /** Unity 冷启动开屏请求中（ShowSplashADWithUnity） */
     private boolean MoneyBoost_unityColdSplashPending = false;
     private String MoneyBoost_unityColdSplashScene = "launch";
+    private long MoneyBoost_coldSplashDeadline = 0L;
 
     private int MoneyBoost_fullscreenAdRefCount = 0;
     /** Unity 已调用 showBanner，后续由 SDK 自行管理 Banner 显示/隐藏 */
@@ -118,12 +127,9 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             if (!MoneyBoost_unityColdSplashPending) {
                 return;
             }
-            MoneyBoost_unityColdSplashPending = false;
+            Log.w(INIT_TAG, "Cold splash wait timed out; continue game");
             MoneyBoost_splashSessionActive = false;
-            MoneyBoost_coldSplashHandled = true;
-            MoneyBoost_allowHotStartSplash = true;
-            // 超时未出开屏时也要恢复 Banner（Unity 常在 Init 前就 ShowBanner）
-            MoneyBoostSyncBannerVisibility();
+            MoneyBoostFinishColdStartSplashFlow();
         }
     };
     private final Runnable hotStartSplashTimeoutRunnable = new Runnable() {
@@ -138,40 +144,101 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     private final Runnable adTickRunnable = new Runnable() {
         @Override
         public void run() {
-            MoneyBoostTickAdReload();
-            mainHandler.postDelayed(this, AD_TICK_INTERVAL_MS);
+            try {
+                MoneyBoostTickAdReload();
+            } catch (Exception | LinkageError e) {
+                Log.e(INIT_TAG, "Ad reload failed", e);
+            }
+            if (!MoneyBoost_isDestroyed && MoneyBoost_isInitSuccess) {
+                mainHandler.postDelayed(this, AD_TICK_INTERVAL_MS);
+            }
         }
     };
     private final Runnable interLoadRunnable = new Runnable() {
         @Override
         public void run() {
-            MoneyBoostLoadInterstitialAd();
+            if (!MoneyBoost_isInitSuccess || MoneyBoost_isDestroyed) return;
+            try {
+                MoneyBoostLoadInterstitialAd();
+            } catch (Exception | LinkageError e) {
+                Log.e(INIT_TAG, "MoneyBoostLoadInterstitialAd failed", e);
+            }
         }
     };
     private final Runnable rewardLoadRunnable = new Runnable() {
         @Override
         public void run() {
-            MoneyBoostLoadRewardAd();
+            if (!MoneyBoost_isInitSuccess || MoneyBoost_isDestroyed) return;
+            try {
+                MoneyBoostLoadRewardAd();
+            } catch (Exception | LinkageError e) {
+                Log.e(INIT_TAG, "MoneyBoostLoadRewardAd failed", e);
+            }
         }
     };
     private final Runnable bannerLoadRunnable = new Runnable() {
         @Override
         public void run() {
-            MoneyBoostLoadBannerView();
+            if (!MoneyBoost_isInitSuccess || MoneyBoost_isDestroyed) return;
+            try {
+                MoneyBoostLoadBannerView();
+            } catch (Exception | LinkageError e) {
+                Log.e(INIT_TAG, "MoneyBoostLoadBannerView failed", e);
+            }
         }
     };
 
     public interface ADInitListener {
         void onAdInitSuccess();
         default void onAdInitFailed(String reason) { }
+        /** Always called after success/failure/timeout. Game startup must not depend on success. */
+        default void onAdInitFinished(boolean success, String reason) { }
     }
 
-    private void MoneyBoostNotifyInitFailed(ADInitListener listener, String reason) {
-        mainHandler.post(() -> {
-            if (MoneyBoost_isDestroyed) return;
-            if (listener != null) listener.onAdInitFailed(reason);
-            MoneyBoostSendUnityMsg("MoneyBoostADManager", "MoneyBoostCallback", "MoneyBoost_INIT_FAILED");
-        });
+    private void MoneyBoostNotifyInitListener(ADInitListener listener, boolean success, String reason) {
+        if (listener == null) return;
+        try {
+            if (success) listener.onAdInitSuccess();
+            else listener.onAdInitFailed(reason);
+        } catch (Exception | LinkageError e) {
+            Log.e(INIT_TAG, "Host initialization callback failed", e);
+        } finally {
+            try {
+                listener.onAdInitFinished(success, reason);
+            } catch (Exception | LinkageError e) {
+                Log.e(INIT_TAG, "Host initialization finished callback failed", e);
+            }
+        }
+    }
+
+    private boolean MoneyBoostIsCurrentInit(int generation) {
+        // A timed-out attempt may recover later, provided no retry/lifecycle superseded it.
+        return !MoneyBoost_isDestroyed && !MoneyBoost_isInitSuccess
+                && generation == MoneyBoost_initGeneration;
+    }
+
+    /** Runs on the main thread; stale callbacks cannot complete a newer attempt. */
+    private void MoneyBoostCompleteInit(int generation, boolean success, String reason) {
+        if (!MoneyBoostIsCurrentInit(generation)) return;
+        if (!success && !MoneyBoost_isInitializing) return;
+        if (MoneyBoost_initTimeout != null) mainHandler.removeCallbacks(MoneyBoost_initTimeout);
+        MoneyBoost_initTimeout = null;
+        MoneyBoost_isInitializing = false;
+        MoneyBoost_isInitSuccess = success;
+        MoneyBoost_initFailed = !success;
+        Log.i(INIT_TAG, "Initialization finished: success=" + success + " reason=" + reason);
+        List<ADInitListener> listeners = new ArrayList<>(MoneyBoost_initListeners);
+        MoneyBoost_initListeners.clear();
+        try {
+            if (!success && MoneyBoost_unityColdSplashPending) MoneyBoostFinishColdStartSplashFlow();
+            MoneyBoostSendUnityMsg("MoneyBoostADManager", "MoneyBoostCallback",
+                    success ? "MoneyBoost_INIT_SUCCESS" : "MoneyBoost_INIT_FAILED");
+        } catch (Exception | LinkageError e) {
+            Log.e(INIT_TAG, "Unity initialization notification failed", e);
+        }
+        for (ADInitListener listener : listeners) {
+            MoneyBoostNotifyInitListener(listener, success, reason);
+        }
     }
 
     public interface DebugCallbackListener {
@@ -202,61 +269,90 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     //////////////////////////////////////////////////////////////////////初始化////////////////////////////////////////////////////////////////////////////////
 
-    public void MoneyBoostInit(Activity activity, ADInitListener initListener){
-        this.MoneyBoost_activity = activity;
-        MoneyBoost_dataPrefs = activity.getSharedPreferences("data", Activity.MODE_PRIVATE);
-        MoneyBoostGetUserNoPopAd();
+    /** Non-blocking entry point, including when called from Unity's render thread. */
+    public void MoneyBoostInit(Activity activity, ADInitListener initListener) {
+        mainHandler.post(() -> MoneyBoostBeginInit(activity, initListener));
+    }
 
-        String admobAppId = "";
+    private void MoneyBoostBeginInit(Activity activity, ADInitListener initListener) {
+        if (MoneyBoost_isInitSuccess) {
+            MoneyBoostNotifyInitListener(initListener, true, "Already initialized");
+            return;
+        }
+        if (initListener != null) MoneyBoost_initListeners.add(initListener);
+        if (MoneyBoost_isInitializing) return;
+        // An explicitly supplied Activity starts a new lifecycle after destruction.
+        MoneyBoost_isDestroyed = false;
+        MoneyBoost_isInitializing = true;
+        MoneyBoost_initFailed = false;
+        final int generation = ++MoneyBoost_initGeneration;
+        MoneyBoost_initTimeout = () -> MoneyBoostCompleteInit(generation, false,
+                "Initialization timed out (UMP or GMA)");
+        mainHandler.postDelayed(MoneyBoost_initTimeout, INIT_TIMEOUT_MS);
+        Log.i(INIT_TAG, "Initialization started");
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            MoneyBoostCompleteInit(generation, false, "Activity unavailable");
+            return;
+        }
+        this.MoneyBoost_activity = activity;
+        final String admobAppId;
         try {
-            ApplicationInfo appInfo = activity.getPackageManager()
-                    .getApplicationInfo(activity.getPackageName(),
-                            PackageManager.GET_META_DATA);
+            MoneyBoost_dataPrefs = activity.getSharedPreferences("data", Activity.MODE_PRIVATE);
+            MoneyBoostGetUserNoPopAd();
+            ApplicationInfo appInfo = activity.getPackageManager().getApplicationInfo(
+                    activity.getPackageName(), PackageManager.GET_META_DATA);
+            if (appInfo.metaData == null) throw new IllegalStateException("Manifest metadata missing");
             MoneyBoost_interKey = appInfo.metaData.getString("MoneyBoost_INTERSTITIAL_ID");
             MoneyBoost_rewardKey = appInfo.metaData.getString("MoneyBoost_REWARDED_ID");
             MoneyBoost_splashKey = appInfo.metaData.getString("MoneyBoost_SPLASH_ID");
             MoneyBoost_bannerKey = appInfo.metaData.getString("MoneyBoost_BANNER_ID");
             admobAppId = appInfo.metaData.getString("com.google.android.gms.ads.APPLICATION_ID");
-        }catch (Exception e){
+            if (admobAppId == null || admobAppId.trim().isEmpty()) {
+                throw new IllegalStateException("AdMob App ID missing");
+            }
+        } catch (Exception | LinkageError e) {
+            Log.e(INIT_TAG, "Read initialization configuration failed", e);
+            MoneyBoostCompleteInit(generation, false, e.toString());
+            return;
         }
-
         try {
-            ConsentRequestParameters params = new ConsentRequestParameters
-                    .Builder()
-                    .build();
+            ConsentRequestParameters params = new ConsentRequestParameters.Builder().build();
             consentInformation = UserMessagingPlatform.getConsentInformation(activity);
-            String finalAdmobAppId = admobAppId;
-            consentInformation.requestConsentInfoUpdate(
-                    activity,
-                    params,
-                    (ConsentInformation.OnConsentInfoUpdateSuccessListener) () -> {
-                        UserMessagingPlatform.loadAndShowConsentFormIfRequired(
-                                activity,
-                                (ConsentForm.OnConsentFormDismissedListener) loadAndShowError -> {
-                                    if (loadAndShowError != null) {
-                                        Log.w("=====UMP", String.format("%s: %s",
-                                                loadAndShowError.getErrorCode(),
-                                                loadAndShowError.getMessage()));
-                                    }
-                                    MoneyBoostInitGmaSdk(activity, initListener, finalAdmobAppId, false);
-                                }
-                        );
-                    },
-                    (ConsentInformation.OnConsentInfoUpdateFailureListener) requestConsentError -> {
-                        Log.w("=====UMP", String.format("%s: %s",
-                                requestConsentError.getErrorCode(),
-                                requestConsentError.getMessage()));
-                        MoneyBoostInitGmaSdk(activity, initListener, finalAdmobAppId, true);
-                    });
-        }catch (Exception e){
-            MoneyBoostInitGmaSdk(activity, initListener, admobAppId, true);
+            Log.i(INIT_TAG, "UMP update started");
+            consentInformation.requestConsentInfoUpdate(activity, params,
+                    () -> mainHandler.post(() -> {
+                        if (!MoneyBoostIsCurrentInit(generation)) return;
+                        try {
+                            Log.i(INIT_TAG, "UMP update complete; checking consent form");
+                            UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity,
+                                    error -> mainHandler.post(() -> {
+                                        if (!MoneyBoostIsCurrentInit(generation)) return;
+                                        if (error != null) Log.w(INIT_TAG, "UMP form: " + error.getMessage());
+                                        MoneyBoostInitGmaSdk(activity, admobAppId, false, generation);
+                                    }));
+                        } catch (Exception | LinkageError e) {
+                            Log.e(INIT_TAG, "UMP form failed", e);
+                            MoneyBoostCompleteInit(generation, false, e.toString());
+                        }
+                    }),
+                    error -> mainHandler.post(() -> {
+                        if (!MoneyBoostIsCurrentInit(generation)) return;
+                        Log.w(INIT_TAG, "UMP update failed: " + error.getMessage());
+                        // Preserve the existing UMP failure fallback; never bypass UMP on timeout.
+                        MoneyBoostInitGmaSdk(activity, admobAppId, true, generation);
+                    }));
+        } catch (Exception | LinkageError e) {
+            Log.e(INIT_TAG, "UMP setup failed", e);
+            MoneyBoostInitGmaSdk(activity, admobAppId, true, generation);
         }
     }
 
     private void MoneyBoostInitAdAdapters(Activity activity) {
-        if (MoneyBoost_interAdapter != null) {
-            return;
-        }
+        // Retry after partial setup: discard any adapters left by the previous attempt.
+        if (MoneyBoost_bannerAdapter != null) MoneyBoost_bannerAdapter.MoneyBoostOnDestroy();
+        if (MoneyBoost_interAdapter != null) MoneyBoost_interAdapter.MoneyBoostOnDestroy();
+        if (MoneyBoost_rewardAdapter != null) MoneyBoost_rewardAdapter.MoneyBoostOnDestroy();
+        if (MoneyBoost_splashAdapter != null) MoneyBoost_splashAdapter.MoneyBoostOnDestroy();
         MoneyBoost_bannerAdapter = new MoneyBoostBannerAdapter();
         MoneyBoost_bannerAdapter.MoneyBoost_activity = activity;
         MoneyBoost_bannerAdapter.MoneyBoost_ad_unit = MoneyBoost_bannerKey;
@@ -329,65 +425,61 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                         + " fallback=" + umpPermissiveFallback);
     }
 
-    /** 初始化 GMA Next-Gen SDK（主线程），完成后再加载广告。 */
-    private void MoneyBoostInitGmaSdk(Activity activity, ADInitListener initListener, String admobAppId,
-                                     boolean umpPermissiveFallback) {
-        if (MoneyBoost_isInitSuccess || MoneyBoost_isInitializing) {
-            return;
-        }
-        MoneyBoostApplyPrivacySettings(activity, umpPermissiveFallback);
-
-        if (admobAppId == null || admobAppId.trim().isEmpty()) {
-            Log.e("=====GMA", "com.google.android.gms.ads.APPLICATION_ID not configured, skip MobileAds init");
-            MoneyBoost_isInitializing = false;
-            MoneyBoost_isInitSuccess = false;
-            MoneyBoostNotifyInitFailed(initListener, "AdMob App ID missing");
-            return;
-        }
-
-        MoneyBoost_isInitializing = true;
-        final String appId = admobAppId.trim();
-
-        // GMA SDK 的初始化入口必须从主线程调用。后台线程调用时，部分版本会直接
-        // 抛出主线程校验异常，或导致初始化回调不再返回，后续广告自然不会发起请求。
-        mainHandler.post(() -> {
-            if (MoneyBoost_isDestroyed || activity.isFinishing() || activity.isDestroyed()) {
-                MoneyBoost_isInitializing = false;
-                if (!MoneyBoost_isDestroyed) MoneyBoostNotifyInitFailed(initListener, "Activity unavailable");
+    /** GMA Next-Gen initializes on a worker thread; adapters and UI stay on the main thread. */
+    private void MoneyBoostInitGmaSdk(Activity activity, String admobAppId,
+                                     boolean umpPermissiveFallback, int generation) {
+        if (!MoneyBoostIsCurrentInit(generation)) return;
+        try {
+            MoneyBoostApplyPrivacySettings(activity, umpPermissiveFallback);
+            if (activity.isFinishing() || activity.isDestroyed()) {
+                MoneyBoostCompleteInit(generation, false, "Activity unavailable");
                 return;
             }
-            try {
-                MobileAds.initialize(
-                        activity,
-                        new InitializationConfig.Builder(appId).build(),
-                        initializationStatus -> {
-                            mainHandler.post(() -> {
-                                if (MoneyBoost_isDestroyed) {
-                                    MoneyBoost_isInitializing = false;
+            new Thread(() -> {
+                try {
+                    Log.i(INIT_TAG, "GMA initialize started on worker thread");
+                    MobileAds.initialize(activity,
+                            new InitializationConfig.Builder(admobAppId.trim()).build(),
+                            status -> mainHandler.post(() -> {
+                                if (!MoneyBoostIsCurrentInit(generation)) return;
+                                try {
+                                    if (activity.isFinishing() || activity.isDestroyed()) {
+                                        MoneyBoostCompleteInit(generation, false, "Activity unavailable");
+                                        return;
+                                    }
+                                    Log.i(INIT_TAG, "GMA callback received; creating adapters");
+                                    MoneyBoostInitAdAdapters(activity);
+                                } catch (Exception | LinkageError e) {
+                                    Log.e(INIT_TAG, "Adapter setup failed", e);
+                                    MoneyBoostCompleteInit(generation, false, e.toString());
                                     return;
                                 }
-                                MoneyBoostInitAdAdapters(activity);
-                                MoneyBoost_isInitSuccess = true;
-                                MoneyBoost_isInitializing = false;
-                                if (initListener != null) {
-                                    initListener.onAdInitSuccess();
-                                }
-                                MoneyBoostScheduleStaggeredAdLoads();
+                                // Host callbacks cannot prevent scheduling advertising work.
                                 MoneyBoostStartAdTick();
-                                // Unity 常在 Init 完成前就调 ShowSplash / ShowBanner：补排队请求
-                                if (MoneyBoost_unityColdSplashPending && !MoneyBoost_coldSplashHandled) {
-                                    MoneyBoostTryShowUnityColdSplash(MoneyBoost_unityColdSplashScene);
-                                }
-                                MoneyBoostSyncBannerVisibility();
-                            });
-                        });
-            } catch (Exception e) {
-                Log.e("=====GMA", "MobileAds.initialize failed", e);
-                MoneyBoost_isInitializing = false;
-                MoneyBoost_isInitSuccess = false;
-                MoneyBoostNotifyInitFailed(initListener, e.getMessage());
-            }
-        });
+                                mainHandler.post(() -> {
+                                    if (!MoneyBoost_isInitSuccess || MoneyBoost_isDestroyed
+                                            || generation != MoneyBoost_initGeneration) return;
+                                    try {
+                                        MoneyBoostScheduleStaggeredAdLoads();
+                                        if (MoneyBoost_unityColdSplashPending && !MoneyBoost_coldSplashHandled) {
+                                            MoneyBoostTryShowUnityColdSplash(MoneyBoost_unityColdSplashScene);
+                                        }
+                                        MoneyBoostSyncBannerVisibility();
+                                    } catch (Exception | LinkageError e) {
+                                        Log.e(INIT_TAG, "Initial ad load failed", e);
+                                    }
+                                });
+                                MoneyBoostCompleteInit(generation, true, "GMA and adapters ready");
+                            }));
+                } catch (Exception | LinkageError e) {
+                    Log.e(INIT_TAG, "GMA initialization failed", e);
+                    mainHandler.post(() -> MoneyBoostCompleteInit(generation, false, e.toString()));
+                }
+            }, "MoneyBoost-GMA-Init").start();
+        } catch (Exception | LinkageError e) {
+            Log.e(INIT_TAG, "GMA initialization setup failed", e);
+            MoneyBoostCompleteInit(generation, false, e.toString());
+        }
     }
 
     private void MoneyBoostStartAdTick() {
@@ -435,8 +527,6 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
      * 低端机再拉长间隔，减轻主线程与网络并发。
      */
     private void MoneyBoostScheduleStaggeredAdLoads() {
-        MoneyBoostLoadSplashAd();
-
         boolean lowEnd = MoneyBoostToolsManager.instance().MoneyBoostIsLowEndDevice();
         long interDelay = lowEnd ? LOAD_DELAY_INTER_LOW_END_MS : LOAD_DELAY_INTER_MS;
         long rewardDelay = lowEnd ? LOAD_DELAY_REWARD_LOW_END_MS : LOAD_DELAY_REWARD_MS;
@@ -445,6 +535,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         mainHandler.postDelayed(interLoadRunnable, interDelay);
         mainHandler.postDelayed(rewardLoadRunnable, rewardDelay);
         mainHandler.postDelayed(bannerLoadRunnable, bannerDelay);
+        Log.i(INIT_TAG, "Scheduling splash/interstitial/rewarded/banner requests");
+        MoneyBoostLoadSplashAd();
     }
 
     private void MoneyBoostCancelStaggeredAdLoads() {
@@ -876,15 +968,27 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     private void MoneyBoostScheduleSplashWaitTimeout() {
+        if (MoneyBoost_coldSplashDeadline == 0L) {
+            MoneyBoost_coldSplashDeadline = SystemClock.uptimeMillis() + COLD_SPLASH_WAIT_TIMEOUT_MS;
+        }
         mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
-        mainHandler.postDelayed(coldSplashTimeoutRunnable, COLD_SPLASH_WAIT_TIMEOUT_MS);
+        mainHandler.postDelayed(coldSplashTimeoutRunnable,
+                Math.max(0L, MoneyBoost_coldSplashDeadline - SystemClock.uptimeMillis()));
     }
 
     private void MoneyBoostFinishColdStartSplashFlow() {
+        boolean notifyClose = !MoneyBoost_coldSplashHandled;
+        MoneyBoost_coldSplashDeadline = 0L;
+        mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
         MoneyBoost_unityColdSplashPending = false;
         MoneyBoost_coldSplashHandled = true;
         MoneyBoost_allowHotStartSplash = true;
-        MoneyBoostSyncBannerVisibility();
+        try {
+            if (notifyClose) MoneyBoostNotifySplashClose();
+            MoneyBoostSyncBannerVisibility();
+        } catch (Exception | LinkageError e) {
+            Log.e(INIT_TAG, "Finish cold splash failed; game flow remains released", e);
+        }
     }
 
     private boolean MoneyBoostShouldBlockHotStartByPlayingState() {
@@ -1076,17 +1180,26 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     /**
      * Unity 冷启动开屏。理想时机：Init 成功之后；若 Init 前调用会排队，等 Init 后再播。
-     * 注意：不要在 adapter 未就绪时把 coldSplashHandled 置 true，否则冷启动开屏会永久跳过。
+     * 等待最多 12 秒；失败/超时发 SPLASH_CLOSE，让 Unity 继续加载，迟到广告不再打断游戏。
      */
     public void MoneyBoostShowSplashADWithUnity(String scene) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(() -> MoneyBoostShowSplashADWithUnity(scene));
+            return;
+        }
         if (MoneyBoost_coldSplashHandled || !MoneyBoost_needPopAD) {
             MoneyBoostFinishColdStartSplashFlow();
             return;
         }
         MoneyBoost_unityColdSplashScene = scene != null ? scene : "launch";
-        // 未 Init / 无 adapter：只排队，等 MoneyBoostInit 完成后再试
+        if (MoneyBoost_initFailed) {
+            MoneyBoostFinishColdStartSplashFlow();
+            return;
+        }
+        // Initialization is asynchronous; waiting for an ad must have a bounded deadline.
         if (!MoneyBoost_isInitSuccess || MoneyBoost_splashAdapter == null) {
             MoneyBoost_unityColdSplashPending = true;
+            MoneyBoostScheduleSplashWaitTimeout();
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug(
                     "=====MoneyBoostMediatonManager",
                     "===ShowSplash queued until init (isInit=" + MoneyBoost_isInitSuccess + ")");
@@ -1113,6 +1226,10 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public void MoneyBoostCancelSplashADWithUnity() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostCancelSplashADWithUnity);
+            return;
+        }
         MoneyBoost_unityColdSplashPending = false;
         mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
         // 用户主动进入玩法时，失败/取消回调可能尚未到达；不能让残留的
@@ -1294,6 +1411,16 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_collapsibleActive = false;
         MoneyBoost_isAppForeground = false;
         MoneyBoost_isDestroyed = true;
+        MoneyBoost_isInitializing = false;
+        MoneyBoost_coldSplashDeadline = 0L;
+        MoneyBoost_initGeneration++;
+        if (MoneyBoost_initTimeout != null) mainHandler.removeCallbacks(MoneyBoost_initTimeout);
+        MoneyBoost_initTimeout = null;
+        List<ADInitListener> listeners = new ArrayList<>(MoneyBoost_initListeners);
+        MoneyBoost_initListeners.clear();
+        for (ADInitListener listener : listeners) {
+            MoneyBoostNotifyInitListener(listener, false, "Activity destroyed");
+        }
         MoneyBoost_wentToBackground = false;
         MoneyBoostCancelStaggeredAdLoads();
         mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
@@ -1329,7 +1456,11 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     private void MoneyBoostSendUnityMsg(String gamaObject, String methodName, String data) {
         if ("MoneyBoostCallback".equals(methodName) && MoneyBoost_debugCallbackListener != null && data != null) {
-            MoneyBoost_debugCallbackListener.onCallback(data);
+            try {
+                MoneyBoost_debugCallbackListener.onCallback(data);
+            } catch (Exception | LinkageError e) {
+                Log.e(INIT_TAG, "Debug callback failed", e);
+            }
         }
         MoneyBoostUnityBridge.send(gamaObject, methodName, data);
     }
