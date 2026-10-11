@@ -1,6 +1,7 @@
 package com.joyboost.moneyboost;
 
 import android.app.Activity;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -31,6 +32,7 @@ public class MoneyBoostRewardVideoAdapter {
     private final AdLoadCallback<RewardedAd> MoneyBoost_loadCallback = new AdLoadCallback<RewardedAd>() {
         @Override
         public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
+            if (MoneyBoost_activity == null) { rewardedAd.destroy(); return; }
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADREWARDLoaded");
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = true;
@@ -41,6 +43,8 @@ public class MoneyBoostRewardVideoAdapter {
 
         @Override
         public void onAdFailedToLoad(@NonNull LoadAdError adError) {
+            if (MoneyBoost_activity == null) return;
+            Log.w("MoneyBoostAds", "Rewarded load failed unit=" + MoneyBoost_ad_unit + " code=" + adError.getCode() + " message=" + adError.getMessage());
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========",
                     "LOADREWARDFailed code=" + adError.getCode()
                             + " message=" + adError.getMessage());
@@ -72,6 +76,7 @@ public class MoneyBoostRewardVideoAdapter {
     }
 
     public void MoneyBoostLoadRewardVideoAd() {
+        if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()) return;
         if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
             return;
         }
@@ -84,6 +89,7 @@ public class MoneyBoostRewardVideoAdapter {
         }
         MoneyBoostCancelRetry();
         MoneyBoost_isLoading = true;
+        Log.i("MoneyBoostAds", "RewardVideo load requested unit=" + MoneyBoost_ad_unit);
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADREWARD");
         AdRequest adRequest = new AdRequest.Builder(unitId).build();
         RewardedAd.load(adRequest, MoneyBoost_loadCallback);
@@ -114,8 +120,12 @@ public class MoneyBoostRewardVideoAdapter {
                 }
                 MoneyBoost_adReady = false;
                 rewardedAd.setAdEventCallback(new RewardedAdEventCallback() {
+                    private boolean displayed;
+                    private boolean finished;
                     @Override
-                    public void onAdShowedFullScreenContent() {
+                    public synchronized void onAdShowedFullScreenContent() {
+                        if (finished || displayed) return;
+                        displayed = true;
                         MoneyBoost_isShowing = true;
                         if (MoneyBoost_rewardVideoListener != null) {
                             MoneyBoost_rewardVideoListener.MoneyBoostOnRewardVideoAdDisplayed();
@@ -123,7 +133,9 @@ public class MoneyBoostRewardVideoAdapter {
                     }
 
                     @Override
-                    public void onAdDismissedFullScreenContent() {
+                    public synchronized void onAdDismissedFullScreenContent() {
+                        if (finished) return;
+                        finished = true;
                         MoneyBoost_isShowing = false;
                         MoneyBoost_adReady = false;
                         rewardedAd.destroy();
@@ -134,8 +146,10 @@ public class MoneyBoostRewardVideoAdapter {
                     }
 
                     @Override
-                    public void onAdFailedToShowFullScreenContent(
+                    public synchronized void onAdFailedToShowFullScreenContent(
                             @NonNull com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError fullScreenContentError) {
+                        if (finished) return;
+                        finished = true;
                         MoneyBoost_adReady = false;
                         if (!MoneyBoost_isShowing) {
                             rewardedAd.destroy();

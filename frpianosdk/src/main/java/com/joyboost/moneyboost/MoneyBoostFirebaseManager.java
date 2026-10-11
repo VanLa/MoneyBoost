@@ -55,9 +55,9 @@ public class MoneyBoostFirebaseManager {
         String ram = MoneyBoostToolsManager.instance().MoneyBoostGetTotalRam();
         MoneyBoostLogFirebaseUserProperty("Ram",ram);
 
-        //上报是否新用户
-        String isNew = MoneyBoostToolsManager.instance().MoneyBoostGetIsNewUser(context);
-        MoneyBoostLogFirebaseUserProperty("IsNew",isNew);
+        // Retire the installation-age property, including stale values on existing installations.
+        // New-user analysis uses Firebase first_open and acquisition cohorts.
+        MoneyBoostFirebaseAnalytics.setUserProperty("IsNew", null);
 
         MoneyBoost_taichiPref = context.getApplicationContext().getSharedPreferences("TaichiTroasCache",0);
         MoneyBoost_taichiSharedPreferencesEditor = MoneyBoost_taichiPref.edit();
@@ -186,7 +186,7 @@ public class MoneyBoostFirebaseManager {
         }
         double currentImpressionRevenue = revenue;
         Bundle params = new Bundle();
-        params.putString(FirebaseAnalytics.Param.AD_PLATFORM, "appLovin");
+        params.putString(FirebaseAnalytics.Param.AD_PLATFORM, "AdMob");
         params.putString(FirebaseAnalytics.Param.AD_SOURCE, network_name);
         params.putString(FirebaseAnalytics.Param.AD_FORMAT, ad_format);
         params.putString(FirebaseAnalytics.Param.AD_UNIT_NAME, unit_id);

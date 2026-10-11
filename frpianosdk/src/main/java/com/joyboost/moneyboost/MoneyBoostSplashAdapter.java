@@ -1,6 +1,7 @@
 package com.joyboost.moneyboost;
 
 import android.app.Activity;
+import android.util.Log;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -50,6 +51,7 @@ public class MoneyBoostSplashAdapter {
     private final PreloadCallback MoneyBoost_preloadCallback = new PreloadCallback() {
         @Override
         public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
+            if (MoneyBoost_activity == null) return;
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADSPLASHLoaded");
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = true;
@@ -63,7 +65,16 @@ public class MoneyBoostSplashAdapter {
         }
 
         @Override
+        public void onAdsExhausted(@NonNull String preloadId) {
+            // The SDK replenishes the registered preload configuration automatically.
+            MoneyBoost_adReady = false;
+            MoneyBoost_isLoading = false;
+        }
+
+        @Override
         public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
+            if (MoneyBoost_activity == null) return;
+            Log.w("MoneyBoostAds", "Splash load failed unit=" + preloadId + " code=" + adError.getCode() + " message=" + adError.getMessage());
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADSPLASHFailed");
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = false;
@@ -88,6 +99,7 @@ public class MoneyBoostSplashAdapter {
     }
 
     public void MoneyBoostLoadSplashAd() {
+        if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()) return;
         if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
             return;
         }
@@ -100,6 +112,7 @@ public class MoneyBoostSplashAdapter {
         }
         MoneyBoostCancelRetry();
         MoneyBoost_isLoading = true;
+        Log.i("MoneyBoostAds", "Splash load requested unit=" + MoneyBoost_ad_unit);
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADSPLASH");
         if (!MoneyBoostStartSplashPreloading(unitId)) {
             MoneyBoost_isLoading = false;
@@ -149,8 +162,12 @@ public class MoneyBoostSplashAdapter {
             }
             MoneyBoost_adReady = false;
             appOpenAd.setAdEventCallback(new AppOpenAdEventCallback() {
+                    private boolean displayed;
+                    private boolean finished;
                 @Override
-                public void onAdShowedFullScreenContent() {
+                public synchronized void onAdShowedFullScreenContent() {
+                        if (finished || displayed) return;
+                        displayed = true;
                     MoneyBoost_isShowing = true;
                     MoneyBoostPostToMain(() -> {
                         if (MoneyBoost_splashListener != null) {
@@ -160,7 +177,9 @@ public class MoneyBoostSplashAdapter {
                 }
 
                 @Override
-                public void onAdDismissedFullScreenContent() {
+                public synchronized void onAdDismissedFullScreenContent() {
+                        if (finished) return;
+                        finished = true;
                     MoneyBoost_isShowing = false;
                     MoneyBoost_adReady = false;
                     appOpenAd.destroy();
@@ -173,8 +192,10 @@ public class MoneyBoostSplashAdapter {
                 }
 
                 @Override
-                public void onAdFailedToShowFullScreenContent(
+                public synchronized void onAdFailedToShowFullScreenContent(
                         @NonNull FullScreenContentError fullScreenContentError) {
+                        if (finished) return;
+                        finished = true;
                     MoneyBoost_isShowing = false;
                     MoneyBoost_adReady = false;
                     appOpenAd.destroy();
@@ -192,7 +213,14 @@ public class MoneyBoostSplashAdapter {
 
                 @Override
                 public void onAdPaid(@NonNull AdValue adValue) {
-                    // 开屏不报 Firebase revenue（对齐原逻辑）
+                    // Cold and resume App Open ads both report actual paid revenue to ARO and Taichi.
+                    ResponseInfo info = appOpenAd.getResponseInfo();
+                    String network = "AdMob";
+                    if (info != null && info.getLoadedAdSourceResponseInfo() != null) {
+                        network = info.getLoadedAdSourceResponseInfo().getName();
+                    }
+                    MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseRevenue(
+                            adValue.getValueMicros() / 1_000_000.0, "APP_OPEN", network, unitId);
                 }
             });
             appOpenAd.show(MoneyBoost_activity);

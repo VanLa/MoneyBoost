@@ -27,10 +27,22 @@ import java.util.ArrayList;
 public class MoneyBoostMediationManager implements MoneyBoostInterstitialListener, MoneyBoostRewardVideoListener, MoneyBoostSplashListener {
 
     private ConsentInformation consentInformation;
+    private volatile boolean MoneyBoost_adsPermitted;
+    private boolean MoneyBoost_privacyFormShowing;
     // Use an atomic boolean to initialize the Google Mobile Ads SDK and load ads once.
     private static volatile MoneyBoostMediationManager instance;
 
     private Activity MoneyBoost_activity;
+    private final MoneyBoostAdAnalytics adAnalytics = new MoneyBoostAdAnalytics((name, params) ->
+            MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent(name, new JSONObject(params).toString()));
+    private MoneyBoostAdAnalytics.Opportunity interOpportunity;
+    private MoneyBoostAdAnalytics.Opportunity rewardOpportunity;
+    private MoneyBoostAdAnalytics.Opportunity splashOpportunity;
+    private MoneyBoostAdAnalytics.Opportunity bannerOpportunity;
+    private MoneyBoostAdAnalytics.Opportunity collapsibleOpportunity;
+    private final MoneyBoostAdAnalytics.Placement interPlacement = adAnalytics.new Placement("inter");
+    private final MoneyBoostAdAnalytics.Placement rewardPlacement = adAnalytics.new Placement("reward");
+
 
     private MoneyBoostInterstitialAdapter MoneyBoost_interAdapter;
 
@@ -284,6 +296,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         // An explicitly supplied Activity starts a new lifecycle after destruction.
         MoneyBoost_isDestroyed = false;
         MoneyBoost_isInitializing = true;
+        MoneyBoost_adsPermitted = false;
         MoneyBoost_initFailed = false;
         final int generation = ++MoneyBoost_initGeneration;
         MoneyBoost_initTimeout = () -> MoneyBoostCompleteInit(generation, false,
@@ -327,24 +340,40 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                             UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity,
                                     error -> mainHandler.post(() -> {
                                         if (!MoneyBoostIsCurrentInit(generation)) return;
-                                        if (error != null) Log.w(INIT_TAG, "UMP form: " + error.getMessage());
-                                        MoneyBoostInitGmaSdk(activity, admobAppId, false, generation);
+                                        if (error != null) Log.w(INIT_TAG, "UMP form code=" + error.getErrorCode() + " message=" + error.getMessage());
+                                        MoneyBoostInitGmaSdk(activity, admobAppId, generation);
+                                        if (error != null) MoneyBoostRetryConsentAfterError(activity, generation);
                                     }));
                         } catch (Exception | LinkageError e) {
                             Log.e(INIT_TAG, "UMP form failed", e);
-                            MoneyBoostCompleteInit(generation, false, e.toString());
+                            MoneyBoostInitGmaSdk(activity, admobAppId, generation);
+                            MoneyBoostRetryConsentAfterError(activity, generation);
                         }
                     }),
                     error -> mainHandler.post(() -> {
                         if (!MoneyBoostIsCurrentInit(generation)) return;
-                        Log.w(INIT_TAG, "UMP update failed: " + error.getMessage());
-                        // Preserve the existing UMP failure fallback; never bypass UMP on timeout.
-                        MoneyBoostInitGmaSdk(activity, admobAppId, true, generation);
+                        Log.w(INIT_TAG, "UMP update failed code=" + error.getErrorCode() + " message=" + error.getMessage());
+                        // UMP owns cached consent; a network error is never permission.
+                        MoneyBoostInitGmaSdk(activity, admobAppId, generation);
+                        MoneyBoostRetryConsentAfterError(activity, generation);
                     }));
         } catch (Exception | LinkageError e) {
             Log.e(INIT_TAG, "UMP setup failed", e);
-            MoneyBoostInitGmaSdk(activity, admobAppId, true, generation);
+            MoneyBoostInitGmaSdk(activity, admobAppId, generation);
+            MoneyBoostRetryConsentAfterError(activity, generation);
         }
+    }
+
+    private void MoneyBoostRetryConsentAfterError(Activity activity, int generation) {
+        if (MoneyBoost_adsPermitted) return;
+        // Retry transient transport/form errors, never a completed user choice.
+        mainHandler.postDelayed(() -> {
+            if (generation != MoneyBoost_initGeneration || MoneyBoost_isDestroyed
+                    || MoneyBoost_isInitSuccess || MoneyBoost_isInitializing || MoneyBoost_privacyFormShowing
+                    || !MoneyBoost_isAppForeground || activity.isFinishing() || activity.isDestroyed()) return;
+            Log.i(INIT_TAG, "Retrying UMP after consent error");
+            MoneyBoostInit(activity, null);
+        }, 30000L);
     }
 
     private void MoneyBoostInitAdAdapters(Activity activity) {
@@ -379,7 +408,12 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     private boolean MoneyBoostCanRequestAdsFromUmp() {
-        return consentInformation == null || consentInformation.canRequestAds();
+        return consentInformation != null && consentInformation.canRequestAds();
+    }
+
+    // Safe for adapter retry threads: only the main-thread UMP flow changes this gate.
+    public boolean MoneyBoostCanLoadAds() {
+        return MoneyBoost_adsPermitted;
     }
 
     public boolean MoneyBoostIsPrivacyOptionsRequired() {
@@ -389,48 +423,86 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public void MoneyBoostShowPrivacyOptionsForm(Activity activity) {
-        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+        mainHandler.post(() -> {
+            if (activity == null || activity.isFinishing() || activity.isDestroyed()
+                    || MoneyBoost_isDestroyed || MoneyBoost_isInitializing || MoneyBoost_privacyFormShowing
+                    || MoneyBoost_interstitialShowPending || MoneyBoost_rewardShowPending
+                    || !MoneyBoostIsPrivacyOptionsRequired()
+                    || MoneyBoostIsFullscreenAdShowing() || MoneyBoostIsSplashAdShowing()) return;
+            final int generation = MoneyBoost_initGeneration;
+            MoneyBoost_privacyFormShowing = true;
+            MoneyBoost_canShowAoaResume = false;
+            MoneyBoost_adsPermitted = false;
+            MoneyBoostStopAdTick();
+            MoneyBoostCancelStaggeredAdLoads();
+            // Destroy automatic preload/refresh work and inventory from the old choices.
+            MoneyBoostDiscardConsentInventory();
+            try {
+                UserMessagingPlatform.showPrivacyOptionsForm(activity, error -> mainHandler.post(() -> {
+                    if (generation != MoneyBoost_initGeneration || MoneyBoost_isDestroyed) return;
+                    if (error != null) Log.w(INIT_TAG, "UMP privacy options code="
+                            + error.getErrorCode() + " message=" + error.getMessage());
+                    MoneyBoostFinishPrivacyOptions(activity);
+                }));
+            } catch (Exception | LinkageError e) {
+                Log.e(INIT_TAG, "UMP privacy options failed", e);
+                MoneyBoostFinishPrivacyOptions(activity);
+            }
+        });
+    }
+
+    private void MoneyBoostDiscardConsentInventory() {
+        if (MoneyBoost_interAdapter != null) MoneyBoost_interAdapter.MoneyBoostOnDestroy();
+        if (MoneyBoost_rewardAdapter != null) MoneyBoost_rewardAdapter.MoneyBoostOnDestroy();
+        if (MoneyBoost_splashAdapter != null) MoneyBoost_splashAdapter.MoneyBoostOnDestroy();
+        if (MoneyBoost_bannerAdapter != null) MoneyBoost_bannerAdapter.MoneyBoostOnDestroy();
+        if (MoneyBoost_collapsibleAdapter != null) MoneyBoost_collapsibleAdapter.MoneyBoostOnDestroy();
+        MoneyBoost_interAdapter = null;
+        MoneyBoost_rewardAdapter = null;
+        MoneyBoost_splashAdapter = null;
+        MoneyBoost_bannerAdapter = null;
+        MoneyBoost_collapsibleAdapter = null;
+        MoneyBoost_collapsibleActive = false;
+        interPlacement.clear();
+        rewardPlacement.clear();
+    }
+
+    private void MoneyBoostFinishPrivacyOptions(Activity activity) {
+        MoneyBoost_privacyFormShowing = false;
+        MoneyBoostApplyPrivacySettings();
+        if (!MoneyBoost_adsPermitted || activity.isFinishing() || activity.isDestroyed()) return;
+        if (!MoneyBoost_isInitSuccess) {
+            MoneyBoostInit(activity, null);
             return;
         }
-        UserMessagingPlatform.showPrivacyOptionsForm(
-                activity,
-                formError -> MoneyBoostApplyPrivacySettings(activity, false)
-        );
+        MoneyBoostInitAdAdapters(activity);
+        MoneyBoostStartAdTick();
+        MoneyBoostScheduleStaggeredAdLoads();
+        MoneyBoostSyncBannerVisibility();
     }
 
-    /** 非 GDPR 或用户已明确同意个性化时为 true。 */
-    private boolean MoneyBoostHasPersonalizedConsentFromUmp() {
-        if (consentInformation == null) {
-            return true;
-        }
-        int status = consentInformation.getConsentStatus();
-        return status == ConsentInformation.ConsentStatus.NOT_REQUIRED
-                || status == ConsentInformation.ConsentStatus.OBTAINED;
-    }
-
-    /**
-     * @param umpPermissiveFallback UMP 拉取失败时沿用宽松策略，避免非 GDPR 地区因网络问题阻断广告。
-     */
-    private void MoneyBoostApplyPrivacySettings(Activity activity, boolean umpPermissiveFallback) {
-        boolean canRequestAds = umpPermissiveFallback || MoneyBoostCanRequestAdsFromUmp();
-        boolean personalizedAllowed = umpPermissiveFallback || MoneyBoostHasPersonalizedConsentFromUmp();
-        MoneyBoostFirebaseManager.instance().MoneyBoostApplyConsentFromUmp(canRequestAds, personalizedAllowed);
-        int status = consentInformation != null
-                ? consentInformation.getConsentStatus()
-                : ConsentInformation.ConsentStatus.UNKNOWN;
-        MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====UMP",
-                "canRequestAds=" + canRequestAds
-                        + " personalized=" + personalizedAllowed
-                        + " status=" + status
-                        + " fallback=" + umpPermissiveFallback);
+    private void MoneyBoostApplyPrivacySettings() {
+        MoneyBoost_adsPermitted = MoneyBoostCanRequestAdsFromUmp();
+        // canRequestAds means ad eligibility, never consent to personalization.
+        // Keep the existing Firebase API; its second argument is not used to grant consent.
+        MoneyBoostFirebaseManager.instance().MoneyBoostApplyConsentFromUmp(MoneyBoost_adsPermitted, false);
+        Log.i(INIT_TAG, "UMP state: canRequestAds=" + MoneyBoost_adsPermitted
+                + " status=" + (consentInformation == null ? ConsentInformation.ConsentStatus.UNKNOWN
+                : consentInformation.getConsentStatus())
+                + " privacyOptionsRequired=" + MoneyBoostIsPrivacyOptionsRequired());
+        MoneyBoostSendUnityMsg("MoneyBoostADManager", "MoneyBoostCallback", "MoneyBoost_PRIVACY_OPTIONS_CHANGED");
     }
 
     /** GMA Next-Gen initializes on a worker thread; adapters and UI stay on the main thread. */
     private void MoneyBoostInitGmaSdk(Activity activity, String admobAppId,
-                                     boolean umpPermissiveFallback, int generation) {
+                                     int generation) {
         if (!MoneyBoostIsCurrentInit(generation)) return;
         try {
-            MoneyBoostApplyPrivacySettings(activity, umpPermissiveFallback);
+            MoneyBoostApplyPrivacySettings();
+            if (!MoneyBoost_adsPermitted) {
+                MoneyBoostCompleteInit(generation, false, "UMP does not allow ad requests; no consent fallback");
+                return;
+            }
             if (activity.isFinishing() || activity.isDestroyed()) {
                 MoneyBoostCompleteInit(generation, false, "Activity unavailable");
                 return;
@@ -493,7 +565,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     /** 每 5 秒补货；已在 loading / 已有库存则跳过，避免与失败重试叠加重载。 */
     private void MoneyBoostTickAdReload() {
-        if (!MoneyBoost_isAppForeground || MoneyBoost_isDestroyed || !MoneyBoost_isInitSuccess) {
+        if (!MoneyBoost_adsPermitted || !MoneyBoost_isAppForeground || MoneyBoost_isDestroyed || !MoneyBoost_isInitSuccess) {
             return;
         }
         if (MoneyBoost_interAdapter != null
@@ -561,7 +633,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     private boolean MoneyBoostIsInterFormatReady() {
-        return MoneyBoost_interAdapter != null && MoneyBoost_interAdapter.MoneyBoostIsReady();
+        return MoneyBoost_adsPermitted && MoneyBoost_interAdapter != null && MoneyBoost_interAdapter.MoneyBoostIsReady();
     }
 
     ///unity用
@@ -570,12 +642,15 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public boolean MoneyBoostIsIntertitialADReadyLog(String scene){
-        try {
-            JSONObject object = new JSONObject();
-            object.put("scene",scene);
-            MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("inter_should_show",object.toString());
-        } catch (Exception ignored) { }
-        return MoneyBoostIsInterFormatReady();
+        if (!MoneyBoostCanRequestInterstitial()) return false;
+        return interPlacement.prepare(scene, MoneyBoostIsInterFormatReady());
+    }
+
+    private boolean MoneyBoostCanRequestInterstitial() {
+        return !(!MoneyBoost_adsPermitted || !MoneyBoost_needPopAD || !MoneyBoost_isAppForeground || MoneyBoost_isDestroyed
+                || MoneyBoost_interstitialShowPending || MoneyBoost_interstitialInSession
+                || MoneyBoost_rewardShowPending
+                || MoneyBoostIsFullscreenAdShowing() || MoneyBoostIsSplashAdShowing());
     }
 
     public void MoneyBoostShowInterstitialUnity(String scene) {
@@ -583,18 +658,10 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             mainHandler.post(() -> MoneyBoostShowInterstitialUnity(scene));
             return;
         }
-        if (!MoneyBoost_needPopAD || !MoneyBoost_isAppForeground || MoneyBoost_isDestroyed
-                || MoneyBoost_interstitialShowPending || MoneyBoost_interstitialInSession
-                || MoneyBoost_rewardShowPending
-                || MoneyBoostIsFullscreenAdShowing() || MoneyBoostIsSplashAdShowing()) return;
-        if (!MoneyBoostIsIntertitialADReadyLog(scene) || MoneyBoost_interAdapter == null) {
-            return;
-        }
-        try {
-            JSONObject object = new JSONObject();
-            object.put("scene", scene);
-            MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("inter_show", object.toString());
-        } catch (Exception ignored) { }
+        if (!MoneyBoostCanRequestInterstitial()) return;
+        boolean ready = MoneyBoostIsInterFormatReady();
+        interOpportunity = interPlacement.request(scene, ready);
+        if (!ready || MoneyBoost_interAdapter == null) return;
         MoneyBoost_interstitialCloseDispatched = false;
         MoneyBoost_interstitialShowPending = true;
         MoneyBoost_interAdapter.MoneyBoostShowInterstitialAd();
@@ -636,11 +703,13 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             mainHandler.post(this::MoneyBoostOnInterstitialAdDisplayed);
             return;
         }
+        if (!MoneyBoost_interstitialShowPending && !MoneyBoost_interstitialInSession) return;
         MoneyBoost_interstitialShowPending = false;
         if (MoneyBoost_interstitialInSession) {
             return;
         }
         MoneyBoost_interstitialInSession = true;
+        adAnalytics.show(interOpportunity);
         MoneyBoost_interstitialCloseDispatched = false;
         MoneyBoostOnFullscreenAdShow();
         MoneyBoostSendUnityMsg("MoneyBoostADManager", "MoneyBoostCallback", "MoneyBoost_INTERSTITIAL_OPEN");
@@ -660,10 +729,23 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public boolean MoneyBoostIsRewardADReady(String scene){
-        boolean rewardReady = MoneyBoost_rewardAdapter != null && MoneyBoost_rewardAdapter.MoneyBoostIsReady();
+        boolean rewardReady = MoneyBoost_adsPermitted && MoneyBoost_rewardAdapter != null && MoneyBoost_rewardAdapter.MoneyBoostIsReady();
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostMediatonManager",
                 "===IsRewardADReady=" + rewardReady);
         return rewardReady;
+    }
+
+    /** Explicit user intent only. Use the non-Log readiness method for polling. */
+    public boolean MoneyBoostIsRewardADReadyLog(String scene) {
+        if (!MoneyBoostCanRequestReward()) return false;
+        return rewardPlacement.prepare(scene, MoneyBoostIsRewardADReady(scene));
+    }
+
+    private boolean MoneyBoostCanRequestReward() {
+        return !(!MoneyBoost_adsPermitted || !MoneyBoost_needPopAD || !MoneyBoost_isAppForeground || MoneyBoost_isDestroyed
+                || MoneyBoost_rewardShowPending || MoneyBoost_rewardVideoInSession
+                || MoneyBoost_interstitialShowPending || MoneyBoostIsFullscreenAdShowing()
+                || MoneyBoostIsSplashAdShowing());
     }
 
     public void MoneyBoostShowRewardAdUnity(String scene){
@@ -671,19 +753,10 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             mainHandler.post(() -> MoneyBoostShowRewardAdUnity(scene));
             return;
         }
-        try {
-            JSONObject object = new JSONObject();
-            object.put("scene",scene);
-            MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("reward_should_show",object.toString());
-        }catch (Exception e){
-        }
-        if (!MoneyBoost_needPopAD || !MoneyBoost_isAppForeground || MoneyBoost_isDestroyed
-                || MoneyBoost_rewardShowPending || MoneyBoost_rewardVideoInSession
-                || MoneyBoost_interstitialShowPending || MoneyBoostIsFullscreenAdShowing()
-                || MoneyBoostIsSplashAdShowing()
-                || MoneyBoost_rewardAdapter == null || !MoneyBoost_rewardAdapter.MoneyBoostIsReady()) {
-            return;
-        }
+        if (!MoneyBoostCanRequestReward()) return;
+        boolean ready = MoneyBoost_rewardAdapter != null && MoneyBoost_rewardAdapter.MoneyBoostIsReady();
+        rewardOpportunity = rewardPlacement.request(scene, ready);
+        if (!ready) return;
         MoneyBoost_rewardCloseDispatched = false;
         MoneyBoost_rewardShowScene = scene;
         MoneyBoost_rewardShowPending = true;
@@ -722,6 +795,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             mainHandler.post(this::MoneyBoostOnRewardVideoAdDisplayed);
             return;
         }
+        if (!MoneyBoost_rewardShowPending && !MoneyBoost_rewardVideoInSession) return;
         if (MoneyBoost_rewardVideoInSession) {
             return;
         }
@@ -730,11 +804,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_rewardCompleteDispatched = false;
         MoneyBoost_rewardCloseDispatched = false;
         MoneyBoostOnFullscreenAdShow();
-        try {
-            JSONObject object = new JSONObject();
-            object.put("scene", MoneyBoost_rewardShowScene);
-            MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("reward_show", object.toString());
-        } catch (Exception ignored) { }
+        adAnalytics.show(rewardOpportunity);
         MoneyBoostSendUnityMsg("MoneyBoostADManager", "MoneyBoostCallback", "MoneyBoost_REWARD_OPEN");
     }
 
@@ -765,11 +835,24 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public void MoneyBoostShowBannerView(){
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostShowBannerView);
+            return;
+        }
+        if (MoneyBoost_isDestroyed || !MoneyBoost_needPopAD) return;
+        if (!MoneyBoost_bannerEnabled) {
+            bannerOpportunity = adAnalytics.opportunity("banner", "persistent",
+                    MoneyBoost_bannerAdapter != null && MoneyBoost_bannerAdapter.MoneyBoostIsLoaded());
+        }
         MoneyBoost_bannerEnabled = true;
         MoneyBoostSyncBannerVisibility();
     }
 
     public void MoneyBoostHideBannerView(){
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostHideBannerView);
+            return;
+        }
         MoneyBoost_bannerEnabled = false;
         MoneyBoostHideCollapsibleBannerView();
         MoneyBoostSyncBannerVisibility();
@@ -793,7 +876,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     private boolean MoneyBoostShouldBlockBannerDisplay() {
-        if (!MoneyBoost_bannerEnabled || !MoneyBoost_needPopAD || MoneyBoost_isDestroyed) {
+        if (!MoneyBoost_adsPermitted || !MoneyBoost_bannerEnabled || !MoneyBoost_needPopAD || MoneyBoost_isDestroyed) {
             return true;
         }
         if (!MoneyBoost_isAppForeground) {
@@ -852,24 +935,25 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             mainHandler.post(this::MoneyBoostShowCollapsibleBannerView);
             return;
         }
-        if (MoneyBoost_bannerAdapter == null || MoneyBoost_activity == null
-                || MoneyBoost_isDestroyed || !MoneyBoost_needPopAD || !MoneyBoost_isAppForeground
+        if (!MoneyBoost_adsPermitted || MoneyBoost_isDestroyed || !MoneyBoost_needPopAD || !MoneyBoost_isAppForeground
                 || MoneyBoostIsFullscreenAdShowing() || MoneyBoostIsSplashAdShowing()) {
             return;
         }
         if (MoneyBoost_collapsibleActive) {
             return;
         }
+        collapsibleOpportunity = adAnalytics.opportunity("collapsibleBanner", "bottom", false);
+        if (MoneyBoost_bannerAdapter == null || MoneyBoost_activity == null) return;
         // Preserve the normal banner so Hide can restore it without a new network load.
         MoneyBoost_collapsibleAdapter = new MoneyBoostBannerAdapter();
         MoneyBoost_collapsibleAdapter.MoneyBoost_activity = MoneyBoost_activity;
         MoneyBoost_collapsibleAdapter.MoneyBoost_ad_unit = MoneyBoost_bannerKey;
         MoneyBoost_collapsibleAdapter.MoneyBoostInitBannerAdapter();
         MoneyBoost_collapsibleActive = true;
+        if (!MoneyBoost_bannerEnabled) {
+            bannerOpportunity = adAnalytics.opportunity("banner", "persistent", MoneyBoost_bannerAdapter.MoneyBoostIsLoaded());
+        }
         MoneyBoost_bannerEnabled = true;
-        try {
-            MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("collapsibleBanner_should_show", null);
-        } catch (Exception ignored) { }
         MoneyBoost_collapsibleAdapter.MoneyBoostLoadCollapsibleBannerView();
         MoneyBoostSyncBannerVisibility();
     }
@@ -886,6 +970,15 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         }
         // Keep the persistent banner enabled when the expanded placement ends.
         MoneyBoostSyncBannerVisibility();
+    }
+
+    public void MoneyBoostOnBannerImpression(MoneyBoostBannerAdapter adapter, int refreshIndex) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(() -> MoneyBoostOnBannerImpression(adapter, refreshIndex));
+            return;
+        }
+        if (adapter == MoneyBoost_collapsibleAdapter) adAnalytics.impression(collapsibleOpportunity, refreshIndex);
+        else if (adapter == MoneyBoost_bannerAdapter) adAnalytics.impression(bannerOpportunity, refreshIndex);
     }
 
     public void MoneyBoostOnBannerAdFailedToLoad(MoneyBoostBannerAdapter adapter) {
@@ -915,7 +1008,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     private boolean MoneyBoostHasSplashCandidateReady() {
-        return MoneyBoost_splashAdapter != null && MoneyBoost_splashAdapter.MoneyBoostIsReady();
+        return MoneyBoost_adsPermitted && MoneyBoost_splashAdapter != null && MoneyBoost_splashAdapter.MoneyBoostIsReady();
     }
 
     private void MoneyBoostLoadSplashAd() {
@@ -1023,6 +1116,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             return;
         }
         MoneyBoost_wentToBackground = false;
+        splashOpportunity = adAnalytics.opportunity("splash", MONEYBOOST_HOT_START_SPLASH_SCENE, MoneyBoostHasSplashCandidateReady());
         if (MoneyBoostHasSplashCandidateReady()) {
             MoneyBoostShowStandardSplash(MONEYBOOST_HOT_START_SPLASH_SCENE);
             return;
@@ -1137,13 +1231,6 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             return;
         }
 
-        try {
-            JSONObject object = new JSONObject();
-            object.put("scene", scene);
-            MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseEvent("splash_show", object.toString());
-        } catch (Exception ignored) {
-        }
-
         MoneyBoost_unityColdSplashPending = false;
         mainHandler.removeCallbacks(coldSplashTimeoutRunnable);
         MoneyBoost_hotStartSplashPending = false;
@@ -1191,7 +1278,13 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             MoneyBoostFinishColdStartSplashFlow();
             return;
         }
+        if (MoneyBoost_unityColdSplashPending || MoneyBoost_splashSessionActive) return;
+        if (!MoneyBoostCanShowColdStartSplash()) {
+            MoneyBoostFinishColdStartSplashFlow();
+            return;
+        }
         MoneyBoost_unityColdSplashScene = scene != null ? scene : "launch";
+        splashOpportunity = adAnalytics.opportunity("splash", MoneyBoost_unityColdSplashScene, MoneyBoostHasSplashCandidateReady());
         if (MoneyBoost_initFailed) {
             MoneyBoostFinishColdStartSplashFlow();
             return;
@@ -1264,6 +1357,12 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     @Override
     public void MoneyBoostOnSplashAdDisplayed() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::MoneyBoostOnSplashAdDisplayed);
+            return;
+        }
+        if (!MoneyBoost_splashSessionActive || MoneyBoost_splashOpenDispatched) return;
+        adAnalytics.show(splashOpportunity);
         MoneyBoostOnFullscreenAdShow();
         MoneyBoost_splashOpenDispatched = true;
         MoneyBoostNotifySplashOpen();
@@ -1290,7 +1389,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         if (MoneyBoost_unityColdSplashPending) {
             MoneyBoostFinishColdStartSplashFlow();
         } else if (!MoneyBoost_coldSplashHandled) {
-            MoneyBoost_allowHotStartSplash = true;
+            MoneyBoostFinishColdStartSplashFlow();
         }
     }
 
@@ -1335,6 +1434,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     public void MoneyBoostOnAppResume() {
         MoneyBoost_isAppForeground = true;
+        if (MoneyBoost_privacyFormShowing) return;
         MoneyBoostSyncBannerVisibility();
         if (MoneyBoost_isInitSuccess && !MoneyBoost_isDestroyed) {
             MoneyBoostStartAdTick();
@@ -1398,6 +1498,10 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public void MoneyBoostOnAppDestroy() {
+        MoneyBoost_adsPermitted = false;
+        MoneyBoost_privacyFormShowing = false;
+        interPlacement.clear();
+        rewardPlacement.clear();
         MoneyBoost_interstitialShowPending = false;
         MoneyBoost_interstitialInSession = false;
         MoneyBoost_interstitialCloseDispatched = false;

@@ -1,6 +1,7 @@
 package com.joyboost.moneyboost;
 
 import android.app.Activity;
+import android.util.Log;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.os.Looper;
@@ -12,12 +13,14 @@ import android.view.ViewParent;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.android.libraries.ads.mobile.sdk.banner.AdSize;
 import com.google.android.libraries.ads.mobile.sdk.banner.AdView;
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAd;
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdEventCallback;
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdRequest;
+import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdRefreshCallback;
 import com.google.android.libraries.ads.mobile.sdk.common.AdLoadCallback;
 import com.google.android.libraries.ads.mobile.sdk.common.AdSourceResponseInfo;
 import com.google.android.libraries.ads.mobile.sdk.common.AdValue;
@@ -34,6 +37,8 @@ public class MoneyBoostBannerAdapter {
     private boolean MoneyBoost_isLoading = false;
     private boolean MoneyBoost_collapsibleRequest = false;
     private int MoneyBoost_loadGeneration = 0;
+    private final AtomicInteger MoneyBoost_impressionCycle = new AtomicInteger(-1);
+    private boolean MoneyBoost_isCollapsiblePlacement = false;
 
     public boolean MoneyBoostIsLoaded() {
         return MoneyBoost_isLoaded;
@@ -48,7 +53,7 @@ public class MoneyBoostBannerAdapter {
         int widthDp = MoneyBoostGetScreenWidthDp(MoneyBoost_activity);
         AdSize adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(MoneyBoost_activity, widthDp);
         if (adSize == null) {
-            adSize = AdSize.getLargeAnchoredAdaptiveBannerAdSize(MoneyBoost_activity, widthDp);
+            adSize = AdSize.BANNER;
         }
         this.MoneyBoost_adView.resize(adSize);
         int heightPx = adSize.getHeightInPixels(MoneyBoost_activity);
@@ -75,12 +80,14 @@ public class MoneyBoostBannerAdapter {
     /** Loads an AdMob collapsible banner anchored at the bottom. */
     public void MoneyBoostLoadCollapsibleBannerView() {
         MoneyBoost_collapsibleRequest = true;
+        MoneyBoost_isCollapsiblePlacement = true;
         // A collapsible request must be explicit even when a regular banner is cached.
         MoneyBoost_isLoaded = false;
         MoneyBoostLoadBannerView();
     }
 
     public void MoneyBoostLoadBannerView() {
+        if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()) return;
         if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
             return;
         }
@@ -96,10 +103,11 @@ public class MoneyBoostBannerAdapter {
             return;
         }
         MoneyBoost_isLoading = true;
+        Log.i("MoneyBoostAds", "Banner load requested unit=" + MoneyBoost_ad_unit);
         int widthDp = MoneyBoostGetScreenWidthDp(MoneyBoost_activity);
         AdSize adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(MoneyBoost_activity, widthDp);
         if (adSize == null) {
-            adSize = AdSize.getLargeAnchoredAdaptiveBannerAdSize(MoneyBoost_activity, widthDp);
+            adSize = AdSize.BANNER;
         }
         MoneyBoost_adView.resize(adSize);
         BannerAdRequest.Builder requestBuilder = new BannerAdRequest.Builder(MoneyBoost_ad_unit.trim(), adSize);
@@ -127,6 +135,7 @@ public class MoneyBoostBannerAdapter {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError adError) {
+                    Log.w("MoneyBoostAds", "Banner load failed unit=" + MoneyBoost_ad_unit + " code=" + adError.getCode() + " message=" + adError.getMessage());
                 requestActivity.runOnUiThread(() -> {
                     if (generation != MoneyBoost_loadGeneration) return;
                     MoneyBoost_isLoading = false;
@@ -147,12 +156,27 @@ public class MoneyBoostBannerAdapter {
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug(
                 "=========", "BannerLoaded:" + MoneyBoostResolveNetworkName(bannerAd)
                         + " collapsible=" + bannerAd.isCollapsible());
+        final int generation = MoneyBoost_loadGeneration;
+        // Refresh callback advances the identity on this same BannerAd object.
+        final AtomicInteger cycle = new AtomicInteger(MoneyBoost_impressionCycle.incrementAndGet());
+        bannerAd.setBannerAdRefreshCallback(new BannerAdRefreshCallback() {
+            @Override
+            public void onAdRefreshed() {
+                cycle.set(MoneyBoost_impressionCycle.incrementAndGet());
+            }
+        });
         bannerAd.setAdEventCallback(new BannerAdEventCallback() {
+            @Override
+            public void onAdImpression() {
+                if (generation != MoneyBoost_loadGeneration || MoneyBoost_bannerAd != bannerAd) return;
+                MoneyBoostMediationManager.getInstance().MoneyBoostOnBannerImpression(MoneyBoostBannerAdapter.this, cycle.get());
+            }
+
             @Override
             public void onAdPaid(@NonNull AdValue adValue) {
                 double revenue = adValue.getValueMicros() / 1_000_000.0;
                 MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseRevenue(
-                        revenue, "BANNER", MoneyBoostResolveNetworkName(bannerAd), MoneyBoost_ad_unit);
+                        revenue, MoneyBoost_isCollapsiblePlacement ? "COLLAPSIBLE_BANNER" : "BANNER", MoneyBoostResolveNetworkName(bannerAd), MoneyBoost_ad_unit);
             }
         });
         if (MoneyBoost_adView == null || MoneyBoost_activity == null
@@ -233,7 +257,7 @@ public class MoneyBoostBannerAdapter {
         int widthDp = MoneyBoostGetScreenWidthDp(MoneyBoost_activity);
         AdSize adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(MoneyBoost_activity, widthDp);
         if (adSize == null) {
-            adSize = AdSize.getLargeAnchoredAdaptiveBannerAdSize(MoneyBoost_activity, widthDp);
+            adSize = AdSize.BANNER;
         }
         if (adSize == null) {
             return dp2px(50 + 5);

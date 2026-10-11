@@ -1,14 +1,11 @@
-// 构建约束：Unity 2022.3.62f3c1 配套使用 Gradle 7.5.1 + Android Gradle Plugin 7.4.x；请勿随意改 unityLibrary/launcher 的 Gradle 主版本
-// GMA Next-Gen / 中介适配器版本在本文件写死；minSdk 24 + AGP 7.4.2 实测可编译
-//
 apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
 
 apply from: 'upload.gradle'
 
 android {
-    // AGP 7.4.2/AAPT2 is validated with SDK 34. SDK 35's resource table
-    // cannot be read reliably by this toolchain (LoadedArsc overlap error).
-    compileSdkVersion 34
+    namespace 'com.joyboost.moneyboost'
+    compileSdkVersion 36
 
     defaultConfig {
         minSdkVersion 24
@@ -28,7 +25,7 @@ android {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
-    lintOptions {
+    lint {
         checkReleaseBuilds false
     }
 }
@@ -41,13 +38,18 @@ configurations.configureEach {
     exclude group: 'com.google.android.gms', module: 'play-services-ads-api'
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}
+
 dependencies {
-    // --- Firebase（对齐竞品 firebase-analytics 23.2.0）
-    // Crashlytics 19.3+ 的 so 仍支持 16KB 页
-    implementation 'com.google.firebase:firebase-analytics:23.2.0'
-    implementation 'com.google.firebase:firebase-crashlytics:19.3.0'
-    implementation 'com.google.firebase:firebase-crashlytics-ndk:19.3.0'
-    implementation 'com.google.firebase:firebase-config:22.0.1'
+    // --- Firebase（版本对应 BoM 35.0.0；显式版本用于发布 POM）
+    implementation 'com.google.firebase:firebase-analytics:24.0.0'
+    implementation 'com.google.firebase:firebase-crashlytics:21.0.0'
+    implementation 'com.google.firebase:firebase-crashlytics-ndk:21.0.0'
+    implementation 'com.google.firebase:firebase-config:24.0.0'
 
     // --- 业务 / Play / 隐私
     implementation 'com.google.android.play:review:2.0.2'
@@ -55,21 +57,20 @@ dependencies {
 
     // --- GMA Next-Gen SDK（AdMob 主聚合；Google 库存内置，无需再加 google-adapter）
     // https://developers.google.com/admob/android/next-gen/quick-start
-    implementation 'com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.4.0'
+    implementation 'com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.5.0'
 
     // --- Meta Audience Network bidding via the AdMob Next-Gen-compatible adapter.
-    // Adapter 6.21.0.4 uses Java 11 bytecode and brings Audience Network SDK 6.21.0.
-    // Keep AGP 7.4.2 / Gradle 7.5.1 / Java source+target 11 unchanged.
+    // Official pairing: Next-Gen 1.5.0 + adapter 6.22.0.1 + Audience Network 6.22.0.
     // Do not add facebook-android-sdk (login/social SDK) or the legacy GMA SDK.
     // https://developers.google.com/admob/android/next-gen/mediation/meta
-    implementation 'com.google.ads.mediation:facebook:6.21.0.4'
-    implementation 'com.facebook.android:audience-network-sdk:6.21.0'
+    implementation 'com.google.ads.mediation:facebook:6.22.0.1'
+    implementation 'com.facebook.android:audience-network-sdk:6.22.0'
 
     // --- Google Play Billing
-    implementation 'com.android.billingclient:billing:8.0.0'
+    implementation 'com.android.billingclient:billing:9.1.0'
 
-    // --- AndroidX（与 compileSdk 34、Java 11、minSdk 24 兼容）
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'androidx.annotation:annotation:1.7.1'
+    // --- AndroidX
+    implementation 'androidx.appcompat:appcompat:1.8.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.2'
+    implementation 'androidx.annotation:annotation:1.11.0'
 }

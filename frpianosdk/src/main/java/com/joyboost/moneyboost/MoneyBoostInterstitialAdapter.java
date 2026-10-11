@@ -1,6 +1,7 @@
 package com.joyboost.moneyboost;
 
 import android.app.Activity;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -29,6 +30,7 @@ public class MoneyBoostInterstitialAdapter {
     private final PreloadCallback MoneyBoost_preloadCallback = new PreloadCallback() {
         @Override
         public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
+            if (MoneyBoost_activity == null) return;
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADINTERLoaded");
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = true;
@@ -37,7 +39,16 @@ public class MoneyBoostInterstitialAdapter {
         }
 
         @Override
+        public void onAdsExhausted(@NonNull String preloadId) {
+            // The SDK replenishes the registered preload configuration automatically.
+            MoneyBoost_adReady = false;
+            MoneyBoost_isLoading = false;
+        }
+
+        @Override
         public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
+            if (MoneyBoost_activity == null) return;
+            Log.w("MoneyBoostAds", "Interstitial load failed unit=" + preloadId + " code=" + adError.getCode() + " message=" + adError.getMessage());
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADINTERFailed");
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = false;
@@ -67,6 +78,7 @@ public class MoneyBoostInterstitialAdapter {
     }
 
     public void MoneyBoostLoadInterstitialAd() {
+        if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()) return;
         if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
             return;
         }
@@ -79,6 +91,7 @@ public class MoneyBoostInterstitialAdapter {
         }
         MoneyBoostCancelRetry();
         MoneyBoost_isLoading = true;
+        Log.i("MoneyBoostAds", "Interstitial load requested unit=" + MoneyBoost_ad_unit);
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADINTER");
         if (!MoneyBoostStartInterstitialPreloading(unitId)) {
             MoneyBoost_isLoading = false;
@@ -128,8 +141,12 @@ public class MoneyBoostInterstitialAdapter {
                 }
                 MoneyBoost_adReady = false;
                 interstitialAd.setAdEventCallback(new InterstitialAdEventCallback() {
+                    private boolean displayed;
+                    private boolean finished;
                     @Override
-                    public void onAdShowedFullScreenContent() {
+                    public synchronized void onAdShowedFullScreenContent() {
+                        if (finished || displayed) return;
+                        displayed = true;
                         MoneyBoost_isShowing = true;
                         if (MoneyBoost_InterstitialListener != null) {
                             MoneyBoost_InterstitialListener.MoneyBoostOnInterstitialAdDisplayed();
@@ -137,7 +154,9 @@ public class MoneyBoostInterstitialAdapter {
                     }
 
                     @Override
-                    public void onAdDismissedFullScreenContent() {
+                    public synchronized void onAdDismissedFullScreenContent() {
+                        if (finished) return;
+                        finished = true;
                         MoneyBoost_isShowing = false;
                         interstitialAd.destroy();
                         if (MoneyBoost_InterstitialListener != null) {
@@ -147,8 +166,10 @@ public class MoneyBoostInterstitialAdapter {
                     }
 
                     @Override
-                    public void onAdFailedToShowFullScreenContent(
+                    public synchronized void onAdFailedToShowFullScreenContent(
                             @NonNull com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError fullScreenContentError) {
+                        if (finished) return;
+                        finished = true;
                         boolean wasShowing = MoneyBoost_isShowing;
                         MoneyBoost_isShowing = false;
                         interstitialAd.destroy();
