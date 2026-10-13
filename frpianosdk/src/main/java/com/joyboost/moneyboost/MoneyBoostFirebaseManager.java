@@ -26,10 +26,33 @@ import java.util.Iterator;
 import java.util.Map;
 
 public class MoneyBoostFirebaseManager {
-    public static MoneyBoostFirebaseManager instance;
+    public static volatile MoneyBoostFirebaseManager instance;
     private FirebaseRemoteConfig MoneyBoostFirebaseRemoteConfig;
     private FirebaseAnalytics MoneyBoostFirebaseAnalytics;
     private Context mContext;
+    private final java.util.ArrayDeque<android.util.Pair<String, Bundle>> diagnosticQueue = new java.util.ArrayDeque<>();
+
+    // Preserve early init diagnostics until the host initializes Firebase. Respect SDK consent settings.
+    public synchronized void MoneyBoostLogDiagnostic(String name, Bundle params) {
+        if (MoneyBoostFirebaseAnalytics == null) {
+            if (diagnosticQueue.size() >= 64) diagnosticQueue.removeFirst();
+            diagnosticQueue.addLast(new android.util.Pair<>(name, new Bundle(params)));
+            return;
+        }
+        MoneyBoostFirebaseAnalytics.logEvent(name, params);
+    }
+
+    private synchronized void MoneyBoostFlushDiagnostics() {
+        while (!diagnosticQueue.isEmpty()) {
+            android.util.Pair<String, Bundle> event = diagnosticQueue.removeFirst();
+            try {
+                MoneyBoostFirebaseAnalytics.logEvent(event.first, event.second);
+            } catch (Exception | LinkageError error) {
+                // Diagnostics are optional: a failed queued event must not abort host Firebase setup.
+                Log.w("MoneyBoostInit", "Queued diagnostic unavailable: " + event.first, error);
+            }
+        }
+    }
 
     public String MoneyBoost_cp_config = "";
     private SharedPreferences MoneyBoost_taichiPref;
@@ -40,16 +63,18 @@ public class MoneyBoostFirebaseManager {
         void onLoadSuccess(String json);
     }
 
-    public static MoneyBoostFirebaseManager instance() {
+    public static synchronized MoneyBoostFirebaseManager instance() {
         if (null == instance) {
             instance = new MoneyBoostFirebaseManager();
         }
         return instance;
     }
 
-    public void MoneyBoostInitFirebaseAnalytics(Context context){
+    public synchronized void MoneyBoostInitFirebaseAnalytics(Context context){
         mContext = context;
         MoneyBoostFirebaseAnalytics = FirebaseAnalytics.getInstance(context);
+        MoneyBoostFlushDiagnostics();
+        MoneyBoostAdDiagnostics.record("ads_firebase_ready", new Bundle());
         MoneyBoostFirebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
         //上报内存
         String ram = MoneyBoostToolsManager.instance().MoneyBoostGetTotalRam();

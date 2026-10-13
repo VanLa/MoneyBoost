@@ -33,6 +33,7 @@ public class MoneyBoostRewardVideoAdapter {
         @Override
         public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
             if (MoneyBoost_activity == null) { rewardedAd.destroy(); return; }
+            MoneyBoostAdDiagnostics.load("reward", MoneyBoost_ad_unit, "success", null);
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADREWARDLoaded");
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = true;
@@ -44,6 +45,7 @@ public class MoneyBoostRewardVideoAdapter {
         @Override
         public void onAdFailedToLoad(@NonNull LoadAdError adError) {
             if (MoneyBoost_activity == null) return;
+            MoneyBoostAdDiagnostics.load("reward", MoneyBoost_ad_unit, "failed", adError);
             Log.w("MoneyBoostAds", "Rewarded load failed unit=" + MoneyBoost_ad_unit + " code=" + adError.getCode() + " message=" + adError.getMessage());
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========",
                     "LOADREWARDFailed code=" + adError.getCode()
@@ -89,6 +91,7 @@ public class MoneyBoostRewardVideoAdapter {
         }
         MoneyBoostCancelRetry();
         MoneyBoost_isLoading = true;
+        MoneyBoostAdDiagnostics.load("reward", MoneyBoost_ad_unit, "requested", null);
         Log.i("MoneyBoostAds", "RewardVideo load requested unit=" + MoneyBoost_ad_unit);
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADREWARD");
         AdRequest adRequest = new AdRequest.Builder(unitId).build();

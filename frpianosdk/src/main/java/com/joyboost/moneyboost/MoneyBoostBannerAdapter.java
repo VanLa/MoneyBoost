@@ -103,6 +103,8 @@ public class MoneyBoostBannerAdapter {
             return;
         }
         MoneyBoost_isLoading = true;
+        final String diagnosticFormat = MoneyBoost_isCollapsiblePlacement ? "collapsible" : "banner";
+        MoneyBoostAdDiagnostics.load(diagnosticFormat, MoneyBoost_ad_unit, "requested", null);
         Log.i("MoneyBoostAds", "Banner load requested unit=" + MoneyBoost_ad_unit);
         int widthDp = MoneyBoostGetScreenWidthDp(MoneyBoost_activity);
         AdSize adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(MoneyBoost_activity, widthDp);
@@ -128,6 +130,7 @@ public class MoneyBoostBannerAdapter {
                         bannerAd.destroy();
                         return;
                     }
+                    MoneyBoostAdDiagnostics.load(diagnosticFormat, MoneyBoost_ad_unit, "success", null);
                     MoneyBoost_isLoading = false;
                     MoneyBoost_onBannerLoaded(bannerAd);
                 });
@@ -138,6 +141,7 @@ public class MoneyBoostBannerAdapter {
                     Log.w("MoneyBoostAds", "Banner load failed unit=" + MoneyBoost_ad_unit + " code=" + adError.getCode() + " message=" + adError.getMessage());
                 requestActivity.runOnUiThread(() -> {
                     if (generation != MoneyBoost_loadGeneration) return;
+                    MoneyBoostAdDiagnostics.load(diagnosticFormat, MoneyBoost_ad_unit, "failed", adError);
                     MoneyBoost_isLoading = false;
                     MoneyBoost_isLoaded = false;
                     MoneyBoostMediationManager.getInstance().MoneyBoostOnBannerAdFailedToLoad(MoneyBoostBannerAdapter.this);

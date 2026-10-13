@@ -52,6 +52,7 @@ public class MoneyBoostSplashAdapter {
         @Override
         public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
             if (MoneyBoost_activity == null) return;
+            MoneyBoostAdDiagnostics.load("splash", MoneyBoost_ad_unit, "success", null);
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADSPLASHLoaded");
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = true;
@@ -74,6 +75,7 @@ public class MoneyBoostSplashAdapter {
         @Override
         public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
             if (MoneyBoost_activity == null) return;
+            MoneyBoostAdDiagnostics.load("splash", MoneyBoost_ad_unit, "failed", adError);
             Log.w("MoneyBoostAds", "Splash load failed unit=" + preloadId + " code=" + adError.getCode() + " message=" + adError.getMessage());
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADSPLASHFailed");
             MoneyBoost_isLoading = false;
@@ -112,9 +114,11 @@ public class MoneyBoostSplashAdapter {
         }
         MoneyBoostCancelRetry();
         MoneyBoost_isLoading = true;
+        MoneyBoostAdDiagnostics.load("splash", MoneyBoost_ad_unit, "requested", null);
         Log.i("MoneyBoostAds", "Splash load requested unit=" + MoneyBoost_ad_unit);
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADSPLASH");
         if (!MoneyBoostStartSplashPreloading(unitId)) {
+            MoneyBoostAdDiagnostics.load("splash", MoneyBoost_ad_unit, "preloader_rejected", null);
             MoneyBoost_isLoading = false;
         }
     }

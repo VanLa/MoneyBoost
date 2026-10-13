@@ -31,6 +31,7 @@ public class MoneyBoostInterstitialAdapter {
         @Override
         public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
             if (MoneyBoost_activity == null) return;
+            MoneyBoostAdDiagnostics.load("inter", MoneyBoost_ad_unit, "success", null);
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADINTERLoaded");
             MoneyBoost_isLoading = false;
             MoneyBoost_adReady = true;
@@ -48,6 +49,7 @@ public class MoneyBoostInterstitialAdapter {
         @Override
         public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
             if (MoneyBoost_activity == null) return;
+            MoneyBoostAdDiagnostics.load("inter", MoneyBoost_ad_unit, "failed", adError);
             Log.w("MoneyBoostAds", "Interstitial load failed unit=" + preloadId + " code=" + adError.getCode() + " message=" + adError.getMessage());
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADINTERFailed");
             MoneyBoost_isLoading = false;
@@ -91,9 +93,11 @@ public class MoneyBoostInterstitialAdapter {
         }
         MoneyBoostCancelRetry();
         MoneyBoost_isLoading = true;
+        MoneyBoostAdDiagnostics.load("inter", MoneyBoost_ad_unit, "requested", null);
         Log.i("MoneyBoostAds", "Interstitial load requested unit=" + MoneyBoost_ad_unit);
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADINTER");
         if (!MoneyBoostStartInterstitialPreloading(unitId)) {
+            MoneyBoostAdDiagnostics.load("inter", MoneyBoost_ad_unit, "preloader_rejected", null);
             MoneyBoost_isLoading = false;
         }
     }

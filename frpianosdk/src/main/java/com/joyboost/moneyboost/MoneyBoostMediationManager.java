@@ -68,6 +68,40 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     private boolean MoneyBoost_isInitializing = false;
     private boolean MoneyBoost_initFailed = false;
     private int MoneyBoost_initGeneration = 0;
+    private long diagnosticInitStarted;
+    private String diagnosticInitStage = "host";
+
+    private void diagnosticInit(String event, String result, String reason) {
+        try {
+            android.os.Bundle params = new android.os.Bundle();
+            params.putLong("init_attempt", MoneyBoost_initGeneration);
+            params.putString("init_stage", diagnosticInitStage);
+            params.putString("result", result);
+            params.putString("reason", MoneyBoostAdDiagnostics.shortText(reason));
+            params.putLong("elapsed_ms", Math.max(0, SystemClock.elapsedRealtime() - diagnosticInitStarted));
+            params.putLong("can_request_ads", MoneyBoost_adsPermitted ? 1 : 0);
+            params.putLong("consent_status", consentInformation == null ? -1 : consentInformation.getConsentStatus());
+            MoneyBoostAdDiagnostics.record(event, params);
+        } catch (Exception | LinkageError error) {
+            Log.w(INIT_TAG, "Init diagnostic unavailable", error);
+        }
+    }
+
+    private void diagnosticUmp(String stage, String result, String code, String message) {
+        try {
+            android.os.Bundle params = new android.os.Bundle();
+            params.putLong("init_attempt", MoneyBoost_initGeneration);
+            params.putString("init_stage", stage);
+            params.putString("result", result);
+            params.putString("error_code", code);
+            params.putString("error_message", MoneyBoostAdDiagnostics.shortText(message));
+            params.putLong("can_request_ads", consentInformation != null && consentInformation.canRequestAds() ? 1 : 0);
+            params.putLong("consent_status", consentInformation == null ? -1 : consentInformation.getConsentStatus());
+            MoneyBoostAdDiagnostics.record("ads_ump_result", params);
+        } catch (Exception | LinkageError error) {
+            Log.w(INIT_TAG, "UMP diagnostic unavailable", error);
+        }
+    }
     private static final String INIT_TAG = "MoneyBoostInit";
     private static final long INIT_TIMEOUT_MS = 45000L;
     private final List<ADInitListener> MoneyBoost_initListeners = new ArrayList<>();
@@ -239,6 +273,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_isInitSuccess = success;
         MoneyBoost_initFailed = !success;
         Log.i(INIT_TAG, "Initialization finished: success=" + success + " reason=" + reason);
+        diagnosticInit("ads_init_result", success ? "success" : "failed", reason);
         List<ADInitListener> listeners = new ArrayList<>(MoneyBoost_initListeners);
         MoneyBoost_initListeners.clear();
         try {
@@ -299,6 +334,9 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_adsPermitted = false;
         MoneyBoost_initFailed = false;
         final int generation = ++MoneyBoost_initGeneration;
+        diagnosticInitStarted = SystemClock.elapsedRealtime();
+        diagnosticInitStage = "config";
+        diagnosticInit("ads_init_start", "started", "");
         MoneyBoost_initTimeout = () -> MoneyBoostCompleteInit(generation, false,
                 "Initialization timed out (UMP or GMA)");
         mainHandler.postDelayed(MoneyBoost_initTimeout, INIT_TIMEOUT_MS);
@@ -328,30 +366,42 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             MoneyBoostCompleteInit(generation, false, e.toString());
             return;
         }
+        MoneyBoostAdDiagnostics.config("inter", MoneyBoost_interKey);
+        MoneyBoostAdDiagnostics.config("reward", MoneyBoost_rewardKey);
+        MoneyBoostAdDiagnostics.config("splash", MoneyBoost_splashKey);
+        MoneyBoostAdDiagnostics.config("banner", MoneyBoost_bannerKey);
         try {
             ConsentRequestParameters params = new ConsentRequestParameters.Builder().build();
             consentInformation = UserMessagingPlatform.getConsentInformation(activity);
+            diagnosticInitStage = "ump_update";
             Log.i(INIT_TAG, "UMP update started");
             consentInformation.requestConsentInfoUpdate(activity, params,
                     () -> mainHandler.post(() -> {
                         if (!MoneyBoostIsCurrentInit(generation)) return;
                         try {
+                            diagnosticUmp("ump_update", "success", "", "");
+                            diagnosticInitStage = "ump_form";
                             Log.i(INIT_TAG, "UMP update complete; checking consent form");
                             UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity,
                                     error -> mainHandler.post(() -> {
                                         if (!MoneyBoostIsCurrentInit(generation)) return;
+                                        diagnosticUmp("ump_form", error == null ? "success" : "failed",
+                                                error == null ? "" : String.valueOf(error.getErrorCode()),
+                                                error == null ? "" : error.getMessage());
                                         if (error != null) Log.w(INIT_TAG, "UMP form code=" + error.getErrorCode() + " message=" + error.getMessage());
                                         MoneyBoostInitGmaSdk(activity, admobAppId, generation);
                                         if (error != null) MoneyBoostRetryConsentAfterError(activity, generation);
                                     }));
                         } catch (Exception | LinkageError e) {
                             Log.e(INIT_TAG, "UMP form failed", e);
+                            diagnosticUmp("ump_form", "failed", "exception", e.toString());
                             MoneyBoostInitGmaSdk(activity, admobAppId, generation);
                             MoneyBoostRetryConsentAfterError(activity, generation);
                         }
                     }),
                     error -> mainHandler.post(() -> {
                         if (!MoneyBoostIsCurrentInit(generation)) return;
+                        diagnosticUmp("ump_update", "failed", String.valueOf(error.getErrorCode()), error.getMessage());
                         Log.w(INIT_TAG, "UMP update failed code=" + error.getErrorCode() + " message=" + error.getMessage());
                         // UMP owns cached consent; a network error is never permission.
                         MoneyBoostInitGmaSdk(activity, admobAppId, generation);
@@ -359,6 +409,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                     }));
         } catch (Exception | LinkageError e) {
             Log.e(INIT_TAG, "UMP setup failed", e);
+            diagnosticUmp("ump_update", "failed", "exception", e.toString());
             MoneyBoostInitGmaSdk(activity, admobAppId, generation);
             MoneyBoostRetryConsentAfterError(activity, generation);
         }
@@ -498,6 +549,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                                      int generation) {
         if (!MoneyBoostIsCurrentInit(generation)) return;
         try {
+            diagnosticInitStage = "consent_gate";
             MoneyBoostApplyPrivacySettings();
             if (!MoneyBoost_adsPermitted) {
                 MoneyBoostCompleteInit(generation, false, "UMP does not allow ad requests; no consent fallback");
@@ -507,6 +559,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                 MoneyBoostCompleteInit(generation, false, "Activity unavailable");
                 return;
             }
+            diagnosticInitStage = "gma";
+            diagnosticInit("ads_init_stage", "started", "");
             new Thread(() -> {
                 try {
                     Log.i(INIT_TAG, "GMA initialize started on worker thread");
@@ -519,6 +573,22 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                                         MoneyBoostCompleteInit(generation, false, "Activity unavailable");
                                         return;
                                     }
+                                    diagnosticInit("ads_init_stage", "callback", "");
+                                    try {
+                                        for (java.util.Map.Entry<String, com.google.android.libraries.ads.mobile.sdk.initialization.AdapterStatus> entry
+                                                : status.getAdapterStatusMap().entrySet()) {
+                                            android.os.Bundle adapter = new android.os.Bundle();
+                                            adapter.putLong("init_attempt", generation);
+                                            adapter.putString("adapter_name", MoneyBoostAdDiagnostics.shortText(entry.getKey()));
+                                            adapter.putString("result", String.valueOf(entry.getValue().getInitializationState()));
+                                            adapter.putString("reason", MoneyBoostAdDiagnostics.shortText(entry.getValue().getDescription()));
+                                            adapter.putLong("elapsed_ms", entry.getValue().getLatency());
+                                            MoneyBoostAdDiagnostics.record("ads_adapter_result", adapter);
+                                        }
+                                    } catch (Exception | LinkageError diagnosticError) {
+                                        Log.w(INIT_TAG, "Adapter diagnostic unavailable", diagnosticError);
+                                    }
+                                    diagnosticInitStage = "adapters";
                                     Log.i(INIT_TAG, "GMA callback received; creating adapters");
                                     MoneyBoostInitAdAdapters(activity);
                                 } catch (Exception | LinkageError e) {
@@ -1515,6 +1585,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_collapsibleActive = false;
         MoneyBoost_isAppForeground = false;
         MoneyBoost_isDestroyed = true;
+        if (MoneyBoost_isInitializing) diagnosticInit("ads_init_result", "cancelled", "Activity destroyed");
         MoneyBoost_isInitializing = false;
         MoneyBoost_coldSplashDeadline = 0L;
         MoneyBoost_initGeneration++;
