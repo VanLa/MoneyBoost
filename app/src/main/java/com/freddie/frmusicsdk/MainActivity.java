@@ -35,6 +35,8 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean splashFlowFinished = false;
     private String nativePlacement;
+    private boolean sdkInitialized;
+    private boolean nativeAutoLoad = true;
 
     private final Runnable statusUpdater = new Runnable() {
         @Override
@@ -75,15 +77,20 @@ public class MainActivity extends AppCompatActivity {
                 statusHandler.removeCallbacks(splashWaitTimeoutRunnable);
             } else if ("MoneyBoost_SPLASH_CLOSE".equals(callback)) {
                 finishSplashFlowAndShowBanner();
+            } else if ("MoneyBoost_INTERSTITIAL_CLOSE".equals(callback)
+                    || "MoneyBoost_REWARD_CLOSE".equals(callback)) {
+                startNativePreloaders();
             }
         });
 
         mediationManager.MoneyBoostInit(this, () -> {
+            sdkInitialized = true;
             Log.i(TAG, "Init ok, request cold splash. " + mediationManager.MoneyBoostDebugSplashStateText());
             // 先开屏，Banner 等开屏结束/超时后再出（避免干扰观察开屏）
             mediationManager.MoneyBoostShowSplashADWithUnity("launch");
             statusHandler.removeCallbacks(splashWaitTimeoutRunnable);
             statusHandler.postDelayed(splashWaitTimeoutRunnable, SPLASH_WAIT_TIMEOUT_MS);
+            startNativePreloaders();
         });
 
         setupButtons();
@@ -97,6 +104,7 @@ public class MainActivity extends AppCompatActivity {
         splashFlowFinished = true;
         statusHandler.removeCallbacks(splashWaitTimeoutRunnable);
         mediationManager.MoneyBoostShowBannerView();
+        startNativePreloaders();
         Log.i(TAG, "Banner shown after splash flow. " + mediationManager.MoneyBoostDebugSplashStateText());
     }
 
@@ -123,6 +131,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         mediationManager.MoneyBoostOnAppResume();
+        startNativePreloaders();
     }
 
     @Override
@@ -148,10 +157,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupButtons() {
-        findViewById(R.id.btn_load_native_home).setOnClickListener(v -> mediationManager.MoneyBoostLoadNativeAd("home"));
-        findViewById(R.id.btn_load_native_action).setOnClickListener(v -> mediationManager.MoneyBoostLoadNativeAd("action"));
+        findViewById(R.id.btn_load_native_home).setOnClickListener(v -> loadNativeDemo("home"));
+        findViewById(R.id.btn_load_native_action).setOnClickListener(v -> loadNativeDemo("action"));
         findViewById(R.id.btn_show_native_action).setOnClickListener(v -> showNativeDemo("action"));
-        findViewById(R.id.btn_load_native_album).setOnClickListener(v -> mediationManager.MoneyBoostLoadNativeAd("album"));
+        findViewById(R.id.btn_load_native_album).setOnClickListener(v -> loadNativeDemo("album"));
         findViewById(R.id.btn_show_native_home).setOnClickListener(v -> showNativeDemo("home"));
         findViewById(R.id.btn_show_native_album).setOnClickListener(v -> showNativeDemo("album"));
         findViewById(R.id.btn_hide_native).setOnClickListener(v -> {
@@ -159,12 +168,15 @@ public class MainActivity extends AppCompatActivity {
             mediationManager.MoneyBoostHideNativeAd("home"); mediationManager.MoneyBoostHideNativeAd("album"); mediationManager.MoneyBoostHideNativeAd("action");
         });
         findViewById(R.id.btn_destroy_native).setOnClickListener(v -> {
+            nativeAutoLoad = false;
             nativePlacement = null;
             mediationManager.MoneyBoostDestroyNativeAd("home"); mediationManager.MoneyBoostDestroyNativeAd("album"); mediationManager.MoneyBoostDestroyNativeAd("action");
         });
         findViewById(android.R.id.content).getViewTreeObserver().addOnScrollChangedListener(this::updateNativeDemo);
-        findViewById(R.id.btn_hide_collapsible_banner).setOnClickListener(v ->
-                mediationManager.MoneyBoostHideCollapsibleBannerView());
+        findViewById(R.id.btn_hide_collapsible_banner).setOnClickListener(v -> {
+            mediationManager.MoneyBoostHideCollapsibleBannerView();
+            startNativePreloaders();
+        });
         btnCollapsibleBanner.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
             mediationManager.MoneyBoostShowCollapsibleBannerView();
@@ -186,8 +198,24 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    /** Registers official Google preloaders. Once registered, the SDK owns retries and replenishment. */
+    private void startNativePreloaders() {
+        if (!sdkInitialized || !splashFlowFinished || !nativeAutoLoad || isFinishing() || isDestroyed()) return;
+        mediationManager.MoneyBoostLoadNativeAd("home");
+        mediationManager.MoneyBoostLoadNativeAd("album");
+        mediationManager.MoneyBoostLoadNativeAd("action");
+    }
+
+    private void loadNativeDemo(String placement) {
+        nativeAutoLoad = true;
+        mediationManager.MoneyBoostLoadNativeAd(placement);
+    }
+
     private void showNativeDemo(String placement) {
         cancelSplashIfUserStartedPlaying();
+        // The demo's explicit Show Native action selects this format over a previously tested fold.
+        mediationManager.MoneyBoostHideCollapsibleBannerView();
+        nativeAutoLoad = true;
         mediationManager.MoneyBoostHideNativeAd("home"); mediationManager.MoneyBoostHideNativeAd("album"); mediationManager.MoneyBoostHideNativeAd("action");
         nativePlacement = placement;
         mediationManager.MoneyBoostLoadNativeAd(placement);
@@ -199,7 +227,7 @@ public class MainActivity extends AppCompatActivity {
         status.setText("Native Home=" + mediationManager.MoneyBoostIsNativeAdReady("home")
                 + " Album=" + mediationManager.MoneyBoostIsNativeAdReady("album")
                 + " Action=" + mediationManager.MoneyBoostIsNativeAdReady("action")
-                + " selected=" + nativePlacement + " (hidden while collapsible/fullscreen is active)");
+                + " autoLoad=" + nativeAutoLoad + " selected=" + nativePlacement + " (hidden while collapsible/fullscreen is active)");
         if (nativePlacement == null) return;
         android.view.View root = findViewById(android.R.id.content), slot = findViewById(R.id.native_demo_slot);
         android.graphics.Rect full = new android.graphics.Rect(), visible = new android.graphics.Rect();

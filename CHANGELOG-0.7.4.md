@@ -80,3 +80,7 @@ The source repository has been consolidated into `/Volumes/ExMemory/SDK/MoneyBoo
 - Unity optionally exports `collapsibleBannerAdUnitId` from MoneyBoostNativeSettings. Blank leaves existing host metadata untouched; the SDK reads only the dedicated fold key. Release rejects official test IDs in this override.
 - Real compiled-manager handoff tests cover unavailable inventory, failed show, order of view swaps/restoration, separate unit attribution, duplicate callbacks and count-only telemetry. Android transport tests inject view registration failure and verify the old Banner survives.
 - This prevents application-controlled blank handoffs; it cannot guarantee a filled ad before the first successful request or during a total lack of eligible inventory. Background/fullscreen/no-ads exclusions remain.
+
+## Java Demo automatic Native preload
+
+The Java app registers the Home/Album/Action official Native preloaders automatically after successful initialization and the launch splash flow. Resume and fullscreen/fold dismissal restore registration when needed; Google still owns request retries, inventories and replenishment. Load buttons remain for manual testing. Show works without a prior Load click and explicitly exits an active fold in this demo. Destroy pauses automatic Native registration until the next Load/Show, preserving a useful destruction test.
