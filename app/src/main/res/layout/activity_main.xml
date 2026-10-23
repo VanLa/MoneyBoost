@@ -8,7 +8,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="16dp"
+        android:paddingBottom="120dp">
 
         <TextView
             android:layout_width="match_parent"
@@ -36,6 +37,18 @@
             android:textIsSelectable="true"
             android:textSize="14sp" />
 
+        <TextView android:id="@+id/tv_native_status" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:padding="8dp" android:text="Native: not loaded" />
+        <Button android:id="@+id/btn_load_native_home" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Load Native Home" />
+        <Button android:id="@+id/btn_show_native_home" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Show Native Home" />
+        <Button android:id="@+id/btn_load_native_action" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Load Native Action" />
+        <Button android:id="@+id/btn_show_native_action" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Show Native Action" />
+        <Button android:id="@+id/btn_load_native_album" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Load Native Album" />
+        <Button android:id="@+id/btn_show_native_album" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Show Native Album" />
+        <Button android:id="@+id/btn_hide_native" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hide Native (keep loaded)" />
+        <Button android:id="@+id/btn_destroy_native" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Destroy Native (test reload)" />
+        <FrameLayout android:id="@+id/native_demo_slot" android:layout_width="match_parent" android:layout_height="224dp"
+            android:layout_marginTop="12dp" android:layout_marginBottom="16dp" android:background="#EEEAF8" />
         <Button
             android:id="@+id/btn_collapsible_banner"
             android:layout_width="match_parent"

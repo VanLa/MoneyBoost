@@ -48,11 +48,29 @@ final class MoneyBoostAdAnalytics {
         return opportunity;
     }
     void show(Opportunity opportunity) { impression(opportunity, 0); }
+    synchronized void bannerImpression(Opportunity opportunity, int refreshIndex,
+                                       boolean actualCollapsible, String unit) {
+        if (opportunity == null) return;
+        Map<String, Object> details = new HashMap<>();
+        details.put("is_collapsible", actualCollapsible ? 1 : 0);
+        details.put("ad_unit_id", unit == null ? "" : unit);
+        boolean requestedCollapsible = "collapsibleBanner".equals(opportunity.parameters.get("ad_type"));
+        details.put("requested_collapsible", requestedCollapsible ? 1 : 0);
+        // A collapsible request may fill with an ordinary banner. Do not count it as expanded.
+        String event = requestedCollapsible && !actualCollapsible
+                ? "collapsibleBanner_fallback_show" : opportunity.parameters.get("ad_type") + "_show";
+        impression(opportunity, refreshIndex, event, details);
+    }
     synchronized void impression(Opportunity opportunity, int refreshIndex) {
+        if (opportunity == null) return;
+        impression(opportunity, refreshIndex, opportunity.parameters.get("ad_type") + "_show", new HashMap<>());
+    }
+    private void impression(Opportunity opportunity, int refreshIndex, String event, Map<String, Object> details) {
         if (opportunity == null || !opportunity.impressions.add(refreshIndex)) return;
         Map<String, Object> parameters = new HashMap<>(opportunity.parameters);
+        parameters.putAll(details);
         parameters.put("refresh_index", refreshIndex);
         parameters.put("impression_id", UUID.randomUUID().toString());
-        sink.log(parameters.get("ad_type") + "_show", parameters);
+        sink.log(event, parameters);
     }
 }

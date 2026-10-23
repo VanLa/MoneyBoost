@@ -16,17 +16,13 @@ import com.google.android.libraries.ads.mobile.sdk.interstitial.InterstitialAd;
 import com.google.android.libraries.ads.mobile.sdk.interstitial.InterstitialAdEventCallback;
 import com.google.android.libraries.ads.mobile.sdk.interstitial.InterstitialAdPreloader;
 
-import java.util.concurrent.ScheduledFuture;
-
 public class MoneyBoostInterstitialAdapter {
-    private int MoneyBoost_interRetryAttempt;
     public String MoneyBoost_ad_unit;
     public Activity MoneyBoost_activity;
     public MoneyBoostInterstitialListener MoneyBoost_InterstitialListener;
-    private boolean MoneyBoost_adReady = false;
-    private boolean MoneyBoost_isShowing = false;
-    private boolean MoneyBoost_isLoading = false;
-    private ScheduledFuture<?> MoneyBoost_retryFuture;
+    private volatile boolean MoneyBoost_isShowing = false;
+    private volatile boolean MoneyBoost_isLoading = false;
+    private boolean MoneyBoost_preloadingStarted;
     private final PreloadCallback MoneyBoost_preloadCallback = new PreloadCallback() {
         @Override
         public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
@@ -34,15 +30,13 @@ public class MoneyBoostInterstitialAdapter {
             MoneyBoostAdDiagnostics.load("inter", MoneyBoost_ad_unit, "success", null);
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADINTERLoaded");
             MoneyBoost_isLoading = false;
-            MoneyBoost_adReady = true;
-            MoneyBoost_interRetryAttempt = 0;
-            MoneyBoostCancelRetry();
+
         }
 
         @Override
         public void onAdsExhausted(@NonNull String preloadId) {
             // The SDK replenishes the registered preload configuration automatically.
-            MoneyBoost_adReady = false;
+
             MoneyBoost_isLoading = false;
         }
 
@@ -53,12 +47,8 @@ public class MoneyBoostInterstitialAdapter {
             Log.w("MoneyBoostAds", "Interstitial load failed unit=" + preloadId + " code=" + adError.getCode() + " message=" + adError.getMessage());
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADINTERFailed");
             MoneyBoost_isLoading = false;
-            MoneyBoost_adReady = false;
-            MoneyBoost_interRetryAttempt++;
-            long delay = (long) Math.pow(2, Math.min(6, MoneyBoost_interRetryAttempt));
-            MoneyBoostCancelRetry();
-            MoneyBoost_retryFuture = MoneyBoostAdRetryScheduler.scheduleSeconds(
-                    MoneyBoostInterstitialAdapter.this::MoneyBoostLoadInterstitialAd, delay);
+
+            // The registered SDK preloader owns retries and replenishment.
         }
     };
 
@@ -79,7 +69,7 @@ public class MoneyBoostInterstitialAdapter {
         // 预加载在 MobileAds.initialize 完成后由 Load 触发
     }
 
-    public void MoneyBoostLoadInterstitialAd() {
+    public synchronized void MoneyBoostLoadInterstitialAd() {
         if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()) return;
         if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
             return;
@@ -88,28 +78,36 @@ public class MoneyBoostInterstitialAdapter {
         if (unitId == null) {
             return;
         }
-        if (MoneyBoost_isLoading || MoneyBoost_isShowing || InterstitialAdPreloader.isAdAvailable(unitId)) {
+        if (MoneyBoost_preloadingStarted) {
             return;
         }
-        MoneyBoostCancelRetry();
+
         MoneyBoost_isLoading = true;
         MoneyBoostAdDiagnostics.load("inter", MoneyBoost_ad_unit, "requested", null);
         Log.i("MoneyBoostAds", "Interstitial load requested unit=" + MoneyBoost_ad_unit);
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADINTER");
-        if (!MoneyBoostStartInterstitialPreloading(unitId)) {
-            MoneyBoostAdDiagnostics.load("inter", MoneyBoost_ad_unit, "preloader_rejected", null);
+        MoneyBoost_preloadingStarted = true;
+        try {
+            if (!MoneyBoostStartInterstitialPreloading(unitId)) {
+                MoneyBoost_preloadingStarted = false;
+                MoneyBoostAdDiagnostics.load("inter", MoneyBoost_ad_unit, "preloader_rejected", null);
+                MoneyBoost_isLoading = false;
+            }
+        } catch (RuntimeException error) {
+            MoneyBoost_preloadingStarted = false;
             MoneyBoost_isLoading = false;
+            throw error;
         }
     }
 
     private boolean MoneyBoostStartInterstitialPreloading(String unitId) {
         AdRequest adRequest = new AdRequest.Builder(unitId).build();
-        PreloadConfiguration preloadConfig = new PreloadConfiguration(adRequest);
+        PreloadConfiguration preloadConfig = new PreloadConfiguration(adRequest, 2);
         return InterstitialAdPreloader.start(unitId, preloadConfig, MoneyBoost_preloadCallback);
     }
 
     public boolean MoneyBoostIsReady() {
-        return MoneyBoost_adReady && MoneyBoostIsAdAvailable();
+        return MoneyBoostIsAdAvailable();
     }
 
     public void MoneyBoostShowInterstitialAd() {
@@ -135,21 +133,29 @@ public class MoneyBoostInterstitialAdapter {
         }
         MoneyBoost_activity.runOnUiThread(new Runnable() {
             public void run() {
+                if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()
+                        || MoneyBoost_activity == null || MoneyBoost_activity.isFinishing()
+                        || MoneyBoost_activity.isDestroyed()) {
+                    if (MoneyBoost_InterstitialListener != null) MoneyBoost_InterstitialListener.MoneyBoostOnInterstitialAdFailedToShow();
+                    return;
+                }
+                if (MoneyBoost_isShowing) return;
                 final InterstitialAd interstitialAd = InterstitialAdPreloader.pollAd(unitId);
                 if (interstitialAd == null) {
-                    MoneyBoostLoadInterstitialAd();
                     if (MoneyBoost_InterstitialListener != null) {
                         MoneyBoost_InterstitialListener.MoneyBoostOnInterstitialAdFailedToShow();
                     }
                     return;
                 }
-                MoneyBoost_adReady = false;
+
+                MoneyBoost_isShowing = true;
+                final java.util.concurrent.atomic.AtomicBoolean finished =
+                        new java.util.concurrent.atomic.AtomicBoolean();
                 interstitialAd.setAdEventCallback(new InterstitialAdEventCallback() {
                     private boolean displayed;
-                    private boolean finished;
                     @Override
                     public synchronized void onAdShowedFullScreenContent() {
-                        if (finished || displayed) return;
+                        if (finished.get() || displayed) return;
                         displayed = true;
                         MoneyBoost_isShowing = true;
                         if (MoneyBoost_InterstitialListener != null) {
@@ -159,22 +165,19 @@ public class MoneyBoostInterstitialAdapter {
 
                     @Override
                     public synchronized void onAdDismissedFullScreenContent() {
-                        if (finished) return;
-                        finished = true;
+                        if (!finished.compareAndSet(false, true)) return;
                         MoneyBoost_isShowing = false;
                         interstitialAd.destroy();
                         if (MoneyBoost_InterstitialListener != null) {
                             MoneyBoost_InterstitialListener.MoneyBoostOnInterstitialAdClosed();
                         }
-                        MoneyBoostLoadInterstitialAd();
                     }
 
                     @Override
                     public synchronized void onAdFailedToShowFullScreenContent(
                             @NonNull com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError fullScreenContentError) {
-                        if (finished) return;
-                        finished = true;
-                        boolean wasShowing = MoneyBoost_isShowing;
+                        if (!finished.compareAndSet(false, true)) return;
+                        boolean wasShowing = displayed;
                         MoneyBoost_isShowing = false;
                         interstitialAd.destroy();
                         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug(
@@ -187,7 +190,6 @@ public class MoneyBoostInterstitialAdapter {
                                 MoneyBoost_InterstitialListener.MoneyBoostOnInterstitialAdFailedToShow();
                             }
                         }
-                        MoneyBoostLoadInterstitialAd();
                     }
 
                     @Override
@@ -202,27 +204,31 @@ public class MoneyBoostInterstitialAdapter {
                         MoneyBoostLogFirebaseRevenue(adValue, "INTERSTITIAL", unitId, interstitialAd);
                     }
                 });
-                interstitialAd.show(MoneyBoost_activity);
+                try {
+                    interstitialAd.show(MoneyBoost_activity);
+                } catch (RuntimeException error) {
+                    if (finished.compareAndSet(false, true)) {
+                        MoneyBoost_isShowing = false;
+                        interstitialAd.destroy();
+                        if (MoneyBoost_InterstitialListener != null) MoneyBoost_InterstitialListener.MoneyBoostOnInterstitialAdFailedToShow();
+                    }
+                }
             }
         });
     }
 
-    public void MoneyBoostOnDestroy() {
-        MoneyBoostCancelRetry();
+    public synchronized void MoneyBoostOnDestroy() {
+
         MoneyBoost_isLoading = false;
         MoneyBoost_isShowing = false;
-        MoneyBoost_adReady = false;
+
         String unitId = MoneyBoostUnitId();
         if (unitId != null) {
             InterstitialAdPreloader.destroy(unitId);
         }
+        MoneyBoost_preloadingStarted = false;
         MoneyBoost_activity = null;
         MoneyBoost_InterstitialListener = null;
-    }
-
-    private void MoneyBoostCancelRetry() {
-        MoneyBoostAdRetryScheduler.cancel(MoneyBoost_retryFuture);
-        MoneyBoost_retryFuture = null;
     }
 
     private String MoneyBoostUnitId() {

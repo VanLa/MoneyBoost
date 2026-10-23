@@ -18,18 +18,14 @@ import com.google.android.libraries.ads.mobile.sdk.common.PreloadCallback;
 import com.google.android.libraries.ads.mobile.sdk.common.PreloadConfiguration;
 import com.google.android.libraries.ads.mobile.sdk.common.ResponseInfo;
 
-import java.util.concurrent.ScheduledFuture;
-
 /** 标准 App Open（GMA Next-Gen Preloader），供冷/热启动开屏使用。 */
 public class MoneyBoostSplashAdapter {
-    private int MoneyBoost_splashRetryAttempt;
     public String MoneyBoost_ad_unit;
     public Activity MoneyBoost_activity;
     public MoneyBoostSplashListener MoneyBoost_splashListener;
-    private boolean MoneyBoost_adReady = false;
-    private boolean MoneyBoost_isShowing = false;
-    private boolean MoneyBoost_isLoading = false;
-    private ScheduledFuture<?> MoneyBoost_retryFuture;
+    private volatile boolean MoneyBoost_isShowing = false;
+    private volatile boolean MoneyBoost_isLoading = false;
+    private boolean MoneyBoost_preloadingStarted;
     private final Handler MoneyBoost_mainHandler = new Handler(Looper.getMainLooper());
 
     /** GMA Next-Gen 全屏回调常在后台线程，统一切回主线程再通知上层。 */
@@ -55,9 +51,7 @@ public class MoneyBoostSplashAdapter {
             MoneyBoostAdDiagnostics.load("splash", MoneyBoost_ad_unit, "success", null);
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADSPLASHLoaded");
             MoneyBoost_isLoading = false;
-            MoneyBoost_adReady = true;
-            MoneyBoost_splashRetryAttempt = 0;
-            MoneyBoostCancelRetry();
+
             MoneyBoostPostToMain(() -> {
                 if (MoneyBoost_splashListener != null) {
                     MoneyBoost_splashListener.MoneyBoostOnSplashAdLoaded();
@@ -68,7 +62,7 @@ public class MoneyBoostSplashAdapter {
         @Override
         public void onAdsExhausted(@NonNull String preloadId) {
             // The SDK replenishes the registered preload configuration automatically.
-            MoneyBoost_adReady = false;
+
             MoneyBoost_isLoading = false;
         }
 
@@ -79,12 +73,8 @@ public class MoneyBoostSplashAdapter {
             Log.w("MoneyBoostAds", "Splash load failed unit=" + preloadId + " code=" + adError.getCode() + " message=" + adError.getMessage());
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADSPLASHFailed");
             MoneyBoost_isLoading = false;
-            MoneyBoost_adReady = false;
-            MoneyBoost_splashRetryAttempt++;
-            long delay = (long) Math.pow(2, Math.min(6, MoneyBoost_splashRetryAttempt));
-            MoneyBoostCancelRetry();
-            MoneyBoost_retryFuture = MoneyBoostAdRetryScheduler.scheduleSeconds(
-                    MoneyBoostSplashAdapter.this::MoneyBoostLoadSplashAd, delay);
+
+            // The registered SDK preloader owns retries and replenishment.
         }
     };
 
@@ -100,7 +90,7 @@ public class MoneyBoostSplashAdapter {
         // 预加载在 MobileAds.initialize 完成后由 Load 触发
     }
 
-    public void MoneyBoostLoadSplashAd() {
+    public synchronized void MoneyBoostLoadSplashAd() {
         if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()) return;
         if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
             return;
@@ -109,29 +99,37 @@ public class MoneyBoostSplashAdapter {
         if (unitId == null) {
             return;
         }
-        if (MoneyBoost_isLoading || MoneyBoost_isShowing || AppOpenAdPreloader.isAdAvailable(unitId)) {
+        if (MoneyBoost_preloadingStarted) {
             return;
         }
-        MoneyBoostCancelRetry();
+
         MoneyBoost_isLoading = true;
         MoneyBoostAdDiagnostics.load("splash", MoneyBoost_ad_unit, "requested", null);
         Log.i("MoneyBoostAds", "Splash load requested unit=" + MoneyBoost_ad_unit);
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADSPLASH");
-        if (!MoneyBoostStartSplashPreloading(unitId)) {
-            MoneyBoostAdDiagnostics.load("splash", MoneyBoost_ad_unit, "preloader_rejected", null);
+        MoneyBoost_preloadingStarted = true;
+        try {
+            if (!MoneyBoostStartSplashPreloading(unitId)) {
+                MoneyBoost_preloadingStarted = false;
+                MoneyBoostAdDiagnostics.load("splash", MoneyBoost_ad_unit, "preloader_rejected", null);
+                MoneyBoost_isLoading = false;
+            }
+        } catch (RuntimeException error) {
+            MoneyBoost_preloadingStarted = false;
             MoneyBoost_isLoading = false;
+            throw error;
         }
     }
 
     private boolean MoneyBoostStartSplashPreloading(String unitId) {
         AdRequest adRequest = new AdRequest.Builder(unitId).build();
-        PreloadConfiguration preloadConfig = new PreloadConfiguration(adRequest);
+        PreloadConfiguration preloadConfig = new PreloadConfiguration(adRequest, 1);
         return AppOpenAdPreloader.start(unitId, preloadConfig, MoneyBoost_preloadCallback);
     }
 
     public boolean MoneyBoostIsReady() {
         String unitId = MoneyBoostUnitId();
-        return MoneyBoost_adReady && unitId != null && AppOpenAdPreloader.isAdAvailable(unitId);
+        return unitId != null && AppOpenAdPreloader.isAdAvailable(unitId);
     }
 
     public void MoneyBoostShowSplashAd() {
@@ -156,6 +154,13 @@ public class MoneyBoostSplashAdapter {
             return;
         }
         MoneyBoost_activity.runOnUiThread(() -> {
+            if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()
+                    || MoneyBoost_activity == null || MoneyBoost_activity.isFinishing()
+                    || MoneyBoost_activity.isDestroyed()) {
+                if (MoneyBoost_splashListener != null) MoneyBoost_splashListener.MoneyBoostOnSplashAdFailedToShow();
+                return;
+            }
+            if (MoneyBoost_isShowing) return;
             final AppOpenAd appOpenAd = AppOpenAdPreloader.pollAd(unitId);
             if (appOpenAd == null) {
                 MoneyBoostLoadSplashAd();
@@ -164,14 +169,16 @@ public class MoneyBoostSplashAdapter {
                 }
                 return;
             }
-            MoneyBoost_adReady = false;
+
+            MoneyBoost_isShowing = true;
+            final java.util.concurrent.atomic.AtomicBoolean finished =
+                    new java.util.concurrent.atomic.AtomicBoolean();
             appOpenAd.setAdEventCallback(new AppOpenAdEventCallback() {
-                    private boolean displayed;
-                    private boolean finished;
+                private boolean displayed;
                 @Override
                 public synchronized void onAdShowedFullScreenContent() {
-                        if (finished || displayed) return;
-                        displayed = true;
+                    if (finished.get() || displayed) return;
+                    displayed = true;
                     MoneyBoost_isShowing = true;
                     MoneyBoostPostToMain(() -> {
                         if (MoneyBoost_splashListener != null) {
@@ -182,32 +189,28 @@ public class MoneyBoostSplashAdapter {
 
                 @Override
                 public synchronized void onAdDismissedFullScreenContent() {
-                        if (finished) return;
-                        finished = true;
+                    if (!finished.compareAndSet(false, true)) return;
                     MoneyBoost_isShowing = false;
-                    MoneyBoost_adReady = false;
+
                     appOpenAd.destroy();
                     MoneyBoostPostToMain(() -> {
                         if (MoneyBoost_splashListener != null) {
                             MoneyBoost_splashListener.MoneyBoostOnSplashAdClosed();
                         }
-                        MoneyBoostLoadSplashAd();
                     });
                 }
 
                 @Override
                 public synchronized void onAdFailedToShowFullScreenContent(
                         @NonNull FullScreenContentError fullScreenContentError) {
-                        if (finished) return;
-                        finished = true;
+                    if (!finished.compareAndSet(false, true)) return;
                     MoneyBoost_isShowing = false;
-                    MoneyBoost_adReady = false;
+
                     appOpenAd.destroy();
                     MoneyBoostPostToMain(() -> {
                         if (MoneyBoost_splashListener != null) {
                             MoneyBoost_splashListener.MoneyBoostOnSplashAdFailedToShow();
                         }
-                        MoneyBoostLoadSplashAd();
                     });
                 }
 
@@ -217,7 +220,7 @@ public class MoneyBoostSplashAdapter {
 
                 @Override
                 public void onAdPaid(@NonNull AdValue adValue) {
-                    // Cold and resume App Open ads both report actual paid revenue to ARO and Taichi.
+                    // Keep Taichi paid revenue separate from Firebase automatic ad_impression.
                     ResponseInfo info = appOpenAd.getResponseInfo();
                     String network = "AdMob";
                     if (info != null && info.getLoadedAdSourceResponseInfo() != null) {
@@ -227,26 +230,30 @@ public class MoneyBoostSplashAdapter {
                             adValue.getValueMicros() / 1_000_000.0, "APP_OPEN", network, unitId);
                 }
             });
-            appOpenAd.show(MoneyBoost_activity);
+            try {
+                appOpenAd.show(MoneyBoost_activity);
+            } catch (RuntimeException error) {
+                if (finished.compareAndSet(false, true)) {
+                    MoneyBoost_isShowing = false;
+                    appOpenAd.destroy();
+                    if (MoneyBoost_splashListener != null) MoneyBoost_splashListener.MoneyBoostOnSplashAdFailedToShow();
+                }
+            }
         });
     }
 
-    public void MoneyBoostOnDestroy() {
-        MoneyBoostCancelRetry();
+    public synchronized void MoneyBoostOnDestroy() {
+
         MoneyBoost_isLoading = false;
         MoneyBoost_isShowing = false;
-        MoneyBoost_adReady = false;
+
         String unitId = MoneyBoostUnitId();
         if (unitId != null) {
             AppOpenAdPreloader.destroy(unitId);
         }
+        MoneyBoost_preloadingStarted = false;
         MoneyBoost_activity = null;
         MoneyBoost_splashListener = null;
-    }
-
-    private void MoneyBoostCancelRetry() {
-        MoneyBoostAdRetryScheduler.cancel(MoneyBoost_retryFuture);
-        MoneyBoost_retryFuture = null;
     }
 
     private String MoneyBoostUnitId() {

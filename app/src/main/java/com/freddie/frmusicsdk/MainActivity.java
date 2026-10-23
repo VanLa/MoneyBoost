@@ -34,11 +34,13 @@ public class MainActivity extends AppCompatActivity {
     private int colorReady;
 
     private boolean splashFlowFinished = false;
+    private String nativePlacement;
 
     private final Runnable statusUpdater = new Runnable() {
         @Override
         public void run() {
             refreshAdButtonStatus();
+            updateNativeDemo();
             statusHandler.postDelayed(this, STATUS_POLL_INTERVAL_MS);
         }
     };
@@ -146,6 +148,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupButtons() {
+        findViewById(R.id.btn_load_native_home).setOnClickListener(v -> mediationManager.MoneyBoostLoadNativeAd("home"));
+        findViewById(R.id.btn_load_native_action).setOnClickListener(v -> mediationManager.MoneyBoostLoadNativeAd("action"));
+        findViewById(R.id.btn_show_native_action).setOnClickListener(v -> showNativeDemo("action"));
+        findViewById(R.id.btn_load_native_album).setOnClickListener(v -> mediationManager.MoneyBoostLoadNativeAd("album"));
+        findViewById(R.id.btn_show_native_home).setOnClickListener(v -> showNativeDemo("home"));
+        findViewById(R.id.btn_show_native_album).setOnClickListener(v -> showNativeDemo("album"));
+        findViewById(R.id.btn_hide_native).setOnClickListener(v -> {
+            nativePlacement = null;
+            mediationManager.MoneyBoostHideNativeAd("home"); mediationManager.MoneyBoostHideNativeAd("album"); mediationManager.MoneyBoostHideNativeAd("action");
+        });
+        findViewById(R.id.btn_destroy_native).setOnClickListener(v -> {
+            nativePlacement = null;
+            mediationManager.MoneyBoostDestroyNativeAd("home"); mediationManager.MoneyBoostDestroyNativeAd("album"); mediationManager.MoneyBoostDestroyNativeAd("action");
+        });
+        findViewById(android.R.id.content).getViewTreeObserver().addOnScrollChangedListener(this::updateNativeDemo);
         findViewById(R.id.btn_hide_collapsible_banner).setOnClickListener(v ->
                 mediationManager.MoneyBoostHideCollapsibleBannerView());
         btnCollapsibleBanner.setOnClickListener(v -> {
@@ -167,6 +184,34 @@ public class MainActivity extends AppCompatActivity {
 
 
 
+    }
+
+    private void showNativeDemo(String placement) {
+        cancelSplashIfUserStartedPlaying();
+        mediationManager.MoneyBoostHideNativeAd("home"); mediationManager.MoneyBoostHideNativeAd("album"); mediationManager.MoneyBoostHideNativeAd("action");
+        nativePlacement = placement;
+        mediationManager.MoneyBoostLoadNativeAd(placement);
+        updateNativeDemo();
+    }
+
+    private void updateNativeDemo() {
+        TextView status = findViewById(R.id.tv_native_status);
+        status.setText("Native Home=" + mediationManager.MoneyBoostIsNativeAdReady("home")
+                + " Album=" + mediationManager.MoneyBoostIsNativeAdReady("album")
+                + " Action=" + mediationManager.MoneyBoostIsNativeAdReady("action")
+                + " selected=" + nativePlacement + " (hidden while collapsible/fullscreen is active)");
+        if (nativePlacement == null) return;
+        android.view.View root = findViewById(android.R.id.content), slot = findViewById(R.id.native_demo_slot);
+        android.graphics.Rect full = new android.graphics.Rect(), visible = new android.graphics.Rect();
+        int[] origin = new int[2]; root.getLocationOnScreen(origin);
+        int[] at = new int[2]; slot.getLocationOnScreen(at);
+        full.set(at[0], at[1], at[0] + slot.getWidth(), at[1] + slot.getHeight());
+        if (root.getWidth() == 0 || root.getHeight() == 0 || !slot.getGlobalVisibleRect(visible) || !visible.contains(full)) {
+            mediationManager.MoneyBoostHideNativeAd(nativePlacement); return;
+        }
+        mediationManager.MoneyBoostShowNativeAd(nativePlacement,
+                (at[0] - origin[0]) / (float)root.getWidth(), (at[1] - origin[1]) / (float)root.getHeight(),
+                slot.getWidth() / (float)root.getWidth(), slot.getHeight() / (float)root.getHeight());
     }
 
     private void refreshAdButtonStatus() {

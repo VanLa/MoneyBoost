@@ -35,6 +35,18 @@ public final class MoneyBoostAdDiagnosticsTest {
         MoneyBoostFirebaseManager.fail = true;
         MoneyBoostAdDiagnostics.record("ads_init_start", new Bundle());
         check(MoneyBoostFirebaseManager.events.size() == 3, "telemetry failure interrupted / emitted");
+        java.util.List<String> routeCallbacks = new java.util.ArrayList<>();
+        manager.MoneyBoostSetDebugCallbackListener(routeCallbacks::add);
+        set(manager, "MoneyBoost_adsPermitted", false);
+        manager.MoneyBoostShowInterstitialTransitionUnity("no_consent");
+        set(manager, "MoneyBoost_adsPermitted", true);
+        set(manager, "MoneyBoost_needPopAD", true);
+        set(manager, "MoneyBoost_isAppForeground", true);
+        set(manager, "MoneyBoost_isDestroyed", false);
+        manager.MoneyBoostShowInterstitialTransitionUnity("no_adapter");
+        check(routeCallbacks.equals(java.util.List.of("MoneyBoost_INTERSTITIAL_UNAVAILABLE", "MoneyBoost_INTERSTITIAL_UNAVAILABLE")),
+                "Rejected transition did not release Unity navigation");
+        manager.MoneyBoostSetDebugCallbackListener(null);
         System.out.println("AD DIAGNOSTICS PASS: stages, consent, numeric duration, stale/duplicate suppression, string limits, telemetry isolation.");
     }
 }

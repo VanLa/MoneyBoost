@@ -8,42 +8,36 @@ import androidx.annotation.NonNull;
 import com.google.android.libraries.ads.mobile.sdk.common.AdRequest;
 import com.google.android.libraries.ads.mobile.sdk.common.AdSourceResponseInfo;
 import com.google.android.libraries.ads.mobile.sdk.common.AdValue;
-import com.google.android.libraries.ads.mobile.sdk.common.AdLoadCallback;
+import com.google.android.libraries.ads.mobile.sdk.common.PreloadCallback;
+import com.google.android.libraries.ads.mobile.sdk.common.PreloadConfiguration;
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError;
 import com.google.android.libraries.ads.mobile.sdk.common.ResponseInfo;
 import com.google.android.libraries.ads.mobile.sdk.rewarded.OnUserEarnedRewardListener;
 import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardItem;
 import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAd;
+import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAdPreloader;
 import com.google.android.libraries.ads.mobile.sdk.rewarded.RewardedAdEventCallback;
 
-import java.util.concurrent.ScheduledFuture;
-
 public class MoneyBoostRewardVideoAdapter {
-    private int MoneyBoost_rewardRetryAttempt;
     public String MoneyBoost_ad_unit;
     public Activity MoneyBoost_activity;
     public MoneyBoostRewardVideoListener MoneyBoost_rewardVideoListener;
-    private boolean MoneyBoost_adReady = false;
-    private boolean MoneyBoost_isShowing = false;
-    private boolean MoneyBoost_isLoading = false;
-    private ScheduledFuture<?> MoneyBoost_retryFuture;
+    private volatile boolean MoneyBoost_isShowing = false;
+    private volatile boolean MoneyBoost_isLoading = false;
+    private boolean MoneyBoost_preloadingStarted;
 
-    private RewardedAd MoneyBoost_rewardedAd;
-    private final AdLoadCallback<RewardedAd> MoneyBoost_loadCallback = new AdLoadCallback<RewardedAd>() {
+    private final PreloadCallback MoneyBoost_preloadCallback = new PreloadCallback() {
         @Override
-        public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
-            if (MoneyBoost_activity == null) { rewardedAd.destroy(); return; }
+        public void onAdPreloaded(@NonNull String preloadId, @NonNull ResponseInfo responseInfo) {
+            if (MoneyBoost_activity == null) return;
             MoneyBoostAdDiagnostics.load("reward", MoneyBoost_ad_unit, "success", null);
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADREWARDLoaded");
             MoneyBoost_isLoading = false;
-            MoneyBoost_adReady = true;
-            MoneyBoost_rewardedAd = rewardedAd;
-            MoneyBoost_rewardRetryAttempt = 0;
-            MoneyBoostCancelRetry();
+
         }
 
         @Override
-        public void onAdFailedToLoad(@NonNull LoadAdError adError) {
+        public void onAdFailedToPreload(@NonNull String preloadId, @NonNull LoadAdError adError) {
             if (MoneyBoost_activity == null) return;
             MoneyBoostAdDiagnostics.load("reward", MoneyBoost_ad_unit, "failed", adError);
             Log.w("MoneyBoostAds", "Rewarded load failed unit=" + MoneyBoost_ad_unit + " code=" + adError.getCode() + " message=" + adError.getMessage());
@@ -51,13 +45,12 @@ public class MoneyBoostRewardVideoAdapter {
                     "LOADREWARDFailed code=" + adError.getCode()
                             + " message=" + adError.getMessage());
             MoneyBoost_isLoading = false;
-            MoneyBoost_adReady = false;
-            MoneyBoost_rewardedAd = null;
-            MoneyBoost_rewardRetryAttempt++;
-            long delay = (long) Math.pow(2, Math.min(6, MoneyBoost_rewardRetryAttempt));
-            MoneyBoostCancelRetry();
-            MoneyBoost_retryFuture = MoneyBoostAdRetryScheduler.scheduleSeconds(
-                    MoneyBoostRewardVideoAdapter.this::MoneyBoostLoadRewardVideoAd, delay);
+
+            // The registered SDK preloader owns retries and replenishment.
+        }
+        @Override
+        public void onAdsExhausted(@NonNull String preloadId) {
+            MoneyBoost_isLoading = false;
         }
     };
 
@@ -70,14 +63,15 @@ public class MoneyBoostRewardVideoAdapter {
     }
 
     public boolean MoneyBoostIsAdAvailable() {
-        return MoneyBoost_rewardedAd != null;
+        String unitId = MoneyBoostUnitId();
+        return unitId != null && RewardedAdPreloader.isAdAvailable(unitId);
     }
 
     public void MoneyBoostInitRewardVideoAdapter() {
         // 预加载在 MobileAds.initialize 完成后由 Load 触发
     }
 
-    public void MoneyBoostLoadRewardVideoAd() {
+    public synchronized void MoneyBoostLoadRewardVideoAd() {
         if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()) return;
         if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
             return;
@@ -86,16 +80,27 @@ public class MoneyBoostRewardVideoAdapter {
         if (unitId == null) {
             return;
         }
-        if (MoneyBoost_isLoading || MoneyBoost_isShowing || MoneyBoost_rewardedAd != null) {
+        if (MoneyBoost_preloadingStarted) {
             return;
         }
-        MoneyBoostCancelRetry();
+
         MoneyBoost_isLoading = true;
         MoneyBoostAdDiagnostics.load("reward", MoneyBoost_ad_unit, "requested", null);
         Log.i("MoneyBoostAds", "RewardVideo load requested unit=" + MoneyBoost_ad_unit);
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "LOADREWARD");
-        AdRequest adRequest = new AdRequest.Builder(unitId).build();
-        RewardedAd.load(adRequest, MoneyBoost_loadCallback);
+        MoneyBoost_preloadingStarted = true;
+        try {
+            AdRequest adRequest = new AdRequest.Builder(unitId).build();
+            if (!RewardedAdPreloader.start(unitId, new PreloadConfiguration(adRequest, 1), MoneyBoost_preloadCallback)) {
+                MoneyBoost_preloadingStarted = false;
+                MoneyBoost_isLoading = false;
+                MoneyBoostAdDiagnostics.load("reward", MoneyBoost_ad_unit, "preloader_rejected", null);
+            }
+        } catch (RuntimeException error) {
+            MoneyBoost_preloadingStarted = false;
+            MoneyBoost_isLoading = false;
+            throw error;
+        }
     }
 
     public void MoneyBoostShowRewardVideoAd() {
@@ -108,26 +113,35 @@ public class MoneyBoostRewardVideoAdapter {
             MoneyBoostNotifyFailedToShow();
             return;
         }
-        if (MoneyBoost_rewardedAd == null) {
+        if (!MoneyBoostIsAdAvailable()) {
             MoneyBoostNotifyFailedToShow();
             return;
         }
         MoneyBoost_activity.runOnUiThread(new Runnable() {
             public void run() {
-                final RewardedAd rewardedAd = MoneyBoost_rewardedAd;
-                MoneyBoost_rewardedAd = null;
-                if (rewardedAd == null) {
+                if (!MoneyBoostMediationManager.getInstance().MoneyBoostCanLoadAds()
+                        || MoneyBoost_activity == null || MoneyBoost_activity.isFinishing()
+                        || MoneyBoost_activity.isDestroyed()) {
                     MoneyBoostNotifyFailedToShow();
-                    MoneyBoostLoadRewardVideoAd();
                     return;
                 }
-                MoneyBoost_adReady = false;
+                if (MoneyBoost_isShowing) return;
+                final RewardedAd rewardedAd = RewardedAdPreloader.pollAd(unitId);
+                if (rewardedAd == null) {
+                    MoneyBoostNotifyFailedToShow();
+                    return;
+                }
+
+                MoneyBoost_isShowing = true;
+                final java.util.concurrent.atomic.AtomicBoolean finished =
+                        new java.util.concurrent.atomic.AtomicBoolean();
+                final java.util.concurrent.atomic.AtomicBoolean showFailed =
+                        new java.util.concurrent.atomic.AtomicBoolean();
                 rewardedAd.setAdEventCallback(new RewardedAdEventCallback() {
                     private boolean displayed;
-                    private boolean finished;
                     @Override
                     public synchronized void onAdShowedFullScreenContent() {
-                        if (finished || displayed) return;
+                        if (finished.get() || displayed) return;
                         displayed = true;
                         MoneyBoost_isShowing = true;
                         if (MoneyBoost_rewardVideoListener != null) {
@@ -137,27 +151,25 @@ public class MoneyBoostRewardVideoAdapter {
 
                     @Override
                     public synchronized void onAdDismissedFullScreenContent() {
-                        if (finished) return;
-                        finished = true;
+                        if (!finished.compareAndSet(false, true)) return;
                         MoneyBoost_isShowing = false;
-                        MoneyBoost_adReady = false;
+
                         rewardedAd.destroy();
                         if (MoneyBoost_rewardVideoListener != null) {
                             MoneyBoost_rewardVideoListener.MoneyBoostOnRewardVideoAdClosed();
                         }
-                        MoneyBoostLoadRewardVideoAd();
                     }
 
                     @Override
                     public synchronized void onAdFailedToShowFullScreenContent(
                             @NonNull com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError fullScreenContentError) {
-                        if (finished) return;
-                        finished = true;
-                        MoneyBoost_adReady = false;
-                        if (!MoneyBoost_isShowing) {
+                        if (!finished.compareAndSet(false, true)) return;
+
+                        showFailed.set(true);
+                        if (!displayed) {
+                            MoneyBoost_isShowing = false;
                             rewardedAd.destroy();
                             MoneyBoostNotifyFailedToShow();
-                            MoneyBoostLoadRewardVideoAd();
                             return;
                         }
                         MoneyBoost_isShowing = false;
@@ -165,7 +177,6 @@ public class MoneyBoostRewardVideoAdapter {
                         if (MoneyBoost_rewardVideoListener != null) {
                             MoneyBoost_rewardVideoListener.MoneyBoostOnRewardVideoAdClosed();
                         }
-                        MoneyBoostLoadRewardVideoAd();
                     }
 
                     @Override
@@ -184,25 +195,29 @@ public class MoneyBoostRewardVideoAdapter {
                 });
                 try {
                     rewardedAd.show(MoneyBoost_activity, new OnUserEarnedRewardListener() {
+                        private final java.util.concurrent.atomic.AtomicBoolean delivered =
+                                new java.util.concurrent.atomic.AtomicBoolean();
                         @Override
                         public void onUserEarnedReward(@NonNull RewardItem rewardItem) {
-                            if (MoneyBoost_rewardVideoListener != null) {
+                            if (!showFailed.get() && delivered.compareAndSet(false, true) && MoneyBoost_rewardVideoListener != null) {
                                 MoneyBoost_rewardVideoListener.MoneyBoostOnRewardVideoAdCompleted();
                             }
                         }
                     });
                 } catch (RuntimeException e) {
-                    MoneyBoost_isShowing = false;
-                    rewardedAd.destroy();
-                    MoneyBoostNotifyFailedToShow();
-                    MoneyBoostLoadRewardVideoAd();
+                    if (finished.compareAndSet(false, true)) {
+                        showFailed.set(true);
+                        MoneyBoost_isShowing = false;
+                        rewardedAd.destroy();
+                        MoneyBoostNotifyFailedToShow();
+                    }
                 }
             }
         });
     }
 
     public boolean MoneyBoostIsReady() {
-        return MoneyBoost_adReady && MoneyBoost_rewardedAd != null;
+        return MoneyBoostIsAdAvailable();
     }
 
     private void MoneyBoostNotifyFailedToShow() {
@@ -211,22 +226,16 @@ public class MoneyBoostRewardVideoAdapter {
         }
     }
 
-    public void MoneyBoostOnDestroy() {
-        MoneyBoostCancelRetry();
+    public synchronized void MoneyBoostOnDestroy() {
+
         MoneyBoost_isLoading = false;
         MoneyBoost_isShowing = false;
-        MoneyBoost_adReady = false;
-        if (MoneyBoost_rewardedAd != null) {
-            MoneyBoost_rewardedAd.destroy();
-            MoneyBoost_rewardedAd = null;
-        }
+
+        String unitId = MoneyBoostUnitId();
+        if (unitId != null) RewardedAdPreloader.destroy(unitId);
+        MoneyBoost_preloadingStarted = false;
         MoneyBoost_activity = null;
         MoneyBoost_rewardVideoListener = null;
-    }
-
-    private void MoneyBoostCancelRetry() {
-        MoneyBoostAdRetryScheduler.cancel(MoneyBoost_retryFuture);
-        MoneyBoost_retryFuture = null;
     }
 
     private String MoneyBoostUnitId() {

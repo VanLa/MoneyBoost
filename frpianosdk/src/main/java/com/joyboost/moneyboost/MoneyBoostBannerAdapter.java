@@ -16,12 +16,14 @@ import androidx.annotation.NonNull;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.android.libraries.ads.mobile.sdk.banner.AdSize;
+import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdPreloader;
+import com.google.android.libraries.ads.mobile.sdk.common.PreloadCallback;
+import com.google.android.libraries.ads.mobile.sdk.common.PreloadConfiguration;
 import com.google.android.libraries.ads.mobile.sdk.banner.AdView;
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAd;
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdEventCallback;
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdRequest;
 import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdRefreshCallback;
-import com.google.android.libraries.ads.mobile.sdk.common.AdLoadCallback;
 import com.google.android.libraries.ads.mobile.sdk.common.AdSourceResponseInfo;
 import com.google.android.libraries.ads.mobile.sdk.common.AdValue;
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError;
@@ -35,13 +37,34 @@ public class MoneyBoostBannerAdapter {
     private BannerAd MoneyBoost_bannerAd;
     private boolean MoneyBoost_isLoaded = false;
     private boolean MoneyBoost_isLoading = false;
-    private boolean MoneyBoost_collapsibleRequest = false;
+    private boolean preloadingStarted, destroyed;
+    private final String preloadId = "moneyboost_banner_" + java.util.UUID.randomUUID();
+    private final android.os.Handler refreshHandler = new android.os.Handler(Looper.getMainLooper());
+    private long lastTick, visibleMillis;
+    private volatile boolean currentImpressed;
+    private static final long REFRESH_VISIBLE_MS = 30000L;
+    private final Runnable refreshTick = new Runnable() {
+        @Override public void run() {
+            if (destroyed) return;
+            long now = android.os.SystemClock.elapsedRealtime();
+            long delta = Math.min(1000L, Math.max(0L, now - lastTick)); lastTick = now;
+            if (currentImpressed && !MoneyBoost_isCollapsiblePlacement && MoneyBoost_adView != null && MoneyBoost_adView.isShown()
+                    && MoneyBoostMediationManager.getInstance().MoneyBoostCanRefreshBannerAds()) {
+                visibleMillis += delta;
+                if (MoneyBoost_bannerAd != null && visibleMillis >= REFRESH_VISIBLE_MS) {
+                    try { pollBanner(true); }
+                    catch (RuntimeException error) { Log.w("MoneyBoostAds", "Banner inventory unavailable", error); }
+                }
+            }
+            refreshHandler.postDelayed(this, 1000L);
+        }
+    };
     private int MoneyBoost_loadGeneration = 0;
     private final AtomicInteger MoneyBoost_impressionCycle = new AtomicInteger(-1);
     private boolean MoneyBoost_isCollapsiblePlacement = false;
 
     public boolean MoneyBoostIsLoaded() {
-        return MoneyBoost_isLoaded;
+        return MoneyBoost_isLoaded || (preloadingStarted && BannerAdPreloader.isAdAvailable(preloadId));
     }
 
     public boolean MoneyBoostIsLoading() {
@@ -79,7 +102,6 @@ public class MoneyBoostBannerAdapter {
 
     /** Loads an AdMob collapsible banner anchored at the bottom. */
     public void MoneyBoostLoadCollapsibleBannerView() {
-        MoneyBoost_collapsibleRequest = true;
         MoneyBoost_isCollapsiblePlacement = true;
         // A collapsible request must be explicit even when a regular banner is cached.
         MoneyBoost_isLoaded = false;
@@ -91,7 +113,7 @@ public class MoneyBoostBannerAdapter {
         if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
             return;
         }
-        // resize/loadAd 必须主线程；开屏 dismiss 可能从 GMA(BG) 回调进来
+        // View registration and inventory consumption must run on the UI thread.
         if (Looper.myLooper() != Looper.getMainLooper()) {
             MoneyBoost_activity.runOnUiThread(this::MoneyBoostLoadBannerView);
             return;
@@ -99,13 +121,12 @@ public class MoneyBoostBannerAdapter {
         if (MoneyBoost_adView == null || MoneyBoost_ad_unit == null || MoneyBoost_ad_unit.trim().isEmpty()) {
             return;
         }
-        if (MoneyBoost_isLoading || MoneyBoost_isLoaded) {
-            return;
-        }
+        if (destroyed || preloadingStarted) return;
         MoneyBoost_isLoading = true;
         final String diagnosticFormat = MoneyBoost_isCollapsiblePlacement ? "collapsible" : "banner";
         MoneyBoostAdDiagnostics.load(diagnosticFormat, MoneyBoost_ad_unit, "requested", null);
         Log.i("MoneyBoostAds", "Banner load requested unit=" + MoneyBoost_ad_unit);
+        try {
         int widthDp = MoneyBoostGetScreenWidthDp(MoneyBoost_activity);
         AdSize adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(MoneyBoost_activity, widthDp);
         if (adSize == null) {
@@ -113,50 +134,70 @@ public class MoneyBoostBannerAdapter {
         }
         MoneyBoost_adView.resize(adSize);
         BannerAdRequest.Builder requestBuilder = new BannerAdRequest.Builder(MoneyBoost_ad_unit.trim(), adSize);
-        if (MoneyBoost_collapsibleRequest) {
+        if (MoneyBoost_isCollapsiblePlacement) {
             Bundle extras = new Bundle();
             extras.putString("collapsible", "bottom");
             requestBuilder.setGoogleExtrasBundle(extras);
-            MoneyBoost_collapsibleRequest = false;
         }
         BannerAdRequest adRequest = requestBuilder.build();
         final int generation = MoneyBoost_loadGeneration;
         final Activity requestActivity = MoneyBoost_activity;
-        MoneyBoost_adView.loadAd(adRequest, new AdLoadCallback<BannerAd>() {
-            @Override
-            public void onAdLoaded(@NonNull BannerAd bannerAd) {
-                requestActivity.runOnUiThread(() -> {
-                    if (generation != MoneyBoost_loadGeneration) {
-                        bannerAd.destroy();
-                        return;
-                    }
-                    MoneyBoostAdDiagnostics.load(diagnosticFormat, MoneyBoost_ad_unit, "success", null);
-                    MoneyBoost_isLoading = false;
-                    MoneyBoost_onBannerLoaded(bannerAd);
-                });
+        preloadingStarted = true;
+            boolean started = BannerAdPreloader.start(preloadId, new PreloadConfiguration(adRequest, 1), new PreloadCallback() {
+                @Override public void onAdPreloaded(String id, ResponseInfo info) {
+                    requestActivity.runOnUiThread(() -> {
+                        if (destroyed || generation != MoneyBoost_loadGeneration) return;
+                        MoneyBoostAdDiagnostics.load(diagnosticFormat, MoneyBoost_ad_unit, "success", null);
+                        MoneyBoost_isLoading = false;
+                        MoneyBoostMediationManager.getInstance().MoneyBoostOnBannerAdLoaded();
+                    });
+                }
+                @Override public void onAdFailedToPreload(String id, LoadAdError error) {
+                    if (destroyed || generation != MoneyBoost_loadGeneration) return;
+                    MoneyBoostAdDiagnostics.load(diagnosticFormat, MoneyBoost_ad_unit, "failed", error);
+                    // Google owns failed-request retry/backoff. Keep the registered configuration.
+                }
+                @Override public void onAdsExhausted(String id) { }
+            });
+            if (!started) { preloadingStarted = false; MoneyBoost_isLoading = false; }
+            else {
+                lastTick = android.os.SystemClock.elapsedRealtime();
+                refreshHandler.removeCallbacks(refreshTick);
+                refreshHandler.postDelayed(refreshTick, 1000L);
+                if (BannerAdPreloader.isAdAvailable(preloadId))
+                    MoneyBoostMediationManager.getInstance().MoneyBoostOnBannerAdLoaded();
             }
+        } catch (RuntimeException error) {
+            preloadingStarted = false; MoneyBoost_isLoading = false;
+            Log.w("MoneyBoostAds", "Banner preloader registration unavailable", error);
+        }
+    }
 
-            @Override
-            public void onAdFailedToLoad(@NonNull LoadAdError adError) {
-                    Log.w("MoneyBoostAds", "Banner load failed unit=" + MoneyBoost_ad_unit + " code=" + adError.getCode() + " message=" + adError.getMessage());
-                requestActivity.runOnUiThread(() -> {
-                    if (generation != MoneyBoost_loadGeneration) return;
-                    MoneyBoostAdDiagnostics.load(diagnosticFormat, MoneyBoost_ad_unit, "failed", adError);
-                    MoneyBoost_isLoading = false;
-                    MoneyBoost_isLoaded = false;
-                    MoneyBoostMediationManager.getInstance().MoneyBoostOnBannerAdFailedToLoad(MoneyBoostBannerAdapter.this);
-                    MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=========", "BannerLoadFailed" + adError.getMessage());
-                });
-            }
-        });
+    private void pollBanner(boolean replacing) {
+        if (destroyed || !preloadingStarted || !BannerAdPreloader.isAdAvailable(preloadId)) return;
+        if (replacing && (MoneyBoost_isCollapsiblePlacement || MoneyBoost_adView == null || !MoneyBoost_adView.isShown()
+                || !MoneyBoostMediationManager.getInstance().MoneyBoostCanRefreshBannerAds())) return;
+        BannerAd next = BannerAdPreloader.pollAd(preloadId);
+        if (next == null) return; // Keep the current banner if inventory temporarily runs out.
+        try {
+            MoneyBoost_onBannerLoaded(next);
+            MoneyBoost_adView.registerBannerAd(next, MoneyBoost_activity);
+            visibleMillis = 0;
+        } catch (RuntimeException error) {
+            if (MoneyBoost_bannerAd == next) MoneyBoost_bannerAd = null;
+            next.destroy(); MoneyBoost_isLoaded = false;
+            Log.w("MoneyBoostAds", "Banner rendering unavailable", error);
+        }
     }
 
     private void MoneyBoost_onBannerLoaded(@NonNull BannerAd bannerAd) {
         MoneyBoost_isLoaded = true;
         if (MoneyBoost_bannerAd != null) {
+            if (MoneyBoost_adView != null) MoneyBoost_adView.unregisterBannerAd();
             MoneyBoost_bannerAd.destroy();
         }
         MoneyBoost_bannerAd = bannerAd;
+        currentImpressed = false;
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug(
                 "=========", "BannerLoaded:" + MoneyBoostResolveNetworkName(bannerAd)
                         + " collapsible=" + bannerAd.isCollapsible());
@@ -166,6 +207,9 @@ public class MoneyBoostBannerAdapter {
         bannerAd.setBannerAdRefreshCallback(new BannerAdRefreshCallback() {
             @Override
             public void onAdRefreshed() {
+                if (generation != MoneyBoost_loadGeneration || MoneyBoost_bannerAd != bannerAd) return;
+                visibleMillis = 0;
+                currentImpressed = false;
                 cycle.set(MoneyBoost_impressionCycle.incrementAndGet());
             }
         });
@@ -173,11 +217,13 @@ public class MoneyBoostBannerAdapter {
             @Override
             public void onAdImpression() {
                 if (generation != MoneyBoost_loadGeneration || MoneyBoost_bannerAd != bannerAd) return;
-                MoneyBoostMediationManager.getInstance().MoneyBoostOnBannerImpression(MoneyBoostBannerAdapter.this, cycle.get());
+                currentImpressed = true;
+                MoneyBoostMediationManager.getInstance().MoneyBoostOnBannerImpression(MoneyBoostBannerAdapter.this, cycle.get(), bannerAd.isCollapsible());
             }
 
             @Override
             public void onAdPaid(@NonNull AdValue adValue) {
+                if (generation != MoneyBoost_loadGeneration || MoneyBoost_bannerAd != bannerAd || adValue == null) return;
                 double revenue = adValue.getValueMicros() / 1_000_000.0;
                 MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseRevenue(
                         revenue, MoneyBoost_isCollapsiblePlacement ? "COLLAPSIBLE_BANNER" : "BANNER", MoneyBoostResolveNetworkName(bannerAd), MoneyBoost_ad_unit);
@@ -221,10 +267,9 @@ public class MoneyBoostBannerAdapter {
                 if (MoneyBoost_adView == null) {
                     return;
                 }
-                if (!MoneyBoost_isLoaded) {
-                    MoneyBoostLoadBannerView();
-                }
-                MoneyBoost_adView.setVisibility(View.VISIBLE);
+                if (!preloadingStarted) MoneyBoostLoadBannerView();
+                if (MoneyBoost_bannerAd == null) pollBanner(false);
+                MoneyBoost_adView.setVisibility(MoneyBoost_bannerAd != null ? View.VISIBLE : View.GONE);
             }
         });
     }
@@ -278,7 +323,10 @@ public class MoneyBoostBannerAdapter {
             return;
         }
         Runnable bring = () -> {
-            if (MoneyBoost_adView != null) {
+            if (MoneyBoost_adView != null && MoneyBoost_adView.isShown()
+                    && MoneyBoost_adView.getParent() instanceof ViewGroup
+                    && ((ViewGroup)MoneyBoost_adView.getParent()).indexOfChild(MoneyBoost_adView)
+                    != ((ViewGroup)MoneyBoost_adView.getParent()).getChildCount() - 1) {
                 MoneyBoost_adView.bringToFront();
             }
         };
@@ -294,19 +342,24 @@ public class MoneyBoostBannerAdapter {
     }
 
     public void MoneyBoostPauseAutoRefresh() {
-        // GMA Next-Gen banner auto-refresh is controlled in AdMob console; no-op here.
+        // Visibility/foreground gate in refreshTick pauses visible-time rotation.
     }
 
     public void MoneyBoostResumeAutoRefresh() {
-        // GMA Next-Gen banner auto-refresh is controlled in AdMob console; no-op here.
+        // Visibility/foreground gate in refreshTick pauses visible-time rotation.
     }
 
     public void MoneyBoostOnDestroy() {
+        if (destroyed) return;
+        destroyed = true;
         MoneyBoost_loadGeneration++;
-        MoneyBoost_collapsibleRequest = false;
+        refreshHandler.removeCallbacks(refreshTick);
+        if (preloadingStarted) BannerAdPreloader.destroy(preloadId);
+        preloadingStarted = false;
         MoneyBoost_isLoaded = false;
         MoneyBoost_isLoading = false;
         if (MoneyBoost_bannerAd != null) {
+            if (MoneyBoost_adView != null) MoneyBoost_adView.unregisterBannerAd();
             MoneyBoost_bannerAd.destroy();
             MoneyBoost_bannerAd = null;
         }

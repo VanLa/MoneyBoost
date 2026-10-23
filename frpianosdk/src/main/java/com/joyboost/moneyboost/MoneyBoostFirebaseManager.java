@@ -70,6 +70,10 @@ public class MoneyBoostFirebaseManager {
         return instance;
     }
 
+    public synchronized void MoneyBoostEnsureFirebaseAnalytics(Context context) {
+        if (MoneyBoostFirebaseAnalytics == null) MoneyBoostInitFirebaseAnalytics(context);
+    }
+
     public synchronized void MoneyBoostInitFirebaseAnalytics(Context context){
         mContext = context;
         MoneyBoostFirebaseAnalytics = FirebaseAnalytics.getInstance(context);
@@ -199,8 +203,8 @@ public class MoneyBoostFirebaseManager {
 //        PostHog.with(mContext).capture("setUserProps",new Properties().putValue("$set",userProps));
     }
 
-    public void MoneyBoostLogFirebaseRevenue(Double revenue, String ad_format, String network_name, String unit_id){
-        if (revenue == null) {
+    public synchronized void MoneyBoostLogFirebaseRevenue(Double revenue, String ad_format, String network_name, String unit_id){
+        if (revenue == null || !Double.isFinite(revenue) || revenue < 0) {
             return;
         }
         if (MoneyBoostFirebaseAnalytics == null && mContext != null) {
@@ -218,8 +222,8 @@ public class MoneyBoostFirebaseManager {
         params.putDouble(FirebaseAnalytics.Param.VALUE, revenue);
         params.putString(FirebaseAnalytics.Param.CURRENCY, "USD");
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug("=====MoneyBoostFirebase","Ad_Impression_Revenue:"+ad_format+"==="+revenue);
-        //Aro
-        MoneyBoostFirebaseAnalytics.logEvent(FirebaseAnalytics.Event.AD_IMPRESSION, params);
+        // AdMob/Firebase owns the standard ad_impression event. Sending it here doubles revenue.
+        // Keep the two separate Taichi events for hosts using Taichi optimization.
         //Taichi
         MoneyBoostFirebaseAnalytics.logEvent("Ad_Impression_Revenue", params);// 给Taichi用
         if (MoneyBoost_taichiPref == null || MoneyBoost_taichiSharedPreferencesEditor == null) {

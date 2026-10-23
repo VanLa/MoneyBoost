@@ -8,13 +8,13 @@ p = Path(tempfile.mkdtemp(prefix='moneyboost-ump-test-'))
 (p/'sdk.jar').write_bytes(ZipFile(root/'frpianosdk/build/outputs/aar/frpianosdk-release.aar').read('classes.jar'))
 cache=Path.home()/'.gradle/caches/modules-2/files-2.1'
 for label, pattern in [('ump','com.google.android.ump/user-messaging-platform/4.0.0/**/*.aar'),
-                       ('gma','com.google.android.libraries.ads.mobile.sdk/ads-mobile-sdk/1.5.0/**/*.aar')]:
+                       ('gma','com.google.android.libraries.ads.mobile.sdk/ads-mobile-sdk/1.6.0/**/*.aar')]:
     (p/(label+'.jar')).write_bytes(ZipFile(next(cache.glob(pattern))).read('classes.jar'))
 stubs={
 'android/os/Bundle.java':'package android.os; public class Bundle extends java.util.HashMap<String,Object> { public Bundle(){} public Bundle(Bundle b){super(b);} public void putString(String k,String v){put(k,v);} public void putLong(String k,long v){put(k,v);} public String getString(String k){return (String)get(k);} public long getLong(String k){return ((Number)get(k)).longValue();} }',
 'android/os/SystemClock.java':'package android.os; public class SystemClock { public static long elapsedRealtime(){return 1000;} }',
 
-'android/os/Looper.java':'package android.os; public class Looper { public static Looper getMainLooper(){return new Looper();} public static Looper myLooper(){return getMainLooper();} }',
+'android/os/Looper.java':'package android.os; public class Looper { static final Looper MAIN=new Looper();public static Looper getMainLooper(){return MAIN;} public static Looper myLooper(){return getMainLooper();} }',
 'android/os/Handler.java':'package android.os; public class Handler { public Handler(Looper l){} public boolean post(Runnable r){r.run();return true;} public boolean postDelayed(Runnable r,long d){return true;} public void removeCallbacks(Runnable r){} }',
 'android/util/Log.java':'package android.util; public class Log { public static int i(String t,String m){return 0;} public static int w(String t,String m){return 0;} public static int w(String t,String m,Throwable e){return 0;} public static int e(String t,String m,Throwable e){throw new AssertionError(m,e);} }',
 'com/joyboost/moneyboost/MoneyBoostFirebaseManager.java':'package com.joyboost.moneyboost; public class MoneyBoostFirebaseManager { static final MoneyBoostFirebaseManager VALUE=new MoneyBoostFirebaseManager(); public static MoneyBoostFirebaseManager instance(){return VALUE;} public void MoneyBoostApplyConsentFromUmp(boolean eligible,boolean personalized) {if(personalized)throw new AssertionError("inferred personalization");} public void MoneyBoostLogFirebaseEvent(String n,String p){} public static final java.util.List<String> events=new java.util.ArrayList<>(); public static final java.util.List<android.os.Bundle> payloads=new java.util.ArrayList<>(); public static boolean fail; public void MoneyBoostLogDiagnostic(String n,android.os.Bundle p){if(fail)throw new IllegalStateException("telemetry offline");events.add(n);payloads.add(p);} }'

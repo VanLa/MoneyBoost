@@ -57,10 +57,10 @@ dependencies {
 
     // --- GMA Next-Gen SDK（AdMob 主聚合；Google 库存内置，无需再加 google-adapter）
     // https://developers.google.com/admob/android/next-gen/quick-start
-    implementation 'com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.5.0'
+    implementation 'com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.6.0'
 
     // --- Meta Audience Network bidding via the AdMob Next-Gen-compatible adapter.
-    // Official pairing: Next-Gen 1.5.0 + adapter 6.22.0.1 + Audience Network 6.22.0.
+    // Official integration: Next-Gen 1.6.0 + adapter 6.22.0.1 + Audience Network 6.22.0.
     // Do not add facebook-android-sdk (login/social SDK) or the legacy GMA SDK.
     // https://developers.google.com/admob/android/next-gen/mediation/meta
     implementation 'com.google.ads.mediation:facebook:6.22.0.1'
