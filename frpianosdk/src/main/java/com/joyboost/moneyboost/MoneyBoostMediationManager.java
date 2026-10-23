@@ -119,6 +119,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     private String MoneyBoost_interKey = "";
     private String MoneyBoost_rewardKey = "";
     private String MoneyBoost_bannerKey = "";
+    private String MoneyBoost_collapsibleBannerKey = "";
     private String MoneyBoost_splashKey = "";
     private String MoneyBoost_nativeHomeKey = "", MoneyBoost_nativeAlbumKey = "", MoneyBoost_nativeActionKey = "";
     private final java.util.Map<String, MoneyBoostNativeAdapter> MoneyBoost_nativeAds = new java.util.concurrent.ConcurrentHashMap<>();
@@ -368,6 +369,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             MoneyBoost_rewardKey = appInfo.metaData.getString("MoneyBoost_REWARDED_ID");
             MoneyBoost_splashKey = appInfo.metaData.getString("MoneyBoost_SPLASH_ID");
             MoneyBoost_bannerKey = appInfo.metaData.getString("MoneyBoost_BANNER_ID");
+            MoneyBoost_collapsibleBannerKey = MoneyBoostResolveCollapsibleBannerUnit(
+                    appInfo.metaData.getString("MoneyBoost_COLLAPSIBLE_BANNER_ID", ""), MoneyBoost_bannerKey);
             MoneyBoost_nativeHomeKey = appInfo.metaData.getString("MoneyBoost_NATIVE_HOME_ID", "");
             MoneyBoost_nativeAlbumKey = appInfo.metaData.getString("MoneyBoost_NATIVE_ALBUM_ID", "");
             MoneyBoost_nativeActionKey = appInfo.metaData.getString("MoneyBoost_NATIVE_ACTION_ID", "");
@@ -384,6 +387,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoostAdDiagnostics.config("reward", MoneyBoost_rewardKey);
         MoneyBoostAdDiagnostics.config("splash", MoneyBoost_splashKey);
         MoneyBoostAdDiagnostics.config("banner", MoneyBoost_bannerKey);
+        MoneyBoostAdDiagnostics.config("collapsible", MoneyBoost_collapsibleBannerKey);
         try {
             ConsentRequestParameters params = new ConsentRequestParameters.Builder().build();
             consentInformation = UserMessagingPlatform.getConsentInformation(activity);
@@ -998,15 +1002,18 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         boolean blocked = MoneyBoostShouldBlockBannerDisplay();
         boolean collapsibleReady = MoneyBoost_collapsibleActive
                 && MoneyBoost_collapsibleAdapter != null && MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded();
-        // Keep the regular banner cached. Only one banner view is visible at a time.
-        if (blocked || collapsibleReady) {
+        // Register/show the replacement before hiding the current bottom view.
+        if (blocked) {
             MoneyBoost_bannerAdapter.MoneyBoostHideBannerView();
-        } else {
-            MoneyBoost_bannerAdapter.MoneyBoostShowBannerView();
+            if (MoneyBoost_collapsibleAdapter != null) MoneyBoost_collapsibleAdapter.MoneyBoostHideBannerView();
+            return;
         }
-        if (MoneyBoost_collapsibleAdapter != null) {
-            if (!blocked && collapsibleReady) MoneyBoost_collapsibleAdapter.MoneyBoostShowBannerView();
-            else MoneyBoost_collapsibleAdapter.MoneyBoostHideBannerView();
+        if (collapsibleReady) MoneyBoost_collapsibleAdapter.MoneyBoostShowBannerView();
+        boolean collapsibleVisible = collapsibleReady && MoneyBoost_collapsibleAdapter.MoneyBoostIsVisible();
+        if (collapsibleVisible) MoneyBoost_bannerAdapter.MoneyBoostHideBannerView();
+        else {
+            MoneyBoost_bannerAdapter.MoneyBoostShowBannerView();
+            if (MoneyBoost_collapsibleAdapter != null) MoneyBoost_collapsibleAdapter.MoneyBoostHideBannerView();
         }
     }
 
@@ -1024,6 +1031,11 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     //////////////////////////////////////////////////////////////////////Collapsible Banner////////////////////////////////////////////////////////////////////////////////
+
+    static String MoneyBoostResolveCollapsibleBannerUnit(String collapsible, String banner) {
+        return collapsible != null && !collapsible.trim().isEmpty() ? collapsible.trim()
+                : banner == null ? "" : banner.trim();
+    }
 
     /** Explicit bottom-anchored expansion; prevent duplicate requests while active. */
     public void MoneyBoostShowCollapsibleBannerView(){
@@ -1050,7 +1062,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         // Preserve the normal banner so Hide can restore it without a new network load.
         MoneyBoost_collapsibleAdapter = new MoneyBoostBannerAdapter();
         MoneyBoost_collapsibleAdapter.MoneyBoost_activity = MoneyBoost_activity;
-        MoneyBoost_collapsibleAdapter.MoneyBoost_ad_unit = MoneyBoost_bannerKey;
+        MoneyBoost_collapsibleAdapter.MoneyBoost_ad_unit = MoneyBoost_collapsibleBannerKey;
         MoneyBoost_collapsibleAdapter.MoneyBoostInitBannerAdapter();
         MoneyBoost_collapsibleActive = true;
         if (!MoneyBoost_bannerEnabled) {
@@ -1067,6 +1079,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             return;
         }
         MoneyBoost_collapsibleActive = false;
+        MoneyBoostSyncBannerVisibility();
         if (MoneyBoost_collapsibleAdapter != null) {
             MoneyBoost_collapsibleAdapter.MoneyBoostOnDestroy();
             MoneyBoost_collapsibleAdapter = null;

@@ -42,6 +42,7 @@
         <!-- 以下为 Google 官方测试广告位；正式包替换为 AdMob 后台创建的标准广告位（非 Partner bidding） -->
         <meta-data android:name="MoneyBoost_INTERSTITIAL_ID" android:value="ca-app-pub-3940256099942544/1033173712"/>
         <meta-data android:name="MoneyBoost_REWARDED_ID" android:value="ca-app-pub-3940256099942544/5224354917"/>
+        <meta-data android:name="MoneyBoost_COLLAPSIBLE_BANNER_ID" android:value="ca-app-pub-3940256099942544/9214589741"/>
         <meta-data android:name="MoneyBoost_BANNER_ID" android:value="ca-app-pub-3940256099942544/9214589741"/>
         <meta-data android:name="MoneyBoost_SPLASH_ID" android:value="ca-app-pub-3940256099942544/9257395921"/>
 

@@ -70,3 +70,13 @@ No Maven remote publication, Ads campaign change or production ID configuration 
 - Final IPU-priority refinement: album retains its original collapsible request even when Native is enabled. Native renders only when no collapsible request occupies the page; no forced Native-for-fold replacement. Action now has an independent Native row after two pairs of actions (or at the end of a shorter list), without replacing its fold opportunity. `MoneyBoost_NATIVE_ACTION_ID` configures it; Java demo includes Action Load/Show buttons.
 
 The source repository has been consolidated into `/Volumes/ExMemory/SDK/MoneyBoost`; there is no separate source-fix worktree. Action Native uses the same official NativeAdPreloader and event contract (`placement=action`, `scene=native_action`) as Home/Album. Production without an Action unit ID disables the placement; development uses official test ads.
+
+## Dedicated collapsible Banner unit and bottom-view continuity
+
+- Optional host metadata `MoneyBoost_COLLAPSIBLE_BANNER_ID` selects the dedicated fold unit. Missing, empty or whitespace values fall back to `MoneyBoost_BANNER_ID`, preserving legacy hosts. Ordinary Banner keeps its existing unit. The Java demo contains the new key with an official test Banner unit.
+- Both configurations still use `BannerAdPreloader.start/isAdAvailable/pollAd/destroy`. No single-load API or custom inventory/retry queue was introduced.
+- Pending/failed fold rendering leaves ordinary Banner visible; a registered visible fold is shown before hiding ordinary Banner. Closing the fold restores ordinary Banner before destroying the fold renderer.
+- Ordinary rotation registers a hidden candidate view before replacing the displayed view. No inventory or a registration error keeps the previous rendered ad. Old callbacks remain fenced; new impression events carry their own unit ID and are deduplicated by actual refresh cycle. Count events contain no revenue.
+- Unity optionally exports `collapsibleBannerAdUnitId` from MoneyBoostNativeSettings. Blank leaves existing host metadata untouched; absent dedicated metadata means SDK legacy fallback. Release rejects official test IDs in this override.
+- Real compiled-manager handoff tests cover unavailable inventory, failed show, order of view swaps/restoration, separate unit attribution, duplicate callbacks and count-only telemetry. Android transport tests inject view registration failure and verify the old Banner survives.
+- This prevents application-controlled blank handoffs; it cannot guarantee a filled ad before the first successful request or during a total lack of eligible inventory. Background/fullscreen/no-ads exclusions remain.

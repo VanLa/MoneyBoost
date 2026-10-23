@@ -179,25 +179,57 @@ public class MoneyBoostBannerAdapter {
                 || !MoneyBoostMediationManager.getInstance().MoneyBoostCanRefreshBannerAds())) return;
         BannerAd next = BannerAdPreloader.pollAd(preloadId);
         if (next == null) return; // Keep the current banner if inventory temporarily runs out.
+        AdView candidate = null;
         try {
-            MoneyBoost_onBannerLoaded(next);
-            MoneyBoost_adView.registerBannerAd(next, MoneyBoost_activity);
-            visibleMillis = 0;
+            if (MoneyBoost_activity == null || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
+                next.destroy(); return;
+            }
+            ViewGroup root = MoneyBoost_activity.findViewById(android.R.id.content);
+            AdSize size = next.getAdSize();
+            if (root == null || size == null) { next.destroy(); return; }
+            // Prepare a hidden Google AdView; leave the displayed view untouched until registration succeeds.
+            candidate = new AdView(MoneyBoost_activity);
+            candidate.setVisibility(View.GONE);
+            candidate.setBackgroundColor(Color.TRANSPARENT);
+            candidate.resize(size);
+            FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, size.getHeightInPixels(MoneyBoost_activity));
+            layout.gravity = Gravity.BOTTOM;
+            MoneyBoostBindBannerCallbacks(next);
+            candidate.registerBannerAd(next, MoneyBoost_activity);
+            root.addView(candidate, layout);
         } catch (RuntimeException error) {
-            if (MoneyBoost_bannerAd == next) MoneyBoost_bannerAd = null;
-            next.destroy(); MoneyBoost_isLoaded = false;
-            Log.w("MoneyBoostAds", "Banner rendering unavailable", error);
+            if (candidate != null) {
+                candidate.unregisterBannerAd();
+                ViewParent parent = candidate.getParent();
+                if (parent instanceof ViewGroup) ((ViewGroup)parent).removeView(candidate);
+                candidate.destroy();
+            }
+            next.destroy();
+            Log.w("MoneyBoostAds", "Banner replacement unavailable; retaining current banner", error);
+            return;
         }
+        AdView previousView = MoneyBoost_adView;
+        BannerAd previousAd = MoneyBoost_bannerAd;
+        boolean wasVisible = previousView != null && previousView.getVisibility() == View.VISIBLE;
+        MoneyBoost_adView = candidate;
+        MoneyBoost_bannerAd = next;
+        MoneyBoost_isLoaded = true;
+        currentImpressed = false;
+        visibleMillis = 0;
+        // Expose the replacement before releasing the previous renderer.
+        candidate.setVisibility(wasVisible ? View.VISIBLE : View.GONE);
+        if (previousView != null) {
+            previousView.setVisibility(View.GONE);
+            previousView.unregisterBannerAd();
+            ViewParent parent = previousView.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup)parent).removeView(previousView);
+            previousView.destroy();
+        }
+        if (previousAd != null) previousAd.destroy();
     }
 
-    private void MoneyBoost_onBannerLoaded(@NonNull BannerAd bannerAd) {
-        MoneyBoost_isLoaded = true;
-        if (MoneyBoost_bannerAd != null) {
-            if (MoneyBoost_adView != null) MoneyBoost_adView.unregisterBannerAd();
-            MoneyBoost_bannerAd.destroy();
-        }
-        MoneyBoost_bannerAd = bannerAd;
-        currentImpressed = false;
+    private void MoneyBoostBindBannerCallbacks(@NonNull BannerAd bannerAd) {
         MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug(
                 "=========", "BannerLoaded:" + MoneyBoostResolveNetworkName(bannerAd)
                         + " collapsible=" + bannerAd.isCollapsible());
@@ -227,29 +259,6 @@ public class MoneyBoostBannerAdapter {
                 double revenue = adValue.getValueMicros() / 1_000_000.0;
                 MoneyBoostFirebaseManager.instance().MoneyBoostLogFirebaseRevenue(
                         revenue, MoneyBoost_isCollapsiblePlacement ? "COLLAPSIBLE_BANNER" : "BANNER", MoneyBoostResolveNetworkName(bannerAd), MoneyBoost_ad_unit);
-            }
-        });
-        if (MoneyBoost_adView == null || MoneyBoost_activity == null
-                || MoneyBoost_activity.isFinishing() || MoneyBoost_activity.isDestroyed()) {
-            return;
-        }
-        AdSize loadedSize = bannerAd.getAdSize();
-        if (loadedSize == null) {
-            return;
-        }
-        final int heightPx = loadedSize.getHeightInPixels(MoneyBoost_activity);
-        MoneyBoost_activity.runOnUiThread(new Runnable() {
-            public void run() {
-                if (MoneyBoost_adView == null) {
-                    return;
-                }
-                ViewGroup.LayoutParams params = MoneyBoost_adView.getLayoutParams();
-                if (params != null && params.height != heightPx) {
-                    params.height = heightPx;
-                    MoneyBoost_adView.setLayoutParams(params);
-                }
-                // 加载完成后再 Sync：Init 前 Unity 调 ShowBanner 时 adapter 还空，否则会一直 GONE 到插屏关闭
-                MoneyBoostMediationManager.getInstance().MoneyBoostOnBannerAdLoaded();
             }
         });
     }
