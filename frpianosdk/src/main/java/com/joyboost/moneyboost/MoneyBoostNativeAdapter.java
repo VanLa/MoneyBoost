@@ -28,6 +28,17 @@ final class MoneyBoostNativeAdapter {
     private final boolean compact, tile;
     private volatile NativeAd ad;
     private NativeAdView view;
+    private TouchHost touchHost;
+    /** Clip drawing and hit testing together; hidden portions must pass touches to the game. */
+    private static final class TouchHost extends FrameLayout {
+        int left,top,right,bottom;
+        TouchHost(Activity activity){super(activity);}
+        @Override public boolean dispatchTouchEvent(android.view.MotionEvent event){
+            if(event.getActionMasked()==android.view.MotionEvent.ACTION_DOWN
+                    && (event.getX()<left || event.getX()>=right || event.getY()<top || event.getY()>=bottom))return false;
+            return super.dispatchTouchEvent(event);
+        }
+    }
     private FrameLayout hostContainer;
     private TextView headlineView, badgeView;
     private Button ctaView;
@@ -156,10 +167,10 @@ final class MoneyBoostNativeAdapter {
         if (destroyed || hostContainer == container) return;
         hostContainer = container;
         if (view != null) {
-            ViewGroup parent = (ViewGroup)view.getParent();
-            if (parent != null) parent.removeView(view);
+            ViewGroup parent = (ViewGroup)touchHost.getParent();
+            if (parent != null) parent.removeView(touchHost);
             ViewGroup target = container != null ? container : root();
-            if (target != null) target.addView(view, new FrameLayout.LayoutParams(-1, -1));
+            if (target != null) target.addView(touchHost, new FrameLayout.LayoutParams(-1, -1));
         }
         sync();
     }
@@ -212,6 +223,8 @@ final class MoneyBoostNativeAdapter {
         if (view == null) return;
         if(clipped){clipBounds.set(visibleLeft-left,visibleTop-top,visibleRight-left,visibleBottom-top);view.setClipBounds(clipBounds);}
         else view.setClipBounds(null);
+        touchHost.left=clipped?visibleLeft-left:0;touchHost.top=clipped?visibleTop-top:0;
+        touchHost.right=clipped?visibleRight-left:w;touchHost.bottom=clipped?visibleBottom-top:h;
         if (hostContainer != null) {
             int[] rootAt = new int[2], slotAt = new int[2];
             root.getLocationOnScreen(rootAt); hostContainer.getLocationOnScreen(slotAt);
@@ -221,10 +234,13 @@ final class MoneyBoostNativeAdapter {
         if (!(old instanceof FrameLayout.LayoutParams) || old.width != w || old.height != h) {
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(w, h);
             params.gravity = Gravity.TOP | Gravity.LEFT; view.setLayoutParams(params);
+            touchHost.setLayoutParams(new FrameLayout.LayoutParams(w,h));
         }
+        ViewGroup.LayoutParams hostParams=touchHost.getLayoutParams();
+        if(hostParams.width!=w || hostParams.height!=h)touchHost.setLayoutParams(new FrameLayout.LayoutParams(w,h));
         // Moving a scrolled item must not request a measure/layout of Unity's entire Android root.
-        if (view.getTranslationX() != left) view.setTranslationX(left);
-        if (view.getTranslationY() != top) view.setTranslationY(top);
+        if (touchHost.getTranslationX() != left) touchHost.setTranslationX(left);
+        if (touchHost.getTranslationY() != top) touchHost.setTranslationY(top);
         if(tile){
             if(ctaView!=null){int size=Math.max(dp(32),Math.min(dp(48),Math.round(h*.28f)));
                 if(ctaView.getLayoutParams().height!=size)ctaView.setLayoutParams(new LinearLayout.LayoutParams(-1,size));}
@@ -244,6 +260,7 @@ final class MoneyBoostNativeAdapter {
         ViewGroup root = root();
         if (root == null || ad == null) return;
         view = new NativeAdView(activity);
+        touchHost = new TouchHost(activity);
         view.setVisibility(View.GONE);
         if (compact) { createCompactContent(root); return; }
         if (tile) { createTileContent(root); return; }
@@ -273,7 +290,7 @@ final class MoneyBoostNativeAdapter {
         applyStyle(MoneyBoostMediationManager.getInstance().MoneyBoostGetNativeStyle());
         // Never register manual impression/click handlers or make the background clickable.
         ViewGroup parent = hostContainer != null ? hostContainer : root;
-        parent.addView(view, new FrameLayout.LayoutParams(dp(300), dp(200)));
+        attachView(parent,dp(300),dp(200));
         view.registerNativeAd(ad, media);
     }
 
@@ -301,7 +318,7 @@ final class MoneyBoostNativeAdapter {
         }
         applyStyle(MoneyBoostMediationManager.getInstance().MoneyBoostGetNativeStyle());
         ViewGroup parent = hostContainer != null ? hostContainer : root;
-        parent.addView(view, new FrameLayout.LayoutParams(dp(300), dp(48)));
+        attachView(parent,dp(300),dp(48));
         view.registerNativeAd(ad, null);
     }
 
@@ -319,7 +336,7 @@ final class MoneyBoostNativeAdapter {
         if(ad.getCallToAction()!=null){ctaView=new Button(activity);ctaView.setAllCaps(false);ctaView.setPadding(dp(4),0,dp(4),0);ctaView.setText(limit(ad.getCallToAction(),15));
             column.addView(ctaView,new LinearLayout.LayoutParams(-1,dp(48)));view.setCallToActionView(ctaView);}
         applyStyle(MoneyBoostMediationManager.getInstance().MoneyBoostGetNativeStyle());
-        ViewGroup parent=hostContainer!=null?hostContainer:root;parent.addView(view,new FrameLayout.LayoutParams(dp(120),dp(160)));
+        ViewGroup parent=hostContainer!=null?hostContainer:root;attachView(parent,dp(120),dp(160));
         view.registerNativeAd(ad,null);
     }
 
@@ -357,10 +374,15 @@ final class MoneyBoostNativeAdapter {
         TextView t = new TextView(activity); t.setText(value); t.setTextSize(size); t.setTextColor(color); return t;
     }
     private int dp(float n) { return Math.round(n * activity.getResources().getDisplayMetrics().density); }
+    private void attachView(ViewGroup parent,int width,int height){
+        touchHost.addView(view,new FrameLayout.LayoutParams(width,height));
+        parent.addView(touchHost,new FrameLayout.LayoutParams(width,height));
+    }
     private ViewGroup root() { return activity.findViewById(android.R.id.content); }
     private void clearAd() {
         displayed = false;
         if (view != null) { ViewGroup parent = (ViewGroup)view.getParent(); if (parent != null) parent.removeView(view); view.destroy(); view = null; }
+        if(touchHost!=null){ViewGroup parent=(ViewGroup)touchHost.getParent();if(parent!=null)parent.removeView(touchHost);touchHost=null;}
         headlineView = null; badgeView = null; ctaView = null; mediaView = null; tileIcon = null;
         if (ad != null) { ad.destroy(); ad = null; }
     }

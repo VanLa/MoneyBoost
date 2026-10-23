@@ -22,7 +22,8 @@ stubs={
 'android/view/ViewTreeObserver.java':'package android.view; public class ViewTreeObserver{public interface OnGlobalLayoutListener{void onGlobalLayout();}public void addOnGlobalLayoutListener(OnGlobalLayoutListener l){}public void removeOnGlobalLayoutListener(OnGlobalLayoutListener l){}}',
 'android/view/View.java':'''package android.view; public class View {public static int GONE=8,VISIBLE=0; public android.graphics.Rect clip;public void setClipBounds(android.graphics.Rect r){clip=r;}public float tx,ty;public float getTranslationX(){return tx;}public float getTranslationY(){return ty;}public void setTranslationX(float v){tx=v;}public void setTranslationY(float v){ty=v;}public int visibility;public boolean isShown(){return visibility==VISIBLE;}public void getLocationOnScreen(int[] at){at[0]=0;at[1]=0;} public ViewGroup parent;public ViewGroup.LayoutParams params;public void setVisibility(int v){visibility=v;}public int getWidth(){return 390;}public int getHeight(){return 844;}public ViewGroup.LayoutParams getLayoutParams(){return params;}public void setLayoutParams(ViewGroup.LayoutParams p){params=p;}public Object getParent(){return parent;}public void setBackground(Object x){}public ViewTreeObserver getViewTreeObserver(){return new ViewTreeObserver();}}''',
 'android/view/ViewGroup.java':'''package android.view;public class ViewGroup extends View {public static class LayoutParams{public int width,height;public LayoutParams(int w,int h){width=w;height=h;}}public void addView(View v,LayoutParams p){v.parent=this;v.params=p;}public void removeView(View v){v.parent=null;}}''',
-'android/widget/FrameLayout.java':'package android.widget; public class FrameLayout extends android.view.ViewGroup{public FrameLayout(android.app.Activity a){}public static class LayoutParams extends android.view.ViewGroup.LayoutParams{public int gravity,leftMargin,topMargin;public LayoutParams(int w,int h){super(w,h);}}}',
+'android/view/MotionEvent.java':'package android.view;public class MotionEvent{public static final int ACTION_DOWN=0;final float x,y;public MotionEvent(float x,float y){this.x=x;this.y=y;}public int getActionMasked(){return 0;}public float getX(){return x;}public float getY(){return y;}}',
+'android/widget/FrameLayout.java':'package android.widget; public class FrameLayout extends android.view.ViewGroup{public FrameLayout(android.app.Activity a){}public boolean dispatchTouchEvent(android.view.MotionEvent e){return true;}public static class LayoutParams extends android.view.ViewGroup.LayoutParams{public int gravity,leftMargin,topMargin;public LayoutParams(int w,int h){super(w,h);}}}',
 'android/widget/LinearLayout.java':'package android.widget;public class LinearLayout extends android.view.ViewGroup {public static int VERTICAL=1;public LinearLayout(android.app.Activity a){}public void setOrientation(int x){}public void setGravity(int x){}public void setPadding(int a,int b,int c,int d){}public void addView(android.view.View v){}public static class LayoutParams extends android.view.ViewGroup.LayoutParams{public LayoutParams(int w,int h){super(w,h);}public LayoutParams(int w,int h,float n){super(w,h);}}}',
 'android/widget/TextView.java':'package android.widget; public class TextView extends android.view.View{public TextView(android.app.Activity a){}public void setText(String x){}public void setPadding(int a,int b,int c,int d){}public void setTextSize(float x){}public void setTextColor(int x){}}',
 'android/widget/Button.java':'package android.widget;public class Button extends TextView{public Button(android.app.Activity a){super(a);}public void setAllCaps(boolean b){}}',
@@ -74,16 +75,16 @@ public static void main(String[] args)throws Exception{
  android.view.View rendered=(android.view.View)viewField.get(a);
  int pollsBeforeScroll=NativeAdPreloader.polls;
  a.show(0,.3f,1,.3f);
- check(rendered.getTranslationY()==Math.round(.3f*844),"Native did not follow scrolled slot");
+ check(((android.view.View)rendered.getParent()).getTranslationY()==Math.round(.3f*844),"Native did not follow scrolled slot");
  a.show(0,-.1f,1,.3f);check(rendered.visibility==android.view.View.GONE,"clipped Native left a floating overlay");
  a.show(0,.2f,1,.3f);check(rendered.visibility==android.view.View.VISIBLE&&NativeAdPreloader.polls==pollsBeforeScroll,"scroll return replaced ad or stayed hidden");
  MoneyBoostNativeStyle style=new MoneyBoostNativeStyle(0,1,2,3,4,Float.NaN,999,true,-5,999);
  check(style.cornerRadius==14&&style.buttonRadius==48&&style.headlineSize==12&&style.buttonSize==20,"style bounds/NaN invalid");
  a.applyStyle(style);check(NativeAdPreloader.polls==pollsBeforeScroll&&NativeAdPreloader.last.destroyed==0,"restyling consumed/destroyed ad");
  android.widget.FrameLayout container=new android.widget.FrameLayout(new android.app.Activity());
- a.setContainer(container);check(rendered.getParent()==container,"Android list ad not attached to scroll slot");
+ a.setContainer(container);check(((android.view.View)rendered.getParent()).getParent()==container,"Android list ad not attached to scroll slot");
  a.show(0,.25f,1,.3f);check(NativeAdPreloader.polls==pollsBeforeScroll,"attaching list slot consumed another ad");
- a.setContainer(null);check(rendered.getParent()!=container,"list container did not detach");
+ a.setContainer(null);check(((android.view.View)rendered.getParent()).getParent()!=container,"list container did not detach");
  NativeAd second=NativeAdPreloader.last;a.destroy();a.destroy();second.callback.onAdImpression();second.callback.onAdPaid(new AdValue());check(!a.isReady()&&NativeAdPreloader.destroys==1&&second.destroyed==1,"destroy not idempotent");
  int starts=NativeAdPreloader.starts;NativeAdPreloader.callback.onAdFailedToPreload(homeId,new LoadAdError());a.load();check(NativeAdPreloader.starts==starts,"destroyed callback restarted");
  MoneyBoostNativeAdapter b=new MoneyBoostNativeAdapter(new android.app.Activity(),"album","same-test-unit");b.load();check(!homeId.equals(NativeAdPreloader.id),"home/album test-unit pool collision");
@@ -93,7 +94,10 @@ public static void main(String[] args)throws Exception{
  compact.show(0,.2f,1,.058f);check(NativeAdPreloader.last!=null,"compact strip not acquired");
  android.view.View compactView=(android.view.View)viewField.get(compact);check(compactView!=null&&compactView.visibility==android.view.View.VISIBLE,"72dp compact strip hidden");compact.destroy();
  MoneyBoostNativeAdapter tile=new MoneyBoostNativeAdapter(new android.app.Activity(),"tile","test-unit",2);tile.load();NativeAdPreloader.available=true;
- tile.show(.1f,.2f,.31f,.20f);check(tile.isShowing(),"normal-sized grid Native hidden");tile.showClipped(.1f,-.05f,.31f,.20f,0,0,1,1);check(tile.isShowing(),"partially scrolled tile disappeared");tile.hide();check(!tile.isShowing(),"hidden tile still showing");tile.destroy();
+ tile.show(.1f,.2f,.31f,.20f);check(tile.isShowing(),"normal-sized grid Native hidden");tile.showClipped(.1f,-.05f,.31f,.20f,0,0,1,1);check(tile.isShowing(),"partially scrolled tile disappeared");android.widget.FrameLayout tileHost=(android.widget.FrameLayout)((android.view.View)viewField.get(tile)).getParent();
+ check(!tileHost.dispatchTouchEvent(new android.view.MotionEvent(10,5)),"invisible portion intercepted header touch");
+ check(tileHost.dispatchTouchEvent(new android.view.MotionEvent(10,60)),"visible portion rejected ad touch");
+ tile.hide();check(!tile.isShowing(),"hidden tile still showing");tile.destroy();
  System.out.println("NATIVE PRELOADING PASS: consent, start rollback, single registration, no eager poll, clipped slot, SDK inventory, hide/restore, expiry, dedup impression, click, stale paid callback, destroy, separate pools, no manual retries.");
 }}'''
 for name,body in stubs.items():
