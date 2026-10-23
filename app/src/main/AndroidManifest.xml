@@ -46,11 +46,8 @@
         <meta-data android:name="MoneyBoost_BANNER_ID" android:value="ca-app-pub-3940256099942544/9214589741"/>
         <meta-data android:name="MoneyBoost_SPLASH_ID" android:value="ca-app-pub-3940256099942544/9257395921"/>
 
-        <!-- Native: separate placements, same manifest key convention as the other formats. -->
-        <meta-data android:name="MoneyBoost_NATIVE_HOME_ID" android:value="ca-app-pub-3940256099942544/2247696110"/>
-        <meta-data android:name="MoneyBoost_NATIVE_ACTION_ID" android:value="ca-app-pub-3940256099942544/2247696110"/>
-        <meta-data android:name="MoneyBoost_NATIVE_ALBUM_ID" android:value="ca-app-pub-3940256099942544/2247696110"/>
-
+        <!-- One explicit test unit, shared by demo scenes through index 0. -->
+        <meta-data android:name="MoneyBoost_NATIVE_ID" android:value="ca-app-pub-3940256099942544/2247696110"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

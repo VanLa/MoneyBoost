@@ -121,7 +121,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     private String MoneyBoost_bannerKey = "";
     private String MoneyBoost_collapsibleBannerKey = "";
     private String MoneyBoost_splashKey = "";
-    private String MoneyBoost_nativeHomeKey = "", MoneyBoost_nativeAlbumKey = "", MoneyBoost_nativeActionKey = "";
+    private String[] MoneyBoost_nativeKeys = new String[0];
     private final java.util.Map<String, MoneyBoostNativeAdapter> MoneyBoost_nativeAds = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final long LOAD_DELAY_INTER_MS = 800L;
@@ -365,14 +365,12 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             ApplicationInfo appInfo = activity.getPackageManager().getApplicationInfo(
                     activity.getPackageName(), PackageManager.GET_META_DATA);
             if (appInfo.metaData == null) throw new IllegalStateException("Manifest metadata missing");
-            MoneyBoost_interKey = appInfo.metaData.getString("MoneyBoost_INTERSTITIAL_ID");
-            MoneyBoost_rewardKey = appInfo.metaData.getString("MoneyBoost_REWARDED_ID");
-            MoneyBoost_splashKey = appInfo.metaData.getString("MoneyBoost_SPLASH_ID");
-            MoneyBoost_bannerKey = appInfo.metaData.getString("MoneyBoost_BANNER_ID");
-            MoneyBoost_collapsibleBannerKey = appInfo.metaData.getString("MoneyBoost_COLLAPSIBLE_BANNER_ID");
-            MoneyBoost_nativeHomeKey = appInfo.metaData.getString("MoneyBoost_NATIVE_HOME_ID", "");
-            MoneyBoost_nativeAlbumKey = appInfo.metaData.getString("MoneyBoost_NATIVE_ALBUM_ID", "");
-            MoneyBoost_nativeActionKey = appInfo.metaData.getString("MoneyBoost_NATIVE_ACTION_ID", "");
+            MoneyBoost_interKey = MoneyBoostReadAdUnit(appInfo.metaData, "MoneyBoost_INTERSTITIAL_ID");
+            MoneyBoost_rewardKey = MoneyBoostReadAdUnit(appInfo.metaData, "MoneyBoost_REWARDED_ID");
+            MoneyBoost_splashKey = MoneyBoostReadAdUnit(appInfo.metaData, "MoneyBoost_SPLASH_ID");
+            MoneyBoost_bannerKey = MoneyBoostReadAdUnit(appInfo.metaData, "MoneyBoost_BANNER_ID");
+            MoneyBoost_collapsibleBannerKey = MoneyBoostReadAdUnit(appInfo.metaData, "MoneyBoost_COLLAPSIBLE_BANNER_ID");
+            MoneyBoost_nativeKeys = MoneyBoostReadNativeAdUnits(appInfo.metaData);
             admobAppId = appInfo.metaData.getString("com.google.android.gms.ads.APPLICATION_ID");
             if (admobAppId == null || admobAppId.trim().isEmpty()) {
                 throw new IllegalStateException("AdMob App ID missing");
@@ -444,34 +442,59 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         }, 30000L);
     }
 
+    /** Missing, empty and whitespace-only IDs disable that format. App ID is separate. */
+    private static String MoneyBoostReadAdUnit(android.os.Bundle metadata, String key) {
+        String value = metadata == null ? null : metadata.getString(key);
+        return value == null ? "" : value.trim();
+    }
+
+    private static String[] MoneyBoostReadNativeAdUnits(android.os.Bundle metadata) {
+        // Keep empty entries so disabling one slot never changes later slot indices.
+        String[] units = MoneyBoostReadAdUnit(metadata, "MoneyBoost_NATIVE_ID").split(";", -1);
+        for (int i = 0; i < units.length; i++) units[i] = units[i].trim();
+        return units;
+    }
+
     private void MoneyBoostInitAdAdapters(Activity activity) {
         // Retry after partial setup: discard any adapters left by the previous attempt.
         if (MoneyBoost_bannerAdapter != null) MoneyBoost_bannerAdapter.MoneyBoostOnDestroy();
         if (MoneyBoost_interAdapter != null) MoneyBoost_interAdapter.MoneyBoostOnDestroy();
         if (MoneyBoost_rewardAdapter != null) MoneyBoost_rewardAdapter.MoneyBoostOnDestroy();
         if (MoneyBoost_splashAdapter != null) MoneyBoost_splashAdapter.MoneyBoostOnDestroy();
-        MoneyBoost_bannerAdapter = new MoneyBoostBannerAdapter();
-        MoneyBoost_bannerAdapter.MoneyBoost_activity = activity;
-        MoneyBoost_bannerAdapter.MoneyBoost_ad_unit = MoneyBoost_bannerKey;
-        MoneyBoost_bannerAdapter.MoneyBoostInitBannerAdapter();
+        MoneyBoost_bannerAdapter = null;
+        if (!MoneyBoost_bannerKey.isEmpty()) {
+            MoneyBoost_bannerAdapter = new MoneyBoostBannerAdapter();
+            MoneyBoost_bannerAdapter.MoneyBoost_activity = activity;
+            MoneyBoost_bannerAdapter.MoneyBoost_ad_unit = MoneyBoost_bannerKey;
+            MoneyBoost_bannerAdapter.MoneyBoostInitBannerAdapter();
+        }
 
-        MoneyBoost_interAdapter = new MoneyBoostInterstitialAdapter();
-        MoneyBoost_interAdapter.MoneyBoost_activity = activity;
-        MoneyBoost_interAdapter.MoneyBoost_ad_unit = MoneyBoost_interKey;
-        MoneyBoost_interAdapter.MoneyBoost_InterstitialListener = this;
-        MoneyBoost_interAdapter.MoneyBoostInitInterstitialAdapter();
+        MoneyBoost_interAdapter = null;
+        if (!MoneyBoost_interKey.isEmpty()) {
+            MoneyBoost_interAdapter = new MoneyBoostInterstitialAdapter();
+            MoneyBoost_interAdapter.MoneyBoost_activity = activity;
+            MoneyBoost_interAdapter.MoneyBoost_ad_unit = MoneyBoost_interKey;
+            MoneyBoost_interAdapter.MoneyBoost_InterstitialListener = this;
+            MoneyBoost_interAdapter.MoneyBoostInitInterstitialAdapter();
+        }
 
-        MoneyBoost_rewardAdapter = new MoneyBoostRewardVideoAdapter();
-        MoneyBoost_rewardAdapter.MoneyBoost_activity = activity;
-        MoneyBoost_rewardAdapter.MoneyBoost_ad_unit = MoneyBoost_rewardKey;
-        MoneyBoost_rewardAdapter.MoneyBoost_rewardVideoListener = this;
-        MoneyBoost_rewardAdapter.MoneyBoostInitRewardVideoAdapter();
+        MoneyBoost_rewardAdapter = null;
+        if (!MoneyBoost_rewardKey.isEmpty()) {
+            MoneyBoost_rewardAdapter = new MoneyBoostRewardVideoAdapter();
+            MoneyBoost_rewardAdapter.MoneyBoost_activity = activity;
+            MoneyBoost_rewardAdapter.MoneyBoost_ad_unit = MoneyBoost_rewardKey;
+            MoneyBoost_rewardAdapter.MoneyBoost_rewardVideoListener = this;
+            MoneyBoost_rewardAdapter.MoneyBoostInitRewardVideoAdapter();
+        }
 
-        MoneyBoost_splashAdapter = new MoneyBoostSplashAdapter();
-        MoneyBoost_splashAdapter.MoneyBoost_activity = activity;
-        MoneyBoost_splashAdapter.MoneyBoost_ad_unit = MoneyBoost_splashKey;
-        MoneyBoost_splashAdapter.MoneyBoost_splashListener = this;
-        MoneyBoost_splashAdapter.MoneyBoostInitSplashAdapter();
+        MoneyBoost_splashAdapter = null;
+        if (!MoneyBoost_splashKey.isEmpty()) {
+            MoneyBoost_splashAdapter = new MoneyBoostSplashAdapter();
+            MoneyBoost_splashAdapter.MoneyBoost_activity = activity;
+            MoneyBoost_splashAdapter.MoneyBoost_ad_unit = MoneyBoost_splashKey;
+            MoneyBoost_splashAdapter.MoneyBoost_splashListener = this;
+            MoneyBoost_splashAdapter.MoneyBoostInitSplashAdapter();
+        }
 
     }
 
@@ -993,9 +1016,6 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             mainHandler.post(this::MoneyBoostSyncBannerVisibility);
             return;
         }
-        if (MoneyBoost_bannerAdapter == null) {
-            return;
-        }
         MoneyBoostReconcileFullscreenAdRefCount();
         for (MoneyBoostNativeAdapter ad : MoneyBoost_nativeAds.values()) ad.sync();
         boolean blocked = MoneyBoostShouldBlockBannerDisplay();
@@ -1003,15 +1023,15 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                 && MoneyBoost_collapsibleAdapter != null && MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded();
         // Register/show the replacement before hiding the current bottom view.
         if (blocked) {
-            MoneyBoost_bannerAdapter.MoneyBoostHideBannerView();
+            if (MoneyBoost_bannerAdapter != null) MoneyBoost_bannerAdapter.MoneyBoostHideBannerView();
             if (MoneyBoost_collapsibleAdapter != null) MoneyBoost_collapsibleAdapter.MoneyBoostHideBannerView();
             return;
         }
         if (collapsibleReady) MoneyBoost_collapsibleAdapter.MoneyBoostShowBannerView();
         boolean collapsibleVisible = collapsibleReady && MoneyBoost_collapsibleAdapter.MoneyBoostIsVisible();
-        if (collapsibleVisible) MoneyBoost_bannerAdapter.MoneyBoostHideBannerView();
+        if (collapsibleVisible) { if (MoneyBoost_bannerAdapter != null) MoneyBoost_bannerAdapter.MoneyBoostHideBannerView(); }
         else {
-            MoneyBoost_bannerAdapter.MoneyBoostShowBannerView();
+            if (MoneyBoost_bannerAdapter != null) MoneyBoost_bannerAdapter.MoneyBoostShowBannerView();
             if (MoneyBoost_collapsibleAdapter != null) MoneyBoost_collapsibleAdapter.MoneyBoostHideBannerView();
         }
     }
@@ -1051,7 +1071,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         long now = SystemClock.elapsedRealtime();
         if (MoneyBoost_interstitialShowPending
                 || (MoneyBoost_lastInterstitialClosed != Long.MIN_VALUE && now - MoneyBoost_lastInterstitialClosed < 30000L)) return;
-        if (MoneyBoost_bannerAdapter == null || MoneyBoost_activity == null) return;
+        if (MoneyBoost_collapsibleBannerKey.isEmpty() || MoneyBoost_activity == null) return;
         collapsibleOpportunity = adAnalytics.opportunity("collapsibleBanner", MoneyBoostAdDiagnostics.shortText(scene), false);
         // Preserve the normal banner so Hide can restore it without a new network load.
         MoneyBoost_collapsibleAdapter = new MoneyBoostBannerAdapter();
@@ -1060,7 +1080,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_collapsibleAdapter.MoneyBoostInitBannerAdapter();
         MoneyBoost_collapsibleActive = true;
         if (!MoneyBoost_bannerEnabled) {
-            bannerOpportunity = adAnalytics.opportunity("banner", "persistent", MoneyBoost_bannerAdapter.MoneyBoostIsLoaded());
+            bannerOpportunity = adAnalytics.opportunity("banner", "persistent", MoneyBoost_bannerAdapter != null && MoneyBoost_bannerAdapter.MoneyBoostIsLoaded());
         }
         MoneyBoost_bannerEnabled = true;
         MoneyBoost_collapsibleAdapter.MoneyBoostLoadCollapsibleBannerView();
@@ -1104,7 +1124,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
      * 次数限制由本进程内存 flag {@link #MoneyBoost_coldSplashHandled} 保证（每次冷启动最多 1 次，不落盘）。
      */
     private boolean MoneyBoostCanShowColdStartSplash() {
-        return MoneyBoost_needPopAD && MoneyBoostAdConstants.OPEN_AD_STARTUP_ON;
+        return MoneyBoost_needPopAD && MoneyBoostAdConstants.OPEN_AD_STARTUP_ON
+                && (!MoneyBoost_isInitSuccess || !MoneyBoost_splashKey.isEmpty());
     }
 
     /**
@@ -1112,7 +1133,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
      * CanShowAoaResume 在真正切后台后置 true，全屏广告关闭后清 false。
      */
     private boolean MoneyBoostCanShowResumeSplash() {
-        return MoneyBoost_needPopAD
+        return MoneyBoost_needPopAD && !MoneyBoost_splashKey.isEmpty()
                 && MoneyBoostAdConstants.OPEN_AD_RESUME_ON
                 && MoneyBoost_canShowAoaResume;
     }
@@ -1400,7 +1421,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             return;
         }
         // Initialization is asynchronous; waiting for an ad must have a bounded deadline.
-        if (!MoneyBoost_isInitSuccess || MoneyBoost_splashAdapter == null) {
+        if (!MoneyBoost_isInitSuccess) {
             MoneyBoost_unityColdSplashPending = true;
             MoneyBoostScheduleSplashWaitTimeout();
             MoneyBoostToolsManager.instance().MoneyBoostLogWithDebug(
@@ -1532,12 +1553,18 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         });
     }
 
-    /** Native placements use the host manifest, never an ad unit ID supplied by Unity pages. */
-    public void MoneyBoostLoadNativeAd(String placement) {
-        mainHandler.post(() -> { MoneyBoostNativeAdapter ad = MoneyBoostGetNative(placement); if (ad != null) ad.load(); });
+    /** Arbitrary scene name + zero-based index into MoneyBoost_NATIVE_ID (semicolon separated).
+     * Multiple scenes may explicitly select the same index; empty/out-of-range slots are disabled.
+     */
+    public void MoneyBoostLoadNativeAd(String placement, int adUnitIndex) {
+        mainHandler.post(() -> {
+            MoneyBoostNativeAdapter ad = MoneyBoostGetNative(placement, adUnitIndex);
+            if (ad != null) ad.load();
+        });
     }
 
     public boolean MoneyBoostIsNativeAdReady(String placement) {
+        if (placement == null) return false;
         MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement);
         return ad != null && ad.isReady();
     }
@@ -1545,24 +1572,26 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     /** Normalized content-view rectangle: top-left origin, values 0..1. */
     public void MoneyBoostShowNativeAd(String placement, float x, float y, float width, float height) {
         mainHandler.post(() -> {
+            if (placement == null) return;
             if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(width) || !Float.isFinite(height)) return;
-            MoneyBoostNativeAdapter ad = MoneyBoostGetNative(placement);
+            MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement);
             if (ad != null) ad.show(x, y, width, height);
         });
     }
 
     public void MoneyBoostHideNativeAd(String placement) {
-        mainHandler.post(() -> { MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement); if (ad != null) ad.hide(); });
+        mainHandler.post(() -> { if (placement == null) return; MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement); if (ad != null) ad.hide(); });
     }
 
     public void MoneyBoostDestroyNativeAd(String placement) {
-        mainHandler.post(() -> { MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.remove(placement); if (ad != null) ad.destroy(); });
+        mainHandler.post(() -> { if (placement == null) return; MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.remove(placement); if (ad != null) ad.destroy(); });
     }
 
-    private MoneyBoostNativeAdapter MoneyBoostGetNative(String placement) {
+    private MoneyBoostNativeAdapter MoneyBoostGetNative(String placement, int adUnitIndex) {
         if (!MoneyBoostCanShowNativeAds() || MoneyBoost_activity == null) return null;
-        String key = "home".equals(placement) ? MoneyBoost_nativeHomeKey : "album".equals(placement) ? MoneyBoost_nativeAlbumKey : "action".equals(placement) ? MoneyBoost_nativeActionKey : "";
-        if (key == null || key.trim().isEmpty()) return null;
+        if (placement == null || placement.trim().isEmpty() || adUnitIndex < 0 || adUnitIndex >= MoneyBoost_nativeKeys.length) return null;
+        String key = MoneyBoost_nativeKeys[adUnitIndex];
+        if (key.isEmpty()) return null;
         MoneyBoostGetNativeBottomReservePx();
         if (!MoneyBoost_nativeAds.containsKey(placement))
             MoneyBoost_nativeAds.put(placement, new MoneyBoostNativeAdapter(MoneyBoost_activity, placement, key.trim()));

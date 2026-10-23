@@ -7,18 +7,21 @@ Built on the 0.7.3 revenue/preloading fixes. Native is an embedded view, never a
 Use the same metadata naming convention as the other MoneyBoost formats:
 
 ```xml
-<meta-data android:name="MoneyBoost_NATIVE_HOME_ID" android:value="YOUR_HOME_NATIVE_UNIT" />
-<meta-data android:name="MoneyBoost_NATIVE_ALBUM_ID" android:value="YOUR_ALBUM_NATIVE_UNIT" />
-<meta-data android:name="MoneyBoost_NATIVE_ACTION_ID" android:value="YOUR_ACTION_NATIVE_UNIT" />
+<!-- One ID shared by any number of scenes -->
+<meta-data android:name="MoneyBoost_NATIVE_ID" android:value="YOUR_NATIVE_UNIT" />
+<!-- Or multiple units, selected by zero-based index: unit 0, unit 1, unit 2 -->
+<!-- <meta-data android:name="MoneyBoost_NATIVE_ID" android:value="UNIT_A;UNIT_B;UNIT_C" /> -->
 ```
 
-The Android Java `app` demo contains all three keys with Google's official test native ID `ca-app-pub-3940256099942544/2247696110`. Missing/empty keys disable the corresponding placement. Use separate production units to distinguish reports; the sample test ID is intentionally shared.
+Native is a generic list, with no Home/Album/Action-specific keys in the SDK. Whitespace is trimmed; missing keys, empty strings and whitespace-only values disable a format. Empty list entries are retained: `UNIT_A;;UNIT_C` disables index 1 without moving index 2. Negative and out-of-range Native indices make no request. A scene selects its index when loading and retains that binding until destroyed. Multiple scene names may explicitly share index 0.
+
+The Java demo explicitly configures Google's Native test ID `ca-app-pub-3940256099942544/2247696110` once; its three sample scenes all select index 0. These are host settings, never SDK fallbacks. The same optional-ID rule applies independently to `MoneyBoost_INTERSTITIAL_ID`, `MoneyBoost_REWARDED_ID`, `MoneyBoost_SPLASH_ID`, `MoneyBoost_BANNER_ID` and `MoneyBoost_COLLAPSIBLE_BANNER_ID`. No ID means no adapter/preloader/request for that format. Fold does not depend on an ordinary Banner ID; neither does Native visibility. AdMob's application ID is a separate SDK initialization setting.
 
 ## Java API and demo
 
 `MoneyBoostMediationManager` exposes:
 
-- `MoneyBoostLoadNativeAd("home" / "album" / "action")`
+- `MoneyBoostLoadNativeAd(scene, adUnitIndex)` — e.g. `MoneyBoostLoadNativeAd("shop", 0)`; scene names belong to the host, not the SDK
 - `MoneyBoostIsNativeAdReady(placement)`
 - `MoneyBoostShowNativeAd(placement, x, y, width, height)` — normalized Android content-view rectangle; top-left origin, values 0..1.
 - `MoneyBoostHideNativeAd(placement)` — hide and retain this page's loaded ad.
@@ -67,9 +70,9 @@ No Maven remote publication, Ads campaign change or production ID configuration 
 - Automated regression covers official preloader calls, inventories, failed registration, no eager Native polling, clipping, display expiry, hide/restore, 30-second ordinary Banner rotation, hidden/background pause, no-fill retention, separate fold pools, stale paid callbacks, UMP and Unity Play Mode navigation.
 - Actual Android network fill, impression/click/paid delivery and Firebase DebugView must still be checked with official test ads on a connected Android device. No device was connected in this session. No production rollout or remote Maven publication occurred.
 
-- Final IPU-priority refinement: album retains its original collapsible request even when Native is enabled. Native renders only when no collapsible request occupies the page; no forced Native-for-fold replacement. Action now has an independent Native row after two pairs of actions (or at the end of a shorter list), without replacing its fold opportunity. `MoneyBoost_NATIVE_ACTION_ID` configures it; Java demo includes Action Load/Show buttons.
+- Final IPU-priority refinement: album retains its original collapsible request even when Native is enabled. Native renders only when no collapsible request occupies the page; no forced Native-for-fold replacement. Action now has an independent Native row after two pairs of actions (or at the end of a shorter list), without replacing its fold opportunity. the generic `MoneyBoost_NATIVE_ID` list configures it; Java demo includes Action Load/Show buttons.
 
-The source repository has been consolidated into `/Volumes/ExMemory/SDK/MoneyBoost`; there is no separate source-fix worktree. Action Native uses the same official NativeAdPreloader and event contract (`placement=action`, `scene=native_action`) as Home/Album. Production without an Action unit ID disables the placement; development uses official test ads.
+The source repository has been consolidated into `/Volumes/ExMemory/SDK/MoneyBoost`; there is no separate source-fix worktree. Action Native uses the same official NativeAdPreloader and event contract (`placement=action`, `scene=native_action`) as Home/Album. A missing or empty selected Native unit disables requests for that placement.
 
 ## Dedicated collapsible Banner unit and bottom-view continuity
 
@@ -77,10 +80,16 @@ The source repository has been consolidated into `/Volumes/ExMemory/SDK/MoneyBoo
 - Both configurations still use `BannerAdPreloader.start/isAdAvailable/pollAd/destroy`. No single-load API or custom inventory/retry queue was introduced.
 - Pending/failed fold rendering leaves ordinary Banner visible; a registered visible fold is shown before hiding ordinary Banner. Closing the fold restores ordinary Banner before destroying the fold renderer.
 - Ordinary rotation registers a hidden candidate view before replacing the displayed view. No inventory or a registration error keeps the previous rendered ad. Old callbacks remain fenced; new impression events carry their own unit ID and are deduplicated by actual refresh cycle. Count events contain no revenue.
-- Unity optionally exports `collapsibleBannerAdUnitId` from MoneyBoostNativeSettings. Blank leaves existing host metadata untouched; the SDK reads only the dedicated fold key. Release rejects official test IDs in this override.
+- IDs are owned by the final Android manifest. Unity settings contain scene enable flags and zero-based Native unit indices only. Current Home/Album/Action all use index 0; change indices to select separate units from the Android list.
 - Real compiled-manager handoff tests cover unavailable inventory, failed show, order of view swaps/restoration, separate unit attribution, duplicate callbacks and count-only telemetry. Android transport tests inject view registration failure and verify the old Banner survives.
 - This prevents application-controlled blank handoffs; it cannot guarantee a filled ad before the first successful request or during a total lack of eligible inventory. Background/fullscreen/no-ads exclusions remain.
 
 ## Java Demo automatic Native preload
 
 The Java app registers the Home/Album/Action official Native preloaders automatically after successful initialization and the launch splash flow. Resume and fullscreen/fold dismissal restore registration when needed; Google still owns request retries, inventories and replenishment. Load buttons remain for manual testing. Show works without a prior Load click and explicitly exits an active fold in this demo. Destroy pauses automatic Native registration until the next Load/Show, preserving a useful destruction test.
+
+## Optional formats and export configuration
+
+Unity development exports explicitly write Google's official test application/unit IDs for each supported format, including one `MoneyBoost_NATIVE_ID` and a separate fold key, as requested for local testing. Non-development exports do not add or overwrite advertising IDs; configure real IDs (or clear/remove unused formats) in the final Android project before packaging. Reusing a development export keeps its test metadata until the host replaces it. No SDK-side test-ID injection exists.
+
+Validation: SDK + Java demo builds, compiled-manager optional configuration tests, Banner handoff, Native/Banner/fullscreen official preloader regressions, and Unity scene-index/export checks. No connected Android device was available for live ad serving validation.

@@ -201,14 +201,14 @@ public class MainActivity extends AppCompatActivity {
     /** Registers official Google preloaders. Once registered, the SDK owns retries and replenishment. */
     private void startNativePreloaders() {
         if (!sdkInitialized || !splashFlowFinished || !nativeAutoLoad || isFinishing() || isDestroyed()) return;
-        mediationManager.MoneyBoostLoadNativeAd("home");
-        mediationManager.MoneyBoostLoadNativeAd("album");
-        mediationManager.MoneyBoostLoadNativeAd("action");
+        mediationManager.MoneyBoostLoadNativeAd("home", 0);
+        mediationManager.MoneyBoostLoadNativeAd("album", 0);
+        mediationManager.MoneyBoostLoadNativeAd("action", 0);
     }
 
     private void loadNativeDemo(String placement) {
         nativeAutoLoad = true;
-        mediationManager.MoneyBoostLoadNativeAd(placement);
+        mediationManager.MoneyBoostLoadNativeAd(placement, 0);
     }
 
     private void showNativeDemo(String placement) {
@@ -218,7 +218,7 @@ public class MainActivity extends AppCompatActivity {
         nativeAutoLoad = true;
         mediationManager.MoneyBoostHideNativeAd("home"); mediationManager.MoneyBoostHideNativeAd("album"); mediationManager.MoneyBoostHideNativeAd("action");
         nativePlacement = placement;
-        mediationManager.MoneyBoostLoadNativeAd(placement);
+        mediationManager.MoneyBoostLoadNativeAd(placement, 0);
         updateNativeDemo();
     }
 
