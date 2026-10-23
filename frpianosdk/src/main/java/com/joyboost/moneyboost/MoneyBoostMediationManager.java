@@ -369,8 +369,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             MoneyBoost_rewardKey = appInfo.metaData.getString("MoneyBoost_REWARDED_ID");
             MoneyBoost_splashKey = appInfo.metaData.getString("MoneyBoost_SPLASH_ID");
             MoneyBoost_bannerKey = appInfo.metaData.getString("MoneyBoost_BANNER_ID");
-            MoneyBoost_collapsibleBannerKey = MoneyBoostResolveCollapsibleBannerUnit(
-                    appInfo.metaData.getString("MoneyBoost_COLLAPSIBLE_BANNER_ID", ""), MoneyBoost_bannerKey);
+            MoneyBoost_collapsibleBannerKey = appInfo.metaData.getString("MoneyBoost_COLLAPSIBLE_BANNER_ID");
             MoneyBoost_nativeHomeKey = appInfo.metaData.getString("MoneyBoost_NATIVE_HOME_ID", "");
             MoneyBoost_nativeAlbumKey = appInfo.metaData.getString("MoneyBoost_NATIVE_ALBUM_ID", "");
             MoneyBoost_nativeActionKey = appInfo.metaData.getString("MoneyBoost_NATIVE_ACTION_ID", "");
@@ -1031,11 +1030,6 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     //////////////////////////////////////////////////////////////////////Collapsible Banner////////////////////////////////////////////////////////////////////////////////
-
-    static String MoneyBoostResolveCollapsibleBannerUnit(String collapsible, String banner) {
-        return collapsible != null && !collapsible.trim().isEmpty() ? collapsible.trim()
-                : banner == null ? "" : banner.trim();
-    }
 
     /** Explicit bottom-anchored expansion; prevent duplicate requests while active. */
     public void MoneyBoostShowCollapsibleBannerView(){

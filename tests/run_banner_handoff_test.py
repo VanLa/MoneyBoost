@@ -20,9 +20,6 @@ public class BannerHandoffTest{
  static Object get(Object t,String n)throws Exception{Field f=t.getClass().getDeclaredField(n);f.setAccessible(true);return f.get(t);}
  static void sync(MoneyBoostMediationManager m)throws Exception{Method f=m.getClass().getDeclaredMethod("MoneyBoostSyncBannerVisibility");f.setAccessible(true);f.invoke(m);}
  public static void main(String[]args)throws Exception{
- check(MoneyBoostMediationManager.MoneyBoostResolveCollapsibleBannerUnit("fold","regular").equals("fold"),"distinct unit ignored");
- for(String missing:new String[]{null,"","  "})check(MoneyBoostMediationManager.MoneyBoostResolveCollapsibleBannerUnit(missing,"regular").equals("regular"),"legacy fallback missing");
- check(MoneyBoostMediationManager.MoneyBoostResolveCollapsibleBannerUnit("  fold  ","regular").equals("fold"),"unit not trimmed");
  MoneyBoostMediationManager m=MoneyBoostMediationManager.getInstance();
  set(m,"MoneyBoost_adsPermitted",true);set(m,"MoneyBoost_bannerEnabled",true);set(m,"MoneyBoost_needPopAD",true);set(m,"MoneyBoost_isAppForeground",true);set(m,"MoneyBoost_isDestroyed",false);
  MoneyBoostBannerAdapter regular=new MoneyBoostBannerAdapter(),fold=new MoneyBoostBannerAdapter();regular.MoneyBoost_ad_unit="regular";fold.MoneyBoost_ad_unit="fold";
@@ -48,7 +45,7 @@ public class BannerHandoffTest{
  MoneyBoostBannerAdapter.calls.clear();m.MoneyBoostHideCollapsibleBannerView();check(regular.visible,"fold close lost ordinary Banner");
  check(MoneyBoostBannerAdapter.calls.indexOf("regular:show")<MoneyBoostBannerAdapter.calls.indexOf("fold:destroy"),"fold destroyed before ordinary restored");
  set(m,"MoneyBoost_isAppForeground",false);sync(m);check(!regular.visible,"background Banner visible");
- System.out.println("BANNER HANDOFF PASS: separate IDs, legacy fallback, pending/failed fold retains ordinary, show-before-hide, restore-before-destroy, per-unit impression dedup, fallback split, count-only events, background exclusion.");
+ System.out.println("BANNER HANDOFF PASS: separate IDs, pending/failed fold retains ordinary, show-before-hide, restore-before-destroy, per-unit impression dedup, fallback split, count-only events, background exclusion.");
  }
 }'''
 }
