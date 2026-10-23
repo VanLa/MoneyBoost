@@ -5,6 +5,8 @@ b = runpy.run_path(str(Path(__file__).with_name('run_ump_gate_test.py')))
 p, j = b['p'], b['java_home']
 cp = str(p/'classes')+':'+b['cp']
 files = {
+'android/os/Looper.java': 'package android.os;public class Looper{static final Looper MAIN=new Looper(),BG=new Looper();public static boolean background;public static Looper getMainLooper(){return MAIN;}public static Looper myLooper(){return background?BG:MAIN;}}',
+'android/os/Handler.java': 'package android.os;public class Handler{public static final java.util.List<Runnable> queued=new java.util.ArrayList<>();public Handler(Looper l){}public boolean post(Runnable r){if(Looper.background)queued.add(r);else r.run();return true;}public boolean postDelayed(Runnable r,long n){return true;}public void removeCallbacks(Runnable r){}public static void drain(){Looper.background=false;while(!queued.isEmpty())queued.remove(0).run();}}',
 'android/content/Context.java': 'package android.content; public class Context {}',
 'android/app/Activity.java': '''package android.app;
 public class Activity extends android.content.Context { public <T extends android.view.View> T findViewById(int id){return null;}
@@ -23,10 +25,10 @@ public class MoneyBoostBannerAdapter {
 }''',
 'com/joyboost/moneyboost/MoneyBoostNativeAdapter.java': '''package com.joyboost.moneyboost;
 final class MoneyBoostNativeAdapter {
- final String unit;static int created,syncs;boolean loaded;
- MoneyBoostNativeAdapter(android.app.Activity a,String placement,String unit){this.unit=unit;created++;}
- void load(){loaded=true;}boolean isReady(){return loaded;}void show(float x,float y,float w,float h){}
- void hide(){}void destroy(){}void sync(){syncs++;}
+ final String unit;static int created,syncs;boolean loaded;int shows,hides;float lastX;
+ MoneyBoostNativeAdapter(android.app.Activity a,String placement,String unit,int template){this.unit=unit;created++;}
+ void load(){loaded=true;}boolean isReady(){return loaded;}void show(float x,float y,float w,float h){shows++;lastX=x;}void showClipped(float x,float y,float w,float h,float cx,float cy,float cw,float ch){show(x,y,w,h);}
+ boolean isShowing(){return false;}void hide(){hides++;}void destroy(){}void sync(){syncs++;}
 }''',
 'com/joyboost/moneyboost/OptionalAdConfigTest.java': '''package com.joyboost.moneyboost;
 import java.lang.reflect.*;import android.os.Bundle;import java.util.*;
@@ -78,6 +80,13 @@ public class OptionalAdConfigTest {
  call(m,"MoneyBoostSyncBannerVisibility",new Class[]{});check(MoneyBoostNativeAdapter.syncs>=3,"Native sync depends on Banner");
  check(!(Boolean)call(m,"MoneyBoostCanShowColdStartSplash",new Class[]{}),"Disabled splash may wait for inventory");
  check(!(Boolean)call(m,"MoneyBoostCanShowResumeSplash",new Class[]{}),"Disabled splash may start resume flow");
+ android.os.Looper.background=true;
+ for(int i=0;i<100;i++)m.MoneyBoostShowNativeAdClipped("shop",i,0,1,1,0,0,1,1);
+ m.MoneyBoostHideNativeAd("shop");check(android.os.Handler.queued.size()==1,"scroll updates queued one UI task per position");
+ android.os.Handler.drain();check(nativeAds.get("shop").shows==0&&nativeAds.get("shop").hides==1,"latest Hide did not supersede stale Show");
+ android.os.Looper.background=true;for(int i=0;i<100;i++)m.MoneyBoostShowNativeAd("shop",i,0,1,1);
+ check(android.os.Handler.queued.size()==1,"unbounded scroll queue");android.os.Handler.drain();
+ check(nativeAds.get("shop").shows==1&&nativeAds.get("shop").lastX==99,"coalesced scroll did not use latest rectangle");
  System.out.println("OPTIONAL AD CONFIG PASS: missing/null/blank/whitespace IDs, zero disabled adapters, independent fold/Native, generic Native scenes and stable semicolon indices, disabled splash flow.");
  }
 }'''

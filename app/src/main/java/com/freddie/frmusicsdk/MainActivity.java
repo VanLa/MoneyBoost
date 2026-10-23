@@ -214,12 +214,14 @@ public class MainActivity extends AppCompatActivity {
         int[] origin = new int[2]; root.getLocationOnScreen(origin);
         int[] at = new int[2]; slot.getLocationOnScreen(at);
         full.set(at[0], at[1], at[0] + slot.getWidth(), at[1] + slot.getHeight());
-        if (root.getWidth() == 0 || root.getHeight() == 0 || !slot.getGlobalVisibleRect(visible) || !visible.contains(full)) {
+        if (root.getWidth() == 0 || root.getHeight() == 0 || !slot.getGlobalVisibleRect(visible)) {
             mediationManager.MoneyBoostHideNativeAd(nativePlacement); return;
         }
-        mediationManager.MoneyBoostShowNativeAd(nativePlacement,
+        mediationManager.MoneyBoostShowNativeAdClipped(nativePlacement,
                 (at[0] - origin[0]) / (float)root.getWidth(), (at[1] - origin[1]) / (float)root.getHeight(),
-                slot.getWidth() / (float)root.getWidth(), slot.getHeight() / (float)root.getHeight());
+                slot.getWidth() / (float)root.getWidth(), slot.getHeight() / (float)root.getHeight(),
+                (visible.left-origin[0])/(float)root.getWidth(), (visible.top-origin[1])/(float)root.getHeight(),
+                visible.width()/(float)root.getWidth(),visible.height()/(float)root.getHeight());
     }
 
     private void refreshAdButtonStatus() {

@@ -2,7 +2,7 @@ package com.joyboost.moneyboost;
 
 /** Project-owned visual parameters. Ad assets, AdChoices and SDK click handling stay untouched. */
 final class MoneyBoostNativeStyle {
-    final int background, border, text, button, buttonText;
+    final int background, border, text, button, buttonText, backgroundEnd, buttonEnd;
     final float cornerRadius, buttonRadius, headlineSize, buttonSize;
     final boolean outlineButton;
 
@@ -14,6 +14,15 @@ final class MoneyBoostNativeStyle {
     MoneyBoostNativeStyle(int background, int border, int text, int button, int buttonText,
                          float cornerRadius, float buttonRadius, boolean outlineButton,
                          float headlineSize, float buttonSize) {
+        this(background, border, text, button, buttonText, cornerRadius, buttonRadius, outlineButton,
+                headlineSize, buttonSize, background, button);
+    }
+
+    MoneyBoostNativeStyle(int background, int border, int text, int button, int buttonText,
+                         float cornerRadius, float buttonRadius, boolean outlineButton,
+                         float headlineSize, float buttonSize, int backgroundEnd, int buttonEnd) {
+        this.backgroundEnd = backgroundEnd | 0xFF000000;
+        this.buttonEnd = buttonEnd | 0xFF000000;
         this.background = background | 0xFF000000;
         this.border = border | 0xFF000000;
         this.text = text | 0xFF000000;

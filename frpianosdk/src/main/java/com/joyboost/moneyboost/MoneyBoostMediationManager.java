@@ -1561,12 +1561,26 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     public void MoneyBoostSetNativeStyle(int background, int border, int text, int button, int buttonText,
                                         float cornerRadiusDp, float buttonRadiusDp, boolean outlineButton,
                                         float headlineSizeSp, float buttonSizeSp) {
+        MoneyBoostSetNativeStyle(background, border, text, button, buttonText, cornerRadiusDp,
+                buttonRadiusDp, outlineButton, headlineSizeSp, buttonSizeSp, background, button);
+    }
+
+    public void MoneyBoostSetNativeStyle(int background, int border, int text, int button, int buttonText,
+                                        float cornerRadiusDp, float buttonRadiusDp, boolean outlineButton,
+                                        float headlineSizeSp, float buttonSizeSp, int backgroundEnd, int buttonEnd) {
         mainHandler.post(() -> {
             MoneyBoost_nativeStyle = new MoneyBoostNativeStyle(background, border, text, button, buttonText,
-                    cornerRadiusDp, buttonRadiusDp, outlineButton, headlineSizeSp, buttonSizeSp);
+                    cornerRadiusDp, buttonRadiusDp, outlineButton, headlineSizeSp, buttonSizeSp, backgroundEnd, buttonEnd);
             for (MoneyBoostNativeAdapter ad : MoneyBoost_nativeAds.values()) ad.applyStyle(MoneyBoost_nativeStyle);
         });
     }
+
+    private volatile int[] nativeTileColors = new int[]{0xFF5747B4,0xFFAE78EB,0xFFFFFFFF};
+    public void MoneyBoostSetNativeTileColors(int top,int bottom,int border){
+        mainHandler.post(()->{nativeTileColors=new int[]{top|0xFF000000,bottom|0xFF000000,border|0xFF000000};
+            for(MoneyBoostNativeAdapter ad:MoneyBoost_nativeAds.values())ad.applyStyle(MoneyBoost_nativeStyle);});
+    }
+    int[] MoneyBoostGetNativeTileColors(){return nativeTileColors;}
 
     MoneyBoostNativeStyle MoneyBoostGetNativeStyle() { return MoneyBoost_nativeStyle; }
 
@@ -1574,8 +1588,17 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
      * Multiple scenes may explicitly select the same index; empty/out-of-range slots are disabled.
      */
     public void MoneyBoostLoadNativeAd(String placement, int adUnitIndex) {
+        MoneyBoostLoadNativeAd(placement, adUnitIndex, false);
+    }
+
+    /** compact selects an icon/headline/CTA strip without the optional MediaView. */
+    public void MoneyBoostLoadNativeAd(String placement, int adUnitIndex, boolean compact) {
+        MoneyBoostLoadNativeAd(placement, adUnitIndex, compact ? 1 : 0);
+    }
+
+    public void MoneyBoostLoadNativeAd(String placement, int adUnitIndex, int template) {
         mainHandler.post(() -> {
-            MoneyBoostNativeAdapter ad = MoneyBoostGetNative(placement, adUnitIndex);
+            MoneyBoostNativeAdapter ad = MoneyBoostGetNative(placement, adUnitIndex, template);
             if (ad != null) ad.load();
         });
     }
@@ -1589,6 +1612,21 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         });
     }
 
+    public boolean MoneyBoostCanDisplayNativeAds() { return MoneyBoostCanShowNativeAds(); }
+
+    public boolean MoneyBoostIsNativeAdShowing(String placement) {
+        if (placement == null) return false;
+        MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement);
+        return ad != null && ad.isShowing();
+    }
+
+    /** One JNI snapshot replaces separate Ready/Showing queries during Unity scrolling. */
+    public int MoneyBoostGetNativeState(String placement) {
+        MoneyBoostNativeAdapter ad = placement == null ? null : MoneyBoost_nativeAds.get(placement);
+        return (ad != null && ad.isReady() ? 1 : 0) | (ad != null && ad.isShowing() ? 2 : 0)
+                | (MoneyBoostCanShowNativeAds() ? 4 : 0);
+    }
+
     public boolean MoneyBoostIsNativeAdReady(String placement) {
         if (placement == null) return false;
         MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement);
@@ -1596,37 +1634,67 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     /** Normalized content-view rectangle: top-left origin, values 0..1. */
-    public void MoneyBoostShowNativeAd(String placement, float x, float y, float width, float height) {
-        Runnable show = () -> {
-            if (placement == null) return;
-            if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(width) || !Float.isFinite(height)) return;
-            MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement);
-            if (ad != null) ad.show(x, y, width, height);
-        };
-        if (Looper.myLooper() == Looper.getMainLooper()) show.run(); else mainHandler.post(show);
+    private static final class NativePosition {
+        final float x,y,width,height; final boolean visible;
+        float clipX,clipY,clipW,clipH; boolean clipped;
+        NativePosition(float x,float y,float width,float height,boolean visible){this.x=x;this.y=y;this.width=width;this.height=height;this.visible=visible;}
+    }
+    private final java.util.concurrent.ConcurrentHashMap<String,NativePosition> nativePositions=new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicBoolean nativePositionQueued=new java.util.concurrent.atomic.AtomicBoolean();
+    private void queueNativePositions(){
+        if(!nativePositionQueued.compareAndSet(false,true))return;
+        mainHandler.post(()->{
+            try {
+                for(java.util.Map.Entry<String,NativePosition> entry:nativePositions.entrySet()){
+                    NativePosition p=entry.getValue();if(!nativePositions.remove(entry.getKey(),p))continue;
+                    MoneyBoostNativeAdapter ad=MoneyBoost_nativeAds.get(entry.getKey());
+                    if(ad!=null){if(!p.visible)ad.hide();else if(p.clipped)ad.showClipped(p.x,p.y,p.width,p.height,p.clipX,p.clipY,p.clipW,p.clipH);else ad.show(p.x,p.y,p.width,p.height);}
+                }
+            } finally {nativePositionQueued.set(false);if(!nativePositions.isEmpty())queueNativePositions();}
+        });
+    }
+    public void MoneyBoostShowNativeAd(String placement,float x,float y,float width,float height){
+        if(placement==null||!Float.isFinite(x)||!Float.isFinite(y)||!Float.isFinite(width)||!Float.isFinite(height))return;
+        if(Looper.myLooper()==Looper.getMainLooper()){
+            nativePositions.remove(placement);MoneyBoostNativeAdapter ad=MoneyBoost_nativeAds.get(placement);if(ad!=null)ad.show(x,y,width,height);
+        }else{nativePositions.put(placement,new NativePosition(x,y,width,height,true));queueNativePositions();}
+    }
+    public void MoneyBoostShowNativeAdClipped(String placement,float x,float y,float width,float height,float cx,float cy,float cw,float ch){
+        if(placement==null||!Float.isFinite(x)||!Float.isFinite(y)||!Float.isFinite(width)||!Float.isFinite(height)
+            ||!Float.isFinite(cx)||!Float.isFinite(cy)||!Float.isFinite(cw)||!Float.isFinite(ch))return;
+        if(Looper.myLooper()==Looper.getMainLooper()){
+            nativePositions.remove(placement);MoneyBoostNativeAdapter ad=MoneyBoost_nativeAds.get(placement);
+            if(ad!=null)ad.showClipped(x,y,width,height,cx,cy,cw,ch);
+        }else{
+            NativePosition p=new NativePosition(x,y,width,height,true);p.clipped=true;p.clipX=cx;p.clipY=cy;p.clipW=cw;p.clipH=ch;
+            nativePositions.put(placement,p);queueNativePositions();
+        }
     }
 
-    public void MoneyBoostHideNativeAd(String placement) {
-        Runnable hide = () -> { if (placement == null) return; MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement); if (ad != null) ad.hide(); };
-        if (Looper.myLooper() == Looper.getMainLooper()) hide.run(); else mainHandler.post(hide);
+    public void MoneyBoostHideNativeAd(String placement){
+        if(placement==null)return;
+        if(Looper.myLooper()==Looper.getMainLooper()){
+            nativePositions.remove(placement);MoneyBoostNativeAdapter ad=MoneyBoost_nativeAds.get(placement);if(ad!=null)ad.hide();
+        }else{nativePositions.put(placement,new NativePosition(0,0,0,0,false));queueNativePositions();}
     }
 
     public void MoneyBoostDestroyNativeAd(String placement) {
-        mainHandler.post(() -> { if (placement == null) return; MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.remove(placement); if (ad != null) ad.destroy(); });
+        mainHandler.post(() -> { if (placement == null) return; nativePositions.remove(placement); MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.remove(placement); if (ad != null) ad.destroy(); });
     }
 
-    private MoneyBoostNativeAdapter MoneyBoostGetNative(String placement, int adUnitIndex) {
+    private MoneyBoostNativeAdapter MoneyBoostGetNative(String placement, int adUnitIndex, int template) {
         if (!MoneyBoostCanShowNativeAds() || MoneyBoost_activity == null) return null;
         if (placement == null || placement.trim().isEmpty() || adUnitIndex < 0 || adUnitIndex >= MoneyBoost_nativeKeys.length) return null;
         String key = MoneyBoost_nativeKeys[adUnitIndex];
         if (key.isEmpty()) return null;
         MoneyBoostGetNativeBottomReservePx();
         if (!MoneyBoost_nativeAds.containsKey(placement))
-            MoneyBoost_nativeAds.put(placement, new MoneyBoostNativeAdapter(MoneyBoost_activity, placement, key.trim()));
+            MoneyBoost_nativeAds.put(placement, new MoneyBoostNativeAdapter(MoneyBoost_activity, placement, key.trim(), template));
         return MoneyBoost_nativeAds.get(placement);
     }
 
     private void MoneyBoostDestroyAllNativeAds() {
+        nativePositions.clear();
         for (MoneyBoostNativeAdapter ad : MoneyBoost_nativeAds.values()) ad.destroy();
         MoneyBoost_nativeAds.clear();
     }
@@ -1639,14 +1707,16 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     /** [bottom reserve / height, min card height / height, min card width / width]. */
-    public float[] MoneyBoostGetNativeLayoutInfo() {
+    public float[] MoneyBoostGetNativeLayoutInfo() { return MoneyBoostGetNativeLayoutInfo(0); }
+
+    public float[] MoneyBoostGetNativeLayoutInfo(int template) {
         Activity a = MoneyBoost_activity;
         if (a == null) return new float[]{1, 1, 1};
         android.util.DisplayMetrics dm = a.getResources().getDisplayMetrics();
         // Called by JNI off-thread: use stable metrics; exact collision checks run on the UI thread.
-        return new float[]{Math.max(80 * dm.density, MoneyBoost_nativeReservePx) / (MoneyBoost_nativeRootHeight > 0 ? MoneyBoost_nativeRootHeight : dm.heightPixels),
-                200 * dm.density / (MoneyBoost_nativeRootHeight > 0 ? MoneyBoost_nativeRootHeight : dm.heightPixels),
-                260 * dm.density / (MoneyBoost_nativeRootWidth > 0 ? MoneyBoost_nativeRootWidth : dm.widthPixels)};
+        return new float[]{(MoneyBoost_nativeReservePx > 0 ? MoneyBoost_nativeReservePx : 80 * dm.density) / (MoneyBoost_nativeRootHeight > 0 ? MoneyBoost_nativeRootHeight : dm.heightPixels),
+                (template == 1 ? 48 : template == 2 ? 112 : 200) * dm.density / (MoneyBoost_nativeRootHeight > 0 ? MoneyBoost_nativeRootHeight : dm.heightPixels),
+                (template == 2 ? 80 : 240) * dm.density / (MoneyBoost_nativeRootWidth > 0 ? MoneyBoost_nativeRootWidth : dm.widthPixels)};
     }
     private volatile int MoneyBoost_nativeReservePx, MoneyBoost_nativeRootWidth, MoneyBoost_nativeRootHeight;
 
@@ -1655,9 +1725,10 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         if (a == null) return Integer.MAX_VALUE;
         android.view.View root = a.findViewById(android.R.id.content);
         if (root != null) { MoneyBoost_nativeRootWidth = root.getWidth(); MoneyBoost_nativeRootHeight = root.getHeight(); }
-        int reserve = Math.round(80 * a.getResources().getDisplayMetrics().density);
+        int reserve = 0;
         if (MoneyBoost_bannerAdapter != null) reserve = Math.max(reserve, MoneyBoost_bannerAdapter.MoneyBoostGetBannerReserveHeightPx());
         if (MoneyBoost_collapsibleAdapter != null) reserve = Math.max(reserve, MoneyBoost_collapsibleAdapter.MoneyBoostGetBannerReserveHeightPx());
+        if (reserve == 0) reserve = Math.round(80 * a.getResources().getDisplayMetrics().density);
         MoneyBoost_nativeReservePx = reserve;
         return reserve;
     }
