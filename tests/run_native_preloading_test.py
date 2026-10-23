@@ -18,14 +18,14 @@ stubs={
 'android/graphics/drawable/GradientDrawable.java':'package android.graphics.drawable; public class GradientDrawable{public void setColor(int x){} public void setCornerRadius(float x){}public void setStroke(int a,int b){}}',
 'android/view/Gravity.java':'package android.view;public class Gravity{public static int TOP=1,LEFT=2,CENTER_VERTICAL=4;}',
 'android/view/ViewTreeObserver.java':'package android.view; public class ViewTreeObserver{public interface OnGlobalLayoutListener{void onGlobalLayout();}public void addOnGlobalLayoutListener(OnGlobalLayoutListener l){}public void removeOnGlobalLayoutListener(OnGlobalLayoutListener l){}}',
-'android/view/View.java':'''package android.view; public class View {public static int GONE=8,VISIBLE=0; public int visibility; public ViewGroup parent;public ViewGroup.LayoutParams params;public void setVisibility(int v){visibility=v;}public int getWidth(){return 390;}public int getHeight(){return 844;}public ViewGroup.LayoutParams getLayoutParams(){return params;}public void setLayoutParams(ViewGroup.LayoutParams p){params=p;}public Object getParent(){return parent;}public void setBackground(Object x){}public ViewTreeObserver getViewTreeObserver(){return new ViewTreeObserver();}}''',
+'android/view/View.java':'''package android.view; public class View {public static int GONE=8,VISIBLE=0; public int visibility;public boolean isShown(){return visibility==VISIBLE;}public void getLocationOnScreen(int[] at){at[0]=0;at[1]=0;} public ViewGroup parent;public ViewGroup.LayoutParams params;public void setVisibility(int v){visibility=v;}public int getWidth(){return 390;}public int getHeight(){return 844;}public ViewGroup.LayoutParams getLayoutParams(){return params;}public void setLayoutParams(ViewGroup.LayoutParams p){params=p;}public Object getParent(){return parent;}public void setBackground(Object x){}public ViewTreeObserver getViewTreeObserver(){return new ViewTreeObserver();}}''',
 'android/view/ViewGroup.java':'''package android.view;public class ViewGroup extends View {public static class LayoutParams{public int width,height;public LayoutParams(int w,int h){width=w;height=h;}}public void addView(View v,LayoutParams p){v.parent=this;v.params=p;}public void removeView(View v){v.parent=null;}}''',
 'android/widget/FrameLayout.java':'package android.widget; public class FrameLayout extends android.view.ViewGroup{public FrameLayout(android.app.Activity a){}public static class LayoutParams extends android.view.ViewGroup.LayoutParams{public int gravity,leftMargin,topMargin;public LayoutParams(int w,int h){super(w,h);}}}',
 'android/widget/LinearLayout.java':'package android.widget;public class LinearLayout extends android.view.ViewGroup {public static int VERTICAL=1;public LinearLayout(android.app.Activity a){}public void setOrientation(int x){}public void setGravity(int x){}public void setPadding(int a,int b,int c,int d){}public void addView(android.view.View v){}public static class LayoutParams extends android.view.ViewGroup.LayoutParams{public LayoutParams(int w,int h){super(w,h);}public LayoutParams(int w,int h,float n){super(w,h);}}}',
-'android/widget/TextView.java':'package android.widget; public class TextView extends android.view.View{public TextView(android.app.Activity a){}public void setText(String x){}public void setTextSize(int x){}public void setTextColor(int x){}}',
-'android/widget/Button.java':'package android.widget;public class Button extends TextView{public Button(android.app.Activity a){super(a);}}',
+'android/widget/TextView.java':'package android.widget; public class TextView extends android.view.View{public TextView(android.app.Activity a){}public void setText(String x){}public void setTextSize(float x){}public void setTextColor(int x){}}',
+'android/widget/Button.java':'package android.widget;public class Button extends TextView{public Button(android.app.Activity a){super(a);}public void setAllCaps(boolean b){}}',
 'android/widget/ImageView.java':'package android.widget;public class ImageView extends android.view.View{public ImageView(android.app.Activity a){}public enum ScaleType{FIT_CENTER}public void setImageDrawable(Object x){}}',
-'com/joyboost/moneyboost/MoneyBoostMediationManager.java':'''package com.joyboost.moneyboost;public class MoneyBoostMediationManager {static final MoneyBoostMediationManager m=new MoneyBoostMediationManager();public static boolean allowed=true;public static MoneyBoostMediationManager getInstance(){return m;}boolean MoneyBoostHasCollapsibleRequest(){return false;}boolean MoneyBoostCanShowNativeAds(){return allowed;}boolean MoneyBoostCanLoadAds(){return allowed;}int MoneyBoostGetNativeBottomReservePx(){return 80;}void MoneyBoostBringBannersToFront(){}}''',
+'com/joyboost/moneyboost/MoneyBoostMediationManager.java':'''package com.joyboost.moneyboost;public class MoneyBoostMediationManager {static final MoneyBoostMediationManager m=new MoneyBoostMediationManager();public static boolean allowed=true;public static MoneyBoostMediationManager getInstance(){return m;}MoneyBoostNativeStyle MoneyBoostGetNativeStyle(){return new MoneyBoostNativeStyle();}boolean MoneyBoostHasCollapsibleRequest(){return false;}boolean MoneyBoostCanShowNativeAds(){return allowed;}boolean MoneyBoostCanLoadAds(){return allowed;}int MoneyBoostGetNativeBottomReservePx(){return 80;}void MoneyBoostBringBannersToFront(){}}''',
 'com/joyboost/moneyboost/MoneyBoostAdDiagnostics.java':'''package com.joyboost.moneyboost;public class MoneyBoostAdDiagnostics{static final java.util.List<String> events=new java.util.ArrayList<>();static final java.util.List<android.os.Bundle> params=new java.util.ArrayList<>();static void load(String a,String b,String c,Object d){}static String shortText(String s){return s;}static void record(String n,android.os.Bundle b){events.add(n);params.add(b);}}''',
 'com/joyboost/moneyboost/MoneyBoostFirebaseManager.java':'package com.joyboost.moneyboost;public class MoneyBoostFirebaseManager{static int paid;static MoneyBoostFirebaseManager instance(){return new MoneyBoostFirebaseManager();}void MoneyBoostLogFirebaseRevenue(double n,String t,String s,String u){paid++;}}'
 }
@@ -53,7 +53,7 @@ import com.google.android.libraries.ads.mobile.sdk.nativead.*;
 import com.google.android.libraries.ads.mobile.sdk.common.*;
 public class NativePreloadTest {
 static void check(boolean v,String m){if(!v)throw new AssertionError(m);}
-public static void main(String[] args){
+public static void main(String[] args)throws Exception{
  MoneyBoostNativeAdapter a=new MoneyBoostNativeAdapter(new android.app.Activity(),"home","same-test-unit");
  MoneyBoostMediationManager.allowed=false;a.load();check(NativeAdPreloader.starts==0,"consent bypass");
  MoneyBoostMediationManager.allowed=true;NativeAdPreloader.fail=true;a.load();NativeAdPreloader.fail=false;a.load();a.load();check(NativeAdPreloader.starts==2,"registration rollback or duplicate start");
@@ -68,6 +68,20 @@ public static void main(String[] args){
  a.hide();a.show(0,.2f,1,.3f);check(NativeAdPreloader.polls==1,"hide/show replaced ad");
  NativeAdPreloader.available=true;android.os.SystemClock.now=55*60*1000L;a.show(0,.2f,1,.3f);check(first.destroyed==1&&NativeAdPreloader.polls==2,"expired displayed ad not released");
  first.callback.onAdImpression();first.callback.onAdClicked();first.callback.onAdPaid(new AdValue());check(MoneyBoostAdDiagnostics.events.size()==2&&MoneyBoostFirebaseManager.paid==1,"stale callback accepted");
+ java.lang.reflect.Field viewField=MoneyBoostNativeAdapter.class.getDeclaredField("view");viewField.setAccessible(true);
+ android.view.View rendered=(android.view.View)viewField.get(a);
+ int pollsBeforeScroll=NativeAdPreloader.polls;
+ a.show(0,.3f,1,.3f);
+ check(((android.widget.FrameLayout.LayoutParams)rendered.getLayoutParams()).topMargin==Math.round(.3f*844),"Native did not follow scrolled slot");
+ a.show(0,-.1f,1,.3f);check(rendered.visibility==android.view.View.GONE,"clipped Native left a floating overlay");
+ a.show(0,.2f,1,.3f);check(rendered.visibility==android.view.View.VISIBLE&&NativeAdPreloader.polls==pollsBeforeScroll,"scroll return replaced ad or stayed hidden");
+ MoneyBoostNativeStyle style=new MoneyBoostNativeStyle(0,1,2,3,4,Float.NaN,999,true,-5,999);
+ check(style.cornerRadius==14&&style.buttonRadius==48&&style.headlineSize==12&&style.buttonSize==20,"style bounds/NaN invalid");
+ a.applyStyle(style);check(NativeAdPreloader.polls==pollsBeforeScroll&&NativeAdPreloader.last.destroyed==0,"restyling consumed/destroyed ad");
+ android.widget.FrameLayout container=new android.widget.FrameLayout(new android.app.Activity());
+ a.setContainer(container);check(rendered.getParent()==container,"Android list ad not attached to scroll slot");
+ a.show(0,.25f,1,.3f);check(NativeAdPreloader.polls==pollsBeforeScroll,"attaching list slot consumed another ad");
+ a.setContainer(null);check(rendered.getParent()!=container,"list container did not detach");
  NativeAd second=NativeAdPreloader.last;a.destroy();a.destroy();second.callback.onAdImpression();second.callback.onAdPaid(new AdValue());check(!a.isReady()&&NativeAdPreloader.destroys==1&&second.destroyed==1,"destroy not idempotent");
  int starts=NativeAdPreloader.starts;NativeAdPreloader.callback.onAdFailedToPreload(homeId,new LoadAdError());a.load();check(NativeAdPreloader.starts==starts,"destroyed callback restarted");
  MoneyBoostNativeAdapter b=new MoneyBoostNativeAdapter(new android.app.Activity(),"album","same-test-unit");b.load();check(!homeId.equals(NativeAdPreloader.id),"home/album test-unit pool collision");
@@ -77,5 +91,5 @@ public static void main(String[] args){
 }}'''
 for name,body in stubs.items():
  p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body)
-subprocess.run([str(j/'javac'),'-d',str(out/'classes'),*[str(out/n) for n in stubs],str(src/'MoneyBoostNativeAdapter.java'),str(src/'MoneyBoostNativeGeometry.java')],check=True)
+subprocess.run([str(j/'javac'),'-d',str(out/'classes'),*[str(out/n) for n in stubs],str(src/'MoneyBoostNativeAdapter.java'),str(src/'MoneyBoostNativeGeometry.java'),str(src/'MoneyBoostNativeStyle.java')],check=True)
 subprocess.run([str(j/'java'),'-cp',str(out/'classes'),'com.joyboost.moneyboost.NativePreloadTest'],check=True)

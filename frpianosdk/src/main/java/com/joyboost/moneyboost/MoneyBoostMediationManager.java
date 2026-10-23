@@ -1083,6 +1083,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             bannerOpportunity = adAnalytics.opportunity("banner", "persistent", MoneyBoost_bannerAdapter != null && MoneyBoost_bannerAdapter.MoneyBoostIsLoaded());
         }
         MoneyBoost_bannerEnabled = true;
+        // Release hidden Native pools before asking Google to register the fold pool.
+        for (MoneyBoostNativeAdapter ad : MoneyBoost_nativeAds.values()) ad.sync();
         MoneyBoost_collapsibleAdapter.MoneyBoostLoadCollapsibleBannerView();
         MoneyBoostSyncBannerVisibility();
     }
@@ -1553,6 +1555,21 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         });
     }
 
+    private volatile MoneyBoostNativeStyle MoneyBoost_nativeStyle = new MoneyBoostNativeStyle();
+
+    /** Called by the host project; dimensions come from each Show rectangle, never screen overlays. */
+    public void MoneyBoostSetNativeStyle(int background, int border, int text, int button, int buttonText,
+                                        float cornerRadiusDp, float buttonRadiusDp, boolean outlineButton,
+                                        float headlineSizeSp, float buttonSizeSp) {
+        mainHandler.post(() -> {
+            MoneyBoost_nativeStyle = new MoneyBoostNativeStyle(background, border, text, button, buttonText,
+                    cornerRadiusDp, buttonRadiusDp, outlineButton, headlineSizeSp, buttonSizeSp);
+            for (MoneyBoostNativeAdapter ad : MoneyBoost_nativeAds.values()) ad.applyStyle(MoneyBoost_nativeStyle);
+        });
+    }
+
+    MoneyBoostNativeStyle MoneyBoostGetNativeStyle() { return MoneyBoost_nativeStyle; }
+
     /** Arbitrary scene name + zero-based index into MoneyBoost_NATIVE_ID (semicolon separated).
      * Multiple scenes may explicitly select the same index; empty/out-of-range slots are disabled.
      */
@@ -1560,6 +1577,15 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         mainHandler.post(() -> {
             MoneyBoostNativeAdapter ad = MoneyBoostGetNative(placement, adUnitIndex);
             if (ad != null) ad.load();
+        });
+    }
+
+    /** Optional Android scrolling slot. Unity continues to provide screen rectangles instead. */
+    public void MoneyBoostSetNativeContainer(String placement, android.widget.FrameLayout container) {
+        mainHandler.post(() -> {
+            if (placement == null) return;
+            MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement);
+            if (ad != null) ad.setContainer(container);
         });
     }
 
@@ -1571,16 +1597,18 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     /** Normalized content-view rectangle: top-left origin, values 0..1. */
     public void MoneyBoostShowNativeAd(String placement, float x, float y, float width, float height) {
-        mainHandler.post(() -> {
+        Runnable show = () -> {
             if (placement == null) return;
             if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(width) || !Float.isFinite(height)) return;
             MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement);
             if (ad != null) ad.show(x, y, width, height);
-        });
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) show.run(); else mainHandler.post(show);
     }
 
     public void MoneyBoostHideNativeAd(String placement) {
-        mainHandler.post(() -> { if (placement == null) return; MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement); if (ad != null) ad.hide(); });
+        Runnable hide = () -> { if (placement == null) return; MoneyBoostNativeAdapter ad = MoneyBoost_nativeAds.get(placement); if (ad != null) ad.hide(); };
+        if (Looper.myLooper() == Looper.getMainLooper()) hide.run(); else mainHandler.post(hide);
     }
 
     public void MoneyBoostDestroyNativeAd(String placement) {
@@ -1846,6 +1874,18 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     //////////////////////////////////////////////////////////////////////Debug status (test app) ////////////////////////////////////////////////////////////////
+
+    public String MoneyBoostDebugCollapsibleStateText() {
+        if (MoneyBoost_collapsibleBannerKey.isEmpty()) return "disabled: no ID";
+        if (!MoneyBoost_isInitSuccess || !MoneyBoost_adsPermitted) return "waiting for init/consent";
+        long remaining = MoneyBoost_lastInterstitialClosed == Long.MIN_VALUE ? 0
+                : 30000L - (SystemClock.elapsedRealtime() - MoneyBoost_lastInterstitialClosed);
+        if (remaining > 0) return "post-interstitial guard: " + ((remaining + 999) / 1000) + "s";
+        if (!MoneyBoost_collapsibleActive) return "idle: press Show";
+        if (MoneyBoost_collapsibleAdapter == null || !MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded()) return "Google preloading";
+        if (!MoneyBoost_collapsibleAdapter.MoneyBoostIsVisible()) return "ready, temporarily hidden";
+        return MoneyBoost_collapsibleAdapter.MoneyBoostIsCollapsibleCreative() ? "shown: collapsible creative" : "shown: ordinary creative returned";
+    }
 
     public boolean MoneyBoostDebugIsCollapsibleReady() {
         return MoneyBoost_collapsibleAdapter != null && MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded();

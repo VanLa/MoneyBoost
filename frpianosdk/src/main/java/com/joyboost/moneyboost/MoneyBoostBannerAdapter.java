@@ -189,7 +189,8 @@ public class MoneyBoostBannerAdapter {
             if (root == null || size == null) { next.destroy(); return; }
             // Prepare a hidden Google AdView; leave the displayed view untouched until registration succeeds.
             candidate = new AdView(MoneyBoost_activity);
-            candidate.setVisibility(View.GONE);
+            // Collapsible expansion happens on attachment: attach that renderer visibly.
+            candidate.setVisibility(MoneyBoost_isCollapsiblePlacement ? View.VISIBLE : View.GONE);
             candidate.setBackgroundColor(Color.TRANSPARENT);
             candidate.resize(size);
             FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(
@@ -218,7 +219,7 @@ public class MoneyBoostBannerAdapter {
         currentImpressed = false;
         visibleMillis = 0;
         // Expose the replacement before releasing the previous renderer.
-        candidate.setVisibility(wasVisible ? View.VISIBLE : View.GONE);
+        candidate.setVisibility(MoneyBoost_isCollapsiblePlacement || wasVisible ? View.VISIBLE : View.GONE);
         if (previousView != null) {
             previousView.setVisibility(View.GONE);
             previousView.unregisterBannerAd();
@@ -281,6 +282,10 @@ public class MoneyBoostBannerAdapter {
                 MoneyBoost_adView.setVisibility(MoneyBoost_bannerAd != null ? View.VISIBLE : View.GONE);
             }
         });
+    }
+
+    public boolean MoneyBoostIsCollapsibleCreative() {
+        return MoneyBoost_bannerAd != null && MoneyBoost_bannerAd.isCollapsible();
     }
 
     public boolean MoneyBoostIsVisible() {

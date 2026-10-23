@@ -27,6 +27,10 @@ final class MoneyBoostNativeAdapter {
     private final String placement, unit;
     private volatile NativeAd ad;
     private NativeAdView view;
+    private FrameLayout hostContainer;
+    private TextView headlineView, badgeView;
+    private Button ctaView;
+    private MediaView mediaView;
     private volatile boolean preloadingStarted;
     private boolean requested;
     private final String preloadId;
@@ -125,6 +129,19 @@ final class MoneyBoostNativeAdapter {
         return params;
     }
 
+    /** Android lists can embed the actual ad in a slot, letting ScrollView own drag interception. */
+    void setContainer(FrameLayout container) {
+        if (destroyed || hostContainer == container) return;
+        hostContainer = container;
+        if (view != null) {
+            ViewGroup parent = (ViewGroup)view.getParent();
+            if (parent != null) parent.removeView(view);
+            ViewGroup target = container != null ? container : root();
+            if (target != null) target.addView(view, new FrameLayout.LayoutParams(-1, -1));
+        }
+        sync();
+    }
+
     void hide() { requested = false; if (view != null) view.setVisibility(View.GONE); }
 
     void sync() {
@@ -140,7 +157,8 @@ final class MoneyBoostNativeAdapter {
         if (manager.MoneyBoostHasCollapsibleRequest() && preloadingStarted) {
             NativeAdPreloader.destroy(preloadId); preloadingStarted = false; generation++;
         }
-        if (!requested || destroyed || !manager.MoneyBoostCanShowNativeAds() || !fits) {
+        if (!requested || destroyed || !manager.MoneyBoostCanShowNativeAds() || !fits
+                || (hostContainer != null && !hostContainer.isShown())) {
             if (view != null) view.setVisibility(View.GONE); return;
         }
         if (ad != null && expired()) clearAd();
@@ -161,12 +179,21 @@ final class MoneyBoostNativeAdapter {
         }
         if (view == null) return;
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(w, h);
+        if (hostContainer != null) {
+            int[] rootAt = new int[2], slotAt = new int[2];
+            root.getLocationOnScreen(rootAt); hostContainer.getLocationOnScreen(slotAt);
+            left += rootAt[0] - slotAt[0]; top += rootAt[1] - slotAt[1];
+        }
         params.gravity = Gravity.TOP | Gravity.LEFT; params.leftMargin = left; params.topMargin = top;
         ViewGroup.LayoutParams old = view.getLayoutParams();
         if (!(old instanceof FrameLayout.LayoutParams)
                 || old.width != w || old.height != h
                 || ((FrameLayout.LayoutParams)old).leftMargin != left
                 || ((FrameLayout.LayoutParams)old).topMargin != top) view.setLayoutParams(params);
+        // Keep advertiser media proportional as the host slot changes size.
+        int mediaSize = Math.min(dp(160), Math.max(dp(120), Math.min(Math.round(w * .34f), h - dp(50))));
+        if (mediaView != null && (mediaView.getLayoutParams().width != mediaSize || mediaView.getLayoutParams().height != mediaSize))
+            mediaView.setLayoutParams(new LinearLayout.LayoutParams(mediaSize, mediaSize));
         view.setVisibility(View.VISIBLE);
         // Banner is always the upper overlay, even if a future layout accidentally intersects it.
         manager.MoneyBoostBringBannersToFront();
@@ -177,34 +204,53 @@ final class MoneyBoostNativeAdapter {
         if (root == null || ad == null) return;
         view = new NativeAdView(activity);
         view.setVisibility(View.GONE);
-        GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.WHITE); bg.setCornerRadius(dp(14));
-        bg.setStroke(dp(1), Color.rgb(205, 195, 235)); view.setBackground(bg);
         LinearLayout outer = new LinearLayout(activity); outer.setOrientation(LinearLayout.VERTICAL);
         outer.setPadding(dp(12), dp(6), dp(30), dp(8));
         view.addView(outer, new FrameLayout.LayoutParams(-1, -1));
-        TextView badge = text("Ad", 12, Color.DKGRAY); // Publisher attribution; SDK supplies AdChoices.
+        TextView badge = text("Ad", 12, Color.DKGRAY); badgeView = badge; // Publisher attribution; SDK supplies AdChoices.
         outer.addView(badge, new LinearLayout.LayoutParams(-1, dp(20)));
         LinearLayout content = new LinearLayout(activity); content.setGravity(Gravity.CENTER_VERTICAL);
         outer.addView(content, new LinearLayout.LayoutParams(-1, -1));
-        MediaView media = new MediaView(activity); media.setImageScaleType(ImageView.ScaleType.FIT_CENTER);
+        MediaView media = new MediaView(activity); mediaView = media; media.setImageScaleType(ImageView.ScaleType.FIT_CENTER);
         media.setMediaContent(ad.getMediaContent());
         content.addView(media, new LinearLayout.LayoutParams(dp(120), dp(120)));
         LinearLayout detail = new LinearLayout(activity); detail.setOrientation(LinearLayout.VERTICAL);
         detail.setPadding(dp(10), 0, 0, 0);
         content.addView(detail, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView headline = text(limit(ad.getHeadline(), 25), 15, Color.rgb(42, 29, 80));
+        TextView headline = text(limit(ad.getHeadline(), 25), 15, Color.rgb(42, 29, 80)); headlineView = headline;
         detail.addView(headline); view.setHeadlineView(headline);
         if (ad.getIcon() != null && ad.getIcon().getDrawable() != null) {
             ImageView icon = new ImageView(activity); icon.setImageDrawable(ad.getIcon().getDrawable());
             detail.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24))); view.setIconView(icon);
         }
         if (ad.getCallToAction() != null) {
-            Button cta = new Button(activity); cta.setText(limit(ad.getCallToAction(), 15)); cta.setTextSize(13);
+            Button cta = new Button(activity); ctaView = cta; cta.setAllCaps(false); cta.setText(limit(ad.getCallToAction(), 15)); cta.setTextSize(13);
             detail.addView(cta, new LinearLayout.LayoutParams(-1, dp(48))); view.setCallToActionView(cta);
         }
+        applyStyle(MoneyBoostMediationManager.getInstance().MoneyBoostGetNativeStyle());
         // Never register manual impression/click handlers or make the background clickable.
-        root.addView(view, new FrameLayout.LayoutParams(dp(300), dp(200)));
+        ViewGroup parent = hostContainer != null ? hostContainer : root;
+        parent.addView(view, new FrameLayout.LayoutParams(dp(300), dp(200)));
         view.registerNativeAd(ad, media);
+    }
+
+    /** Restyle in place: never re-register an ad or duplicate impression/click handlers. */
+    void applyStyle(MoneyBoostNativeStyle style) {
+        if (view == null) return;
+        GradientDrawable card = new GradientDrawable();
+        card.setColor(style.background); card.setCornerRadius(dp(style.cornerRadius));
+        card.setStroke(dp(1), style.border); view.setBackground(card);
+        if (badgeView != null) badgeView.setTextColor(style.text);
+        if (headlineView != null) { headlineView.setTextColor(style.text); headlineView.setTextSize(style.headlineSize); }
+        if (ctaView != null) {
+            GradientDrawable button = new GradientDrawable();
+            button.setColor(style.outlineButton ? style.background : style.button);
+            button.setCornerRadius(dp(style.buttonRadius));
+            if (style.outlineButton) button.setStroke(dp(2), style.button);
+            ctaView.setBackground(button);
+            ctaView.setTextColor(style.outlineButton ? style.button : style.buttonText);
+            ctaView.setTextSize(style.buttonSize);
+        }
     }
 
     private static String limit(String value, int count) {
@@ -215,10 +261,11 @@ final class MoneyBoostNativeAdapter {
     private TextView text(String value, int size, int color) {
         TextView t = new TextView(activity); t.setText(value); t.setTextSize(size); t.setTextColor(color); return t;
     }
-    private int dp(int n) { return Math.round(n * activity.getResources().getDisplayMetrics().density); }
+    private int dp(float n) { return Math.round(n * activity.getResources().getDisplayMetrics().density); }
     private ViewGroup root() { return activity.findViewById(android.R.id.content); }
     private void clearAd() {
         if (view != null) { ViewGroup parent = (ViewGroup)view.getParent(); if (parent != null) parent.removeView(view); view.destroy(); view = null; }
+        headlineView = null; badgeView = null; ctaView = null; mediaView = null;
         if (ad != null) { ad.destroy(); ad = null; }
     }
     void destroy() {
