@@ -165,8 +165,6 @@ public class MainActivity extends AppCompatActivity {
         });
         btnCollapsibleBanner.setOnClickListener(v -> {
             cancelSplashIfUserStartedPlaying();
-            nativePlacement = null;
-            mediationManager.MoneyBoostDestroyNativeAd(NATIVE_SCENE);
             // Each explicit demo click tests a fresh expansion, even if the previous ad was collapsed.
             mediationManager.MoneyBoostHideCollapsibleBannerView();
             mediationManager.MoneyBoostShowCollapsibleBannerView("demo_fold");

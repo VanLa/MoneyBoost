@@ -1019,6 +1019,12 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     boolean MoneyBoostHasCollapsibleRequest() { return MoneyBoost_collapsibleActive; }
 
+    // Home shares the bottom gap with the expanded banner; feed slots remain independent.
+    boolean MoneyBoostShouldHideNativeForCollapsible(String placement) {
+        return "home".equals(placement) && MoneyBoost_collapsibleActive
+                && MoneyBoost_collapsibleAdapter != null && MoneyBoost_collapsibleAdapter.MoneyBoostIsVisible();
+    }
+
     boolean MoneyBoostCanRefreshBannerAds() { return !MoneyBoostShouldBlockBannerDisplay(); }
 
     private void MoneyBoostSyncBannerVisibility() {
@@ -1045,6 +1051,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             if (MoneyBoost_bannerAdapter != null) MoneyBoost_bannerAdapter.MoneyBoostShowBannerView();
             if (MoneyBoost_collapsibleAdapter != null) MoneyBoost_collapsibleAdapter.MoneyBoostHideBannerView();
         }
+        // Apply Home-only visibility after the actual fold renderer has changed state.
+        for (MoneyBoostNativeAdapter ad : MoneyBoost_nativeAds.values()) ad.sync();
     }
 
     private void MoneyBoostOnFullscreenAdShow() {
@@ -1091,8 +1099,6 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             bannerOpportunity = adAnalytics.opportunity("banner", "persistent", MoneyBoost_bannerAdapter != null && MoneyBoost_bannerAdapter.MoneyBoostIsLoaded());
         }
         MoneyBoost_bannerEnabled = true;
-        // Release hidden Native pools before asking Google to register the fold pool.
-        for (MoneyBoostNativeAdapter ad : MoneyBoost_nativeAds.values()) ad.sync();
         MoneyBoost_collapsibleAdapter.MoneyBoostLoadCollapsibleBannerView();
         MoneyBoostSyncBannerVisibility();
     }
@@ -1709,7 +1715,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     boolean MoneyBoostCanShowNativeAds() {
         return MoneyBoost_adsPermitted && MoneyBoost_isInitSuccess && MoneyBoost_needPopAD
                 && MoneyBoost_isAppForeground && !MoneyBoost_isDestroyed && !MoneyBoost_privacyFormShowing
-                && !MoneyBoost_collapsibleActive && !MoneyBoost_interstitialShowPending && !MoneyBoost_rewardShowPending
+                && !MoneyBoost_interstitialShowPending && !MoneyBoost_rewardShowPending
                 && !MoneyBoostIsFullscreenAdShowing() && !MoneyBoostIsSplashAdShowing();
     }
 

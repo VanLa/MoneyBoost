@@ -196,11 +196,8 @@ final class MoneyBoostNativeAdapter {
             fits=w>=dp(tile?80:240)&&h>=dp(compact?48:tile?112:200)&&visibleRight>visibleLeft&&visibleBottom>visibleTop;
         }
 
-        // Free the hidden Native buffer for the requested collapsible format under Google's global cache limit.
-        if (manager.MoneyBoostHasCollapsibleRequest() && preloadingStarted) {
-            NativeAdPreloader.destroy(preloadId); preloadingStarted = false; generation++;
-        }
-        if (!requested || destroyed || !manager.MoneyBoostCanShowNativeAds() || !fits
+        if (!requested || destroyed || !manager.MoneyBoostCanShowNativeAds()
+                || manager.MoneyBoostShouldHideNativeForCollapsible(placement) || !fits
                 || (hostContainer != null && !hostContainer.isShown())) {
             displayed = false; if (view != null) view.setVisibility(View.GONE); return;
         }
