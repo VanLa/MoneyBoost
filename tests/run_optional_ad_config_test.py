@@ -16,9 +16,9 @@ public class Activity extends android.content.Context { public <T extends androi
 'android/util/DisplayMetrics.java': '''package android.util; public class DisplayMetrics {public float density=1;public int widthPixels=390,heightPixels=844;}''',
 'com/joyboost/moneyboost/MoneyBoostBannerAdapter.java': '''package com.joyboost.moneyboost;
 public class MoneyBoostBannerAdapter {
- public static int created; public android.app.Activity MoneyBoost_activity; public String MoneyBoost_ad_unit;public boolean visible;
+ public static int created,foldLoads,releases; public android.app.Activity MoneyBoost_activity; public String MoneyBoost_ad_unit;public boolean visible;
  public MoneyBoostBannerAdapter(){created++;}public void MoneyBoostInitBannerAdapter(){} public void MoneyBoostOnDestroy(){visible=false;}
- public void MoneyBoostLoadBannerView(){}public void MoneyBoostLoadCollapsibleBannerView(){}
+ public void MoneyBoostLoadBannerView(){}public void MoneyBoostLoadCollapsibleBannerView(){foldLoads++;}public void MoneyBoostReleaseDisplayedBanner(){visible=false;releases++;}
  public boolean MoneyBoostIsLoaded(){return true;} public boolean MoneyBoostIsVisible(){return visible;}
  public void MoneyBoostShowBannerView(){visible=true;}public void MoneyBoostHideBannerView(){visible=false;}
  public int MoneyBoostGetBannerReserveHeightPx(){return 80;}
@@ -65,9 +65,15 @@ public class OptionalAdConfigTest {
  check(get(m,"MoneyBoost_interAdapter")==null,"Disabling format retained old adapter");
  set(m,"MoneyBoost_activity",activity);set(m,"MoneyBoost_adsPermitted",true);set(m,"MoneyBoost_isInitSuccess",true);set(m,"MoneyBoost_isAppForeground",true);set(m,"MoneyBoost_needPopAD",true);set(m,"MoneyBoost_isDestroyed",false);
  m.MoneyBoostShowCollapsibleBannerView("any_scene");check(!m.MoneyBoostHasCollapsibleRequest()&&MoneyBoostBannerAdapter.created==0,"Blank fold started a request");
- set(m,"MoneyBoost_collapsibleBannerKey","fold-id");m.MoneyBoostShowCollapsibleBannerView("any_scene");
+ set(m,"MoneyBoost_collapsibleBannerKey","fold-id");
+ call(m,"MoneyBoostInitAdAdapters",new Class[]{android.app.Activity.class},activity);
+ Object preparedFold=get(m,"MoneyBoost_collapsibleAdapter");
+ call(m,"MoneyBoostLoadBannerView",new Class[]{});
+ check(preparedFold!=null&&MoneyBoostBannerAdapter.foldLoads>0&&!m.MoneyBoostHasCollapsibleRequest()&&!m.MoneyBoostDebugIsCollapsibleShowing(),"Fold did not preload independently before first Show, or displayed early");
+ int preparedCount=MoneyBoostBannerAdapter.created;m.MoneyBoostShowCollapsibleBannerView("any_scene");
+ check(get(m,"MoneyBoost_collapsibleAdapter")==preparedFold&&MoneyBoostBannerAdapter.created==preparedCount,"First Show discarded preloaded pool");
  check(m.MoneyBoostHasCollapsibleRequest()&&m.MoneyBoostDebugIsCollapsibleShowing(),"Fold depends on ordinary Banner");
- m.MoneyBoostHideCollapsibleBannerView();check(!m.MoneyBoostHasCollapsibleRequest(),"Fold not released without Banner");
+ m.MoneyBoostHideCollapsibleBannerView();check(!m.MoneyBoostHasCollapsibleRequest()&&get(m,"MoneyBoost_collapsibleAdapter")==preparedFold&&MoneyBoostBannerAdapter.releases>0,"Fold close discarded refill pool");
  set(m,"MoneyBoost_nativeKeys",units);
  for(int index:new int[]{-1,1,3,4})m.MoneyBoostLoadNativeAd("disabled_"+index,index);
  m.MoneyBoostLoadNativeAd(null,0);m.MoneyBoostLoadNativeAd(" ",0);
@@ -94,7 +100,7 @@ public class OptionalAdConfigTest {
 for field,kind,init,listener in [('inter','Interstitial','Interstitial','MoneyBoost_InterstitialListener'),('reward','RewardVideo','RewardVideo','MoneyBoost_rewardVideoListener'),('splash','Splash','Splash','MoneyBoost_splashListener')]:
  listener_type={'inter':'MoneyBoostInterstitialListener','reward':'MoneyBoostRewardVideoListener','splash':'MoneyBoostSplashListener'}[field]
  files[f'com/joyboost/moneyboost/MoneyBoost{kind}Adapter.java']=f'''package com.joyboost.moneyboost;
- public class MoneyBoost{kind}Adapter {{ public static int created; public android.app.Activity MoneyBoost_activity;public String MoneyBoost_ad_unit;
+ public class MoneyBoost{kind}Adapter {{ public static int created,foldLoads,releases; public android.app.Activity MoneyBoost_activity;public String MoneyBoost_ad_unit;
  public {listener_type} {listener};public MoneyBoost{kind}Adapter(){{created++;}}
  public void MoneyBoostInit{init}Adapter(){{}}public void MoneyBoostOnDestroy(){{}}public boolean MoneyBoostIsShowing(){{return false;}} }}'''
 for name,body in files.items():

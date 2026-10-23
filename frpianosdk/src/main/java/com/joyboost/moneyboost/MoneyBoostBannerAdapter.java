@@ -104,7 +104,6 @@ public class MoneyBoostBannerAdapter {
     public void MoneyBoostLoadCollapsibleBannerView() {
         MoneyBoost_isCollapsiblePlacement = true;
         // A collapsible request must be explicit even when a regular banner is cached.
-        MoneyBoost_isLoaded = false;
         MoneyBoostLoadBannerView();
     }
 
@@ -361,6 +360,19 @@ public class MoneyBoostBannerAdapter {
 
     public void MoneyBoostResumeAutoRefresh() {
         // Visibility/foreground gate in refreshTick pauses visible-time rotation.
+    }
+
+    /** Release the consumed renderer; Google's preloader keeps/refills the next opportunity. */
+    public void MoneyBoostReleaseDisplayedBanner() {
+        if (destroyed || MoneyBoost_bannerAd == null) return;
+        MoneyBoostHideBannerView();
+        MoneyBoost_adView.unregisterBannerAd();
+        MoneyBoost_bannerAd.destroy(); MoneyBoost_bannerAd = null;
+        ViewParent parent = MoneyBoost_adView.getParent();
+        if(parent instanceof ViewGroup)((ViewGroup)parent).removeView(MoneyBoost_adView);
+        MoneyBoost_adView.destroy(); MoneyBoost_adView = null;
+        MoneyBoost_isLoaded = false; currentImpressed = false; visibleMillis = 0;
+        MoneyBoostInitBannerAdapter();
     }
 
     public void MoneyBoostOnDestroy() {

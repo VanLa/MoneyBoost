@@ -10,6 +10,7 @@ public class MoneyBoostBannerAdapter {
  public boolean MoneyBoostIsLoaded(){return ready;}public boolean MoneyBoostIsVisible(){return visible;}
  public void MoneyBoostShowBannerView(){calls.add(MoneyBoost_ad_unit+":show");if(!failShow)visible=true;}
  public void MoneyBoostHideBannerView(){calls.add(MoneyBoost_ad_unit+":hide");visible=false;}
+ public void MoneyBoostReleaseDisplayedBanner(){calls.add(MoneyBoost_ad_unit+":release");visible=false;}
  public void MoneyBoostOnDestroy(){calls.add(MoneyBoost_ad_unit+":destroy");visible=false;}
 }''',
 'com/joyboost/moneyboost/BannerHandoffTest.java':'''package com.joyboost.moneyboost;
@@ -43,7 +44,7 @@ public class BannerHandoffTest{
   check(!payload.containsKey("value")&&!payload.containsKey("currency"),"count duplicated revenue");
  }
  MoneyBoostBannerAdapter.calls.clear();m.MoneyBoostHideCollapsibleBannerView();check(regular.visible,"fold close lost ordinary Banner");
- check(MoneyBoostBannerAdapter.calls.indexOf("regular:show")<MoneyBoostBannerAdapter.calls.indexOf("fold:destroy"),"fold destroyed before ordinary restored");
+ check(MoneyBoostBannerAdapter.calls.indexOf("regular:show")<MoneyBoostBannerAdapter.calls.indexOf("fold:release"),"fold released before ordinary restored");
  set(m,"MoneyBoost_isAppForeground",false);sync(m);check(!regular.visible,"background Banner visible");
  System.out.println("BANNER HANDOFF PASS: separate IDs, pending/failed fold retains ordinary, show-before-hide, restore-before-destroy, per-unit impression dedup, fallback split, count-only events, background exclusion.");
  }

@@ -469,6 +469,11 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
             MoneyBoost_bannerAdapter.MoneyBoostInitBannerAdapter();
         }
 
+        if (MoneyBoost_collapsibleAdapter != null) MoneyBoost_collapsibleAdapter.MoneyBoostOnDestroy();
+        MoneyBoost_collapsibleAdapter = null;
+        MoneyBoost_collapsibleActive = false;
+        MoneyBoostPrepareCollapsibleAdapter();
+
         MoneyBoost_interAdapter = null;
         if (!MoneyBoost_interKey.isEmpty()) {
             MoneyBoost_interAdapter = new MoneyBoostInterstitialAdapter();
@@ -690,10 +695,10 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
                 && !MoneyBoost_bannerAdapter.MoneyBoostIsLoaded()) {
             MoneyBoost_bannerAdapter.MoneyBoostLoadBannerView();
         }
-        if (MoneyBoost_collapsibleActive && MoneyBoost_collapsibleAdapter != null
+        if (MoneyBoost_collapsibleAdapter != null
                 && !MoneyBoost_collapsibleAdapter.MoneyBoostIsLoading()
                 && !MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded()) {
-            MoneyBoost_collapsibleAdapter.MoneyBoostLoadBannerView();
+            MoneyBoost_collapsibleAdapter.MoneyBoostLoadCollapsibleBannerView();
         }
     }
 
@@ -945,10 +950,16 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     //////////////////////////////////////////////////////////////////////Banner////////////////////////////////////////////////////////////////////////////////
 
     private void MoneyBoostLoadBannerView(){
-        if (MoneyBoost_bannerAdapter == null) {
-            return;
-        }
-        MoneyBoost_bannerAdapter.MoneyBoostLoadBannerView();
+        if (MoneyBoost_bannerAdapter != null) MoneyBoost_bannerAdapter.MoneyBoostLoadBannerView();
+        if (MoneyBoost_collapsibleAdapter != null) MoneyBoost_collapsibleAdapter.MoneyBoostLoadCollapsibleBannerView();
+    }
+
+    private void MoneyBoostPrepareCollapsibleAdapter() {
+        if (MoneyBoost_collapsibleAdapter != null || MoneyBoost_collapsibleBannerKey.isEmpty() || MoneyBoost_activity == null) return;
+        MoneyBoost_collapsibleAdapter = new MoneyBoostBannerAdapter();
+        MoneyBoost_collapsibleAdapter.MoneyBoost_activity = MoneyBoost_activity;
+        MoneyBoost_collapsibleAdapter.MoneyBoost_ad_unit = MoneyBoost_collapsibleBannerKey;
+        MoneyBoost_collapsibleAdapter.MoneyBoostInitBannerAdapter();
     }
 
     public void MoneyBoostShowBannerView(){
@@ -1072,12 +1083,9 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         if (MoneyBoost_interstitialShowPending
                 || (MoneyBoost_lastInterstitialClosed != Long.MIN_VALUE && now - MoneyBoost_lastInterstitialClosed < 30000L)) return;
         if (MoneyBoost_collapsibleBannerKey.isEmpty() || MoneyBoost_activity == null) return;
-        collapsibleOpportunity = adAnalytics.opportunity("collapsibleBanner", MoneyBoostAdDiagnostics.shortText(scene), false);
+        collapsibleOpportunity = adAnalytics.opportunity("collapsibleBanner", MoneyBoostAdDiagnostics.shortText(scene), MoneyBoost_collapsibleAdapter != null && MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded());
         // Preserve the normal banner so Hide can restore it without a new network load.
-        MoneyBoost_collapsibleAdapter = new MoneyBoostBannerAdapter();
-        MoneyBoost_collapsibleAdapter.MoneyBoost_activity = MoneyBoost_activity;
-        MoneyBoost_collapsibleAdapter.MoneyBoost_ad_unit = MoneyBoost_collapsibleBannerKey;
-        MoneyBoost_collapsibleAdapter.MoneyBoostInitBannerAdapter();
+        MoneyBoostPrepareCollapsibleAdapter();
         MoneyBoost_collapsibleActive = true;
         if (!MoneyBoost_bannerEnabled) {
             bannerOpportunity = adAnalytics.opportunity("banner", "persistent", MoneyBoost_bannerAdapter != null && MoneyBoost_bannerAdapter.MoneyBoostIsLoaded());
@@ -1097,8 +1105,7 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         MoneyBoost_collapsibleActive = false;
         MoneyBoostSyncBannerVisibility();
         if (MoneyBoost_collapsibleAdapter != null) {
-            MoneyBoost_collapsibleAdapter.MoneyBoostOnDestroy();
-            MoneyBoost_collapsibleAdapter = null;
+            MoneyBoost_collapsibleAdapter.MoneyBoostReleaseDisplayedBanner();
         }
         // Keep the persistent banner enabled when the expanded placement ends.
         MoneyBoostSyncBannerVisibility();
@@ -1952,7 +1959,8 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
         long remaining = MoneyBoost_lastInterstitialClosed == Long.MIN_VALUE ? 0
                 : 30000L - (SystemClock.elapsedRealtime() - MoneyBoost_lastInterstitialClosed);
         if (remaining > 0) return "post-interstitial guard: " + ((remaining + 999) / 1000) + "s";
-        if (!MoneyBoost_collapsibleActive) return "idle: press Show";
+        if (!MoneyBoost_collapsibleActive) return MoneyBoost_collapsibleAdapter != null && MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded()
+                ? "preloaded: press Show" : "Google preloading: waiting for inventory";
         if (MoneyBoost_collapsibleAdapter == null || !MoneyBoost_collapsibleAdapter.MoneyBoostIsLoaded()) return "Google preloading";
         if (!MoneyBoost_collapsibleAdapter.MoneyBoostIsVisible()) return "ready, temporarily hidden";
         return MoneyBoost_collapsibleAdapter.MoneyBoostIsCollapsibleCreative() ? "shown: collapsible creative" : "shown: ordinary creative returned";
