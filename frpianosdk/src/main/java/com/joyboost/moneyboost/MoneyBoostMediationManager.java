@@ -1570,6 +1570,22 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
 
     private volatile MoneyBoostNativeStyle MoneyBoost_nativeStyle = new MoneyBoostNativeStyle();
 
+    private MoneyBoostNativeArtwork nativeArtwork;
+    public void MoneyBoostSetNativeArtwork(byte[] buttonPng,int left,int bottom,int right,int top,boolean unityBackground) {
+        if(buttonPng!=null && buttonPng.length>1024*1024)return;
+        mainHandler.post(() -> {
+            if(MoneyBoost_activity==null)return;
+            try {
+                nativeArtwork=new MoneyBoostNativeArtwork(MoneyBoost_activity.getResources(),buttonPng,left,bottom,right,top,unityBackground);
+                for(MoneyBoostNativeAdapter ad:MoneyBoost_nativeAds.values())ad.applyStyle(MoneyBoost_nativeStyle);
+            } catch(RuntimeException e){Log.w("MoneyBoostAds","Native artwork unavailable",e);}
+        });
+    }
+    boolean MoneyBoostNativeUsesUnityBackground(){return nativeArtwork!=null&&nativeArtwork.unityBackground;}
+    android.graphics.drawable.Drawable MoneyBoostGetNativeButtonBackground(){
+        return nativeArtwork==null||MoneyBoost_activity==null?null:nativeArtwork.button(MoneyBoost_activity.getResources());
+    }
+
     /** Called by the host project; dimensions come from each Show rectangle, never screen overlays. */
     public void MoneyBoostSetNativeStyle(int background, int border, int text, int button, int buttonText,
                                         float cornerRadiusDp, float buttonRadiusDp, boolean outlineButton,
@@ -1610,9 +1626,33 @@ public class MoneyBoostMediationManager implements MoneyBoostInterstitialListene
     }
 
     public void MoneyBoostLoadNativeAd(String placement, int adUnitIndex, int template) {
+        MoneyBoostLoadNativeAd(placement, adUnitIndex, template, 1);
+    }
+
+    /** Optional per-placement Google Preloader buffer (1..5). Legacy callers retain 1.
+     * Configure before the first load; repeated calls do not restart an active pool.
+     * This is cached inventory, not a batch request or a count of visible views.
+     */
+    public void MoneyBoostLoadNativeAd(String placement, int adUnitIndex, int template, int bufferSize) {
         mainHandler.post(() -> {
             MoneyBoostNativeAdapter ad = MoneyBoostGetNative(placement, adUnitIndex, template);
-            if (ad != null) ad.load();
+            if (ad != null) { ad.setPreloadBufferSize(bufferSize); ad.load(); }
+        });
+    }
+
+    /** A distinct view consuming the placement's shared cache; no extra preload pool or ad unit. */
+    public void MoneyBoostLoadNativeSlot(String slot, String placement, int adUnitIndex, int template, int bufferSize) {
+        mainHandler.post(() -> {
+            if (slot == null || placement == null || !slot.startsWith(placement + "#")) return;
+            MoneyBoostNativeAdapter owner = MoneyBoostGetNative(placement, adUnitIndex, template);
+            if (owner == null) return;
+            owner.setPreloadBufferSize(bufferSize); owner.load();
+            if (!MoneyBoost_nativeAds.containsKey(slot)) {
+                MoneyBoostNativeAdapter view = new MoneyBoostNativeAdapter(MoneyBoost_activity, slot,
+                        owner.unitId(), template, owner);
+                view.applyStyle(MoneyBoost_nativeStyle);
+                MoneyBoost_nativeAds.put(slot, view);
+            }
         });
     }
 

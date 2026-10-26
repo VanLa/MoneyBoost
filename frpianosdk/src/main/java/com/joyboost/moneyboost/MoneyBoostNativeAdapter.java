@@ -45,11 +45,15 @@ final class MoneyBoostNativeAdapter {
     private MediaView mediaView;
     private ImageView tileIcon;
     private volatile boolean preloadingStarted;
+    // Legacy callers keep one cached ad. Configure once, before the first load.
+    private int preloadBufferSize = 1;
     private boolean requested;
     private volatile boolean displayed;
     private final String preloadId;
+    private final MoneyBoostNativeAdapter preloadOwner;
     private volatile boolean destroyed;
     private volatile long loadedAt;
+    private volatile long unsupportedUntil;
     private static final long MAX_AGE_MS = 55 * 60 * 1000L;
     private int generation;
     private float x, y, width, height;
@@ -67,14 +71,27 @@ final class MoneyBoostNativeAdapter {
     }
 
     MoneyBoostNativeAdapter(Activity activity, String placement, String unit, int template) {
+        this(activity, placement, unit, template, null);
+    }
+
+    MoneyBoostNativeAdapter(Activity activity, String placement, String unit, int template, MoneyBoostNativeAdapter owner) {
+        this.preloadOwner = owner;
         this.compact = template == 1; this.tile = template == 2;
         this.activity = activity; this.placement = placement; this.unit = unit;
-        this.preloadId = "moneyboost_native_" + placement + "_" + java.util.UUID.randomUUID();
+        this.preloadId = owner != null ? owner.preloadId : "moneyboost_native_" + placement + "_" + java.util.UUID.randomUUID();
         ViewGroup root = root();
         if (root != null) root.getViewTreeObserver().addOnGlobalLayoutListener(layoutListener);
     }
 
+    String unitId() { return unit; }
+
+    void setPreloadBufferSize(int count) {
+        // Never restart an active pool or discard inventory on repeated page entry.
+        if (!preloadingStarted && !destroyed) preloadBufferSize = Math.max(1, Math.min(5, count));
+    }
+
     void load() {
+        if (preloadOwner != null) { if (!destroyed) preloadOwner.load(); return; }
         if (destroyed || preloadingStarted
                 || !MoneyBoostMediationManager.getInstance().MoneyBoostCanShowNativeAds()) return;
         final int ticket = generation;
@@ -83,7 +100,7 @@ final class MoneyBoostNativeAdapter {
             NativeAdRequest request = new NativeAdRequest.Builder(unit,
                     Collections.singletonList(NativeAd.NativeAdType.NATIVE)).build();
             preloadingStarted = true;
-            boolean started = NativeAdPreloader.start(preloadId, new PreloadConfiguration(request, 1), new PreloadCallback() {
+            boolean started = NativeAdPreloader.start(preloadId, new PreloadConfiguration(request, preloadBufferSize), new PreloadCallback() {
                 @Override public void onAdPreloaded(String id, ResponseInfo info) {
                     if (destroyed || generation != ticket) return;
                     MoneyBoostAdDiagnostics.load("native_" + placement, unit, "success", null);
@@ -104,7 +121,7 @@ final class MoneyBoostNativeAdapter {
     }
 
     private void acquireAd() {
-        if (ad != null || !preloadingStarted || destroyed) return;
+        if (ad != null || !inventoryStarted() || destroyed || SystemClock.elapsedRealtime()<unsupportedUntil) return;
         NativeAdLoadResult.NativeAdLoadSuccessResult result = NativeAdPreloader.pollAd(preloadId);
         if (!(result instanceof NativeAdLoadResult.NativeAdSuccess)) {
             if (result instanceof NativeAdLoadResult.BannerAdSuccess) ((NativeAdLoadResult.BannerAdSuccess)result).getAd().destroy();
@@ -112,6 +129,15 @@ final class MoneyBoostNativeAdapter {
             return;
         }
         NativeAd loaded = ((NativeAdLoadResult.NativeAdSuccess)result).getAd();
+        // Icon-only compact/grid templates cannot contain the required 120dp video MediaView.
+        // Do not render a returned video as a static icon or repeatedly drain the pool each frame.
+        if(loaded.getHeadline()==null || loaded.getHeadline().trim().isEmpty()
+                || loaded.getCallToAction()==null || loaded.getCallToAction().trim().isEmpty()
+                || ((compact || tile) && loaded.getMediaContent()!=null && loaded.getMediaContent().getHasVideoContent())) {
+            loaded.destroy();unsupportedUntil=SystemClock.elapsedRealtime()+60_000;
+            android.util.Log.w("MoneyBoostAds","Native required assets do not fit the selected template",null);
+            return;
+        }
         ad = loaded; loadedAt = SystemClock.elapsedRealtime();
         final String requestId = java.util.UUID.randomUUID().toString();
         final java.util.concurrent.atomic.AtomicBoolean impressionLogged = new java.util.concurrent.atomic.AtomicBoolean();
@@ -150,7 +176,8 @@ final class MoneyBoostNativeAdapter {
     }
 
     private boolean expired() { return SystemClock.elapsedRealtime() - loadedAt >= MAX_AGE_MS; }
-    boolean isReady() { return !destroyed && ((ad != null && !expired()) || (preloadingStarted && NativeAdPreloader.isAdAvailable(preloadId))); }
+    private boolean inventoryStarted() { return preloadOwner == null ? preloadingStarted : !preloadOwner.destroyed && preloadOwner.preloadingStarted; }
+    boolean isReady() { return !destroyed && SystemClock.elapsedRealtime()>=unsupportedUntil && ((ad != null && !expired()) || (inventoryStarted() && NativeAdPreloader.isAdAvailable(preloadId))); }
 
     private android.os.Bundle eventParams(String requestId) {
         android.os.Bundle params = new android.os.Bundle();
@@ -241,7 +268,7 @@ final class MoneyBoostNativeAdapter {
         if(tile){
             if(ctaView!=null){int size=Math.max(dp(32),Math.min(dp(48),Math.round(h*.28f)));
                 if(ctaView.getLayoutParams().height!=size)ctaView.setLayoutParams(new LinearLayout.LayoutParams(-1,size));}
-            if(tileIcon!=null){int size=Math.min(dp(40),Math.round(h*.27f));
+            if(tileIcon!=null){int size=Math.min(dp(32),Math.round(h*.22f));
                 if(tileIcon.getLayoutParams().height!=size)tileIcon.setLayoutParams(new LinearLayout.LayoutParams(size,size));}
         }
         // Keep advertiser media proportional as the host slot changes size.
@@ -278,7 +305,7 @@ final class MoneyBoostNativeAdapter {
         detail.addView(headline); view.setHeadlineView(headline);
         if (ad.getIcon() != null && ad.getIcon().getDrawable() != null) {
             ImageView icon = new ImageView(activity); icon.setImageDrawable(ad.getIcon().getDrawable());
-            detail.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24))); view.setIconView(icon);
+            detail.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24))); icon.setScaleType(ImageView.ScaleType.FIT_CENTER);view.setIconView(icon);
         }
         if (ad.getCallToAction() != null) {
             Button cta = new Button(activity); ctaView = cta; cta.setAllCaps(false); cta.setText(limit(ad.getCallToAction(), 15)); cta.setTextSize(13);
@@ -303,11 +330,11 @@ final class MoneyBoostNativeAdapter {
         outer.addView(row, new LinearLayout.LayoutParams(-1, -1));
         if (ad.getIcon() != null && ad.getIcon().getDrawable() != null) {
             ImageView icon = new ImageView(activity); icon.setImageDrawable(ad.getIcon().getDrawable());
-            row.addView(icon, new LinearLayout.LayoutParams(dp(32), dp(32))); view.setIconView(icon);
+            row.addView(icon, new LinearLayout.LayoutParams(dp(32), dp(32))); icon.setScaleType(ImageView.ScaleType.FIT_CENTER);view.setIconView(icon);
         }
         LinearLayout title = new LinearLayout(activity); title.setOrientation(LinearLayout.VERTICAL);
         title.setPadding(dp(8), 0, dp(8), 0); row.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        badgeView=text("Ad",10,Color.DKGRAY);title.addView(badgeView);
+        badgeView=text("Ad",12,Color.DKGRAY);title.addView(badgeView);
         headlineView=text(limit(ad.getHeadline(),25),14,Color.DKGRAY);title.addView(headlineView);view.setHeadlineView(headlineView);
         if (ad.getCallToAction() != null) {
             ctaView = new Button(activity); ctaView.setAllCaps(false); ctaView.setText(limit(ad.getCallToAction(), 15));
@@ -323,14 +350,15 @@ final class MoneyBoostNativeAdapter {
     private void createTileContent(ViewGroup root) {
         LinearLayout column=new LinearLayout(activity);column.setOrientation(LinearLayout.VERTICAL);
         column.setPadding(dp(8),dp(4),dp(8),dp(4));view.addView(column,new FrameLayout.LayoutParams(-1,-1));
-        badgeView=text("Ad",10,Color.WHITE);column.addView(badgeView,new LinearLayout.LayoutParams(-1,dp(14)));
+        badgeView=text("Ad",12,Color.DKGRAY);column.addView(badgeView,new LinearLayout.LayoutParams(-1,dp(18)));
         if(ad.getIcon()!=null&&ad.getIcon().getDrawable()!=null){
             ImageView icon=new ImageView(activity);tileIcon=icon;icon.setImageDrawable(ad.getIcon().getDrawable());
-            column.addView(icon,new LinearLayout.LayoutParams(dp(40),dp(40)));view.setIconView(icon);
+            column.addView(icon,new LinearLayout.LayoutParams(dp(40),dp(40)));icon.setScaleType(ImageView.ScaleType.FIT_CENTER);view.setIconView(icon);
         }
-        headlineView=text(limit(ad.getHeadline(),25),13,Color.WHITE);
+        headlineView=text(limit(ad.getHeadline(),25),13,Color.DKGRAY);
+        headlineView.setIncludeFontPadding(false);
         column.addView(headlineView,new LinearLayout.LayoutParams(-1,0,1));view.setHeadlineView(headlineView);
-        if(ad.getCallToAction()!=null){ctaView=new Button(activity);ctaView.setAllCaps(false);ctaView.setPadding(dp(4),0,dp(4),0);ctaView.setText(limit(ad.getCallToAction(),15));
+        if(ad.getCallToAction()!=null){ctaView=new Button(activity);ctaView.setAllCaps(false);ctaView.setIncludeFontPadding(false);ctaView.setMaxLines(2);ctaView.setPadding(dp(4),0,dp(4),0);ctaView.setText(limit(ad.getCallToAction(),15));
             column.addView(ctaView,new LinearLayout.LayoutParams(-1,dp(48)));view.setCallToActionView(ctaView);}
         applyStyle(MoneyBoostMediationManager.getInstance().MoneyBoostGetNativeStyle());
         ViewGroup parent=hostContainer!=null?hostContainer:root;attachView(parent,dp(120),dp(160));
@@ -349,14 +377,16 @@ final class MoneyBoostNativeAdapter {
             android.graphics.drawable.LayerDrawable frame = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{rim, card});
             frame.setLayerInset(1, dp(2), dp(2), dp(2), dp(2)); view.setBackground(frame);
         } else view.setBackground(card);
-        if (badgeView != null) badgeView.setTextColor(tile ? Color.WHITE : style.text);
-        if (headlineView != null) { headlineView.setTextColor(tile ? Color.WHITE : style.text); headlineView.setTextSize(tile ? Math.min(13,style.headlineSize) : style.headlineSize); }
+        if(MoneyBoostMediationManager.getInstance().MoneyBoostNativeUsesUnityBackground())view.setBackground(null);
+        if (badgeView != null) { badgeView.setTextColor(tile && !MoneyBoostMediationManager.getInstance().MoneyBoostNativeUsesUnityBackground()?Color.WHITE:style.text);badgeView.setMinimumWidth(dp(15));badgeView.setMinimumHeight(dp(15)); }
+        if (headlineView != null) { headlineView.setTextColor(tile && !MoneyBoostMediationManager.getInstance().MoneyBoostNativeUsesUnityBackground()?Color.WHITE:style.text); headlineView.setTextSize(tile ? Math.min(13,style.headlineSize) : style.headlineSize); }
         if (ctaView != null) {
             GradientDrawable button = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                     style.outlineButton ? new int[]{style.background, style.background} : new int[]{style.button, style.buttonEnd});
             button.setCornerRadius(dp(style.buttonRadius));
             button.setStroke(dp(compact || style.outlineButton ? 2 : 0), style.outlineButton ? style.button : Color.WHITE);
-            ctaView.setBackground(button);
+            android.graphics.drawable.Drawable artwork=MoneyBoostMediationManager.getInstance().MoneyBoostGetNativeButtonBackground();
+            ctaView.setBackground(artwork!=null?artwork:button);
             ctaView.setTextColor(style.outlineButton ? style.button : style.buttonText);
             ctaView.setTextSize(tile ? Math.min(13,style.buttonSize) : style.buttonSize);
         }
@@ -385,7 +415,7 @@ final class MoneyBoostNativeAdapter {
     }
     void destroy() {
         destroyed = true; generation++; requested = false;
-        if (preloadingStarted) NativeAdPreloader.destroy(preloadId);
+        if (preloadOwner == null && preloadingStarted) NativeAdPreloader.destroy(preloadId);
         preloadingStarted = false;
         ViewGroup root = root();
         if (root != null) root.getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener);
