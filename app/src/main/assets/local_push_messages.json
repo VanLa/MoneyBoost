@@ -1,0 +1,410 @@
+{
+  "en": [
+    {
+      "title": "Add a little color",
+      "body": "Your next masterpiece starts with a tap."
+    },
+    {
+      "title": "Take a color break",
+      "body": "One picture. A little peace."
+    },
+    {
+      "title": "A spark of color",
+      "body": "Pick a shade. Make it yours."
+    },
+    {
+      "title": "Color your mood",
+      "body": "Bright, bold or calm? You choose."
+    },
+    {
+      "title": "Make something lovely",
+      "body": "A blank canvas is waiting for you."
+    },
+    {
+      "title": "Tap. Color. Relax.",
+      "body": "Let the day fade into color."
+    },
+    {
+      "title": "Your colors, your rules",
+      "body": "Try a palette that feels like you."
+    },
+    {
+      "title": "A minute for you",
+      "body": "Pause the rush. Pick up a color."
+    }
+  ],
+  "zh": [
+    {
+      "title": "来点颜色吧",
+      "body": "轻点一下，画出你的下一幅佳作。"
+    },
+    {
+      "title": "歇一会，涂个色",
+      "body": "一幅小画，一点轻松。"
+    },
+    {
+      "title": "灵感，点亮了",
+      "body": "选个颜色，画出你的风格。"
+    },
+    {
+      "title": "今天是什么颜色？",
+      "body": "明亮、热烈或宁静，由你决定。"
+    },
+    {
+      "title": "画点美好的",
+      "body": "空白画布，等你添彩。"
+    },
+    {
+      "title": "点一点，放轻松",
+      "body": "让一天的忙碌，慢慢融进色彩。"
+    },
+    {
+      "title": "配色，你说了算",
+      "body": "试一组只属于你的颜色。"
+    },
+    {
+      "title": "留一分钟给自己",
+      "body": "放慢一点，给心情涂个色。"
+    }
+  ],
+  "es": [
+    {
+      "title": "Dale un poco de color",
+      "body": "Tu próxima obra empieza con un toque."
+    },
+    {
+      "title": "Una pausa con color",
+      "body": "Un dibujo. Un poco de calma."
+    },
+    {
+      "title": "Una chispa de color",
+      "body": "Elige un tono. Hazlo tuyo."
+    },
+    {
+      "title": "Colorea tu ánimo",
+      "body": "¿Brillante, intenso o suave? Tú eliges."
+    },
+    {
+      "title": "Crea algo bonito",
+      "body": "Un lienzo en blanco te espera."
+    },
+    {
+      "title": "Toca. Colorea. Relájate.",
+      "body": "Deja que el día se llene de color."
+    },
+    {
+      "title": "Tus colores, tus reglas",
+      "body": "Prueba una paleta que vaya contigo."
+    },
+    {
+      "title": "Un minuto para ti",
+      "body": "Baja el ritmo. Elige un color."
+    }
+  ],
+  "pt": [
+    {
+      "title": "Dê um toque de cor",
+      "body": "Sua próxima obra começa com um toque."
+    },
+    {
+      "title": "Uma pausa com cor",
+      "body": "Um desenho. Um pouco de paz."
+    },
+    {
+      "title": "Uma faísca de cor",
+      "body": "Escolha um tom. Deixe a sua marca."
+    },
+    {
+      "title": "Pinte seu humor",
+      "body": "Vibrante, forte ou suave? Você escolhe."
+    },
+    {
+      "title": "Crie algo bonito",
+      "body": "Uma tela em branco espera por você."
+    },
+    {
+      "title": "Toque. Pinte. Relaxe.",
+      "body": "Deixe o dia se transformar em cor."
+    },
+    {
+      "title": "Suas cores, suas regras",
+      "body": "Experimente uma paleta que é a sua cara."
+    },
+    {
+      "title": "Um minuto para você",
+      "body": "Desacelere. Escolha uma cor."
+    }
+  ],
+  "fr": [
+    {
+      "title": "Une touche de couleur",
+      "body": "Votre prochaine œuvre commence ici."
+    },
+    {
+      "title": "Une pause en couleurs",
+      "body": "Un dessin. Un peu de calme."
+    },
+    {
+      "title": "Une étincelle de couleur",
+      "body": "Choisissez un ton. Créez votre style."
+    },
+    {
+      "title": "Colorez votre humeur",
+      "body": "Vive, intense ou douce ? À vous de voir."
+    },
+    {
+      "title": "Créez quelque chose de beau",
+      "body": "Une toile vierge vous attend."
+    },
+    {
+      "title": "Touchez. Colorez. Soufflez.",
+      "body": "Laissez la journée fondre en couleurs."
+    },
+    {
+      "title": "Vos couleurs, vos règles",
+      "body": "Essayez une palette à votre image."
+    },
+    {
+      "title": "Une minute pour vous",
+      "body": "Ralentissez. Choisissez une couleur."
+    }
+  ],
+  "de": [
+    {
+      "title": "Ein bisschen Farbe",
+      "body": "Dein nächstes Kunstwerk beginnt hier."
+    },
+    {
+      "title": "Zeit für eine Farbpause",
+      "body": "Ein Bild. Ein bisschen Ruhe."
+    },
+    {
+      "title": "Ein Funke Farbe",
+      "body": "Wähle einen Farbton. Mach ihn zu deinem."
+    },
+    {
+      "title": "Farbe für deine Stimmung",
+      "body": "Leuchtend, kräftig oder sanft? Du wählst."
+    },
+    {
+      "title": "Mach etwas Schönes",
+      "body": "Eine leere Leinwand wartet auf dich."
+    },
+    {
+      "title": "Tippen. Malen. Entspannen.",
+      "body": "Lass den Tag in Farben ausklingen."
+    },
+    {
+      "title": "Deine Farben, deine Regeln",
+      "body": "Probiere eine Palette, die zu dir passt."
+    },
+    {
+      "title": "Eine Minute für dich",
+      "body": "Mach langsam. Wähle eine Farbe."
+    }
+  ],
+  "id": [
+    {
+      "title": "Beri sedikit warna",
+      "body": "Karya berikutnya dimulai dari satu ketukan."
+    },
+    {
+      "title": "Rehat sambil mewarnai",
+      "body": "Satu gambar. Sedikit ketenangan."
+    },
+    {
+      "title": "Percikan warna",
+      "body": "Pilih warna. Jadikan khas dirimu."
+    },
+    {
+      "title": "Warnai suasana hatimu",
+      "body": "Cerah, berani, atau lembut? Kamu pilih."
+    },
+    {
+      "title": "Ciptakan yang indah",
+      "body": "Kanvas kosong menantimu."
+    },
+    {
+      "title": "Ketuk. Warnai. Santai.",
+      "body": "Lepaskan penat lewat warna."
+    },
+    {
+      "title": "Warnamu, aturanmu",
+      "body": "Coba palet yang mencerminkan dirimu."
+    },
+    {
+      "title": "Satu menit untukmu",
+      "body": "Pelan sejenak. Pilih satu warna."
+    }
+  ],
+  "ja": [
+    {
+      "title": "毎日に、ひと色。",
+      "body": "次の一枚は、ひとタップから。"
+    },
+    {
+      "title": "ちょっと、ぬり絵休憩",
+      "body": "ひと塗りずつ、ほっとする時間。"
+    },
+    {
+      "title": "色から、ひらめき。",
+      "body": "好きな色で、あなたらしく。"
+    },
+    {
+      "title": "今日の気分は何色？",
+      "body": "明るく？鮮やかに？穏やかに？"
+    },
+    {
+      "title": "小さな一枚を、素敵に",
+      "body": "まっさらな絵が、あなたを待っています。"
+    },
+    {
+      "title": "タップして、ひと息。",
+      "body": "一日の終わりを、色でゆったり。"
+    },
+    {
+      "title": "配色は、自由。",
+      "body": "あなたらしい色の組み合わせを。"
+    },
+    {
+      "title": "自分に、1分。",
+      "body": "忙しさを止めて、好きな色を。"
+    }
+  ],
+  "ko": [
+    {
+      "title": "하루에 색 한 스푼",
+      "body": "다음 작품은 터치 한 번으로 시작돼요."
+    },
+    {
+      "title": "잠깐, 컬러 휴식",
+      "body": "그림 한 장으로 마음에 여유를."
+    },
+    {
+      "title": "색으로 반짝이는 영감",
+      "body": "마음에 드는 색으로 나답게 칠해요."
+    },
+    {
+      "title": "오늘 기분은 무슨 색?",
+      "body": "화사하게, 강렬하게, 차분하게. 골라봐요."
+    },
+    {
+      "title": "작은 아름다움을 그려요",
+      "body": "빈 도화지가 당신을 기다려요."
+    },
+    {
+      "title": "톡, 칠하고, 쉬어요",
+      "body": "하루의 분주함을 색으로 내려놓아요."
+    },
+    {
+      "title": "내 색깔, 내 방식",
+      "body": "나를 닮은 색 조합을 찾아봐요."
+    },
+    {
+      "title": "나를 위한 1분",
+      "body": "잠깐 멈추고 좋아하는 색을 골라요."
+    }
+  ],
+  "ru": [
+    {
+      "title": "Добавь немного цвета",
+      "body": "Твоя следующая картина — в одно касание."
+    },
+    {
+      "title": "Пауза в красках",
+      "body": "Один рисунок. Немного спокойствия."
+    },
+    {
+      "title": "Искра цвета",
+      "body": "Выбери оттенок. Создай свой стиль."
+    },
+    {
+      "title": "Какого цвета настроение?",
+      "body": "Яркое, смелое или нежное? Выбирай."
+    },
+    {
+      "title": "Создай что-то красивое",
+      "body": "Чистый холст ждёт тебя."
+    },
+    {
+      "title": "Коснись. Раскрась. Отдохни.",
+      "body": "Пусть день растворится в красках."
+    },
+    {
+      "title": "Твои цвета, твои правила",
+      "body": "Попробуй палитру под своё настроение."
+    },
+    {
+      "title": "Минута для себя",
+      "body": "Замедлись. Выбери любимый цвет."
+    }
+  ],
+  "vi": [
+    {
+      "title": "Thêm chút sắc màu",
+      "body": "Tác phẩm tiếp theo bắt đầu từ một chạm."
+    },
+    {
+      "title": "Nghỉ chút, tô màu nhé",
+      "body": "Một bức tranh. Một chút bình yên."
+    },
+    {
+      "title": "Một tia sắc màu",
+      "body": "Chọn một màu. Tạo nét riêng."
+    },
+    {
+      "title": "Tâm trạng hôm nay màu gì?",
+      "body": "Rực rỡ, táo bạo hay dịu êm? Bạn chọn."
+    },
+    {
+      "title": "Vẽ chút điều xinh",
+      "body": "Trang vẽ trắng đang chờ bạn."
+    },
+    {
+      "title": "Chạm. Tô màu. Thư giãn.",
+      "body": "Để ngày dài tan vào sắc màu."
+    },
+    {
+      "title": "Màu của bạn, cách của bạn",
+      "body": "Thử bảng màu mang dấu ấn riêng."
+    },
+    {
+      "title": "Một phút cho mình",
+      "body": "Chậm lại một chút. Chọn một màu."
+    }
+  ],
+  "th": [
+    {
+      "title": "เติมสีสันสักนิด",
+      "body": "ผลงานชิ้นต่อไปเริ่มได้ในแตะเดียว"
+    },
+    {
+      "title": "พักใจแล้วมาเติมสี",
+      "body": "ภาพหนึ่งใบ ช่วงเวลาสบายใจ"
+    },
+    {
+      "title": "จุดประกายด้วยสี",
+      "body": "เลือกสีที่ชอบ เติมความเป็นคุณ"
+    },
+    {
+      "title": "วันนี้อารมณ์สีอะไร?",
+      "body": "สดใส จัดจ้าน หรือนุ่มนวล คุณเลือกได้"
+    },
+    {
+      "title": "สร้างสิ่งสวยงามกัน",
+      "body": "ภาพว่างกำลังรอสีสันจากคุณ"
+    },
+    {
+      "title": "แตะ เติมสี ผ่อนคลาย",
+      "body": "ปล่อยความวุ่นวายให้ละลายไปกับสี"
+    },
+    {
+      "title": "สีของคุณ สไตล์ของคุณ",
+      "body": "ลองจับคู่สีในแบบที่เป็นคุณ"
+    },
+    {
+      "title": "หนึ่งนาทีเพื่อตัวเอง",
+      "body": "พักสักนิด แล้วเลือกสีที่ชอบ"
+    }
+  ]
+}

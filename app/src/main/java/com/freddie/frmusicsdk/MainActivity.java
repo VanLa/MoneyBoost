@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat;
 import com.joyboost.moneyboost.MoneyBoostFirebaseManager;
 import com.joyboost.moneyboost.MoneyBoostMediationManager;
 import com.joyboost.moneyboost.MoneyBoostToolsManager;
+import com.joyboost.moneyboost.MoneyBoostLocalPush;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -118,6 +119,14 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        logLocalPushOpen(intent);
+    }
+
+    private void logLocalPushOpen(Intent intent) {
+        if (intent != null && intent.getBooleanExtra("moneyboost_local_push", false)) {
+            Log.i(TAG, "Opened from a local push notification");
+            intent.removeExtra("moneyboost_local_push");
+        }
     }
 
     @Override
@@ -130,12 +139,15 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        logLocalPushOpen(getIntent());
+        ((TextView) findViewById(R.id.tv_local_push_status)).setText(DemoLocalPush.onResume(this));
         mediationManager.MoneyBoostOnAppResume();
         startNativePreloaders();
     }
 
     @Override
     protected void onPause() {
+        MoneyBoostLocalPush.setForeground(false);
         mediationManager.MoneyBoostOnAppPause();
         super.onPause();
     }
@@ -157,6 +169,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupButtons() {
+        findViewById(R.id.btn_register_local_push).setOnClickListener(v ->
+            ((TextView) findViewById(R.id.tv_local_push_status)).setText(DemoLocalPush.enable(this)));
+        findViewById(R.id.btn_cancel_local_push).setOnClickListener(v ->
+            ((TextView) findViewById(R.id.tv_local_push_status)).setText(DemoLocalPush.cancel(this)));
         findViewById(R.id.btn_show_native).setOnClickListener(v -> showNativeDemo());
         findViewById(android.R.id.content).getViewTreeObserver().addOnScrollChangedListener(this::updateNativeDemo);
         findViewById(R.id.btn_hide_collapsible_banner).setOnClickListener(v -> {

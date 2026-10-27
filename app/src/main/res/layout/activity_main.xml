@@ -37,6 +37,17 @@
             android:textIsSelectable="true"
             android:textSize="14sp" />
 
+        <TextView android:id="@+id/tv_local_push_status"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:padding="12dp" android:text="本地推送：Day1 开始，8 组文案 / 12 种语言。"
+            android:textIsSelectable="true" />
+        <Button android:id="@+id/btn_register_local_push"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="注册 Day1 本地推送 / 通知授权" />
+        <Button android:id="@+id/btn_cancel_local_push"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp" android:text="取消本地推送" />
+
         <TextView android:id="@+id/tv_native_status" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:padding="8dp" android:text="Native: auto preload after initialization / splash" />
         <Button android:id="@+id/btn_show_native" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Show Native" />

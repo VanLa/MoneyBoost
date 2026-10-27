@@ -2,6 +2,8 @@
 -keep class com.joyboost.moneyboost.MoneyBoostMediationManager { public *; }
 -keep class com.joyboost.moneyboost.MoneyBoostToolsManager { public *; }
 -keep class com.joyboost.moneyboost.MoneyBoostFirebaseManager { public *; }
+-keep class com.joyboost.moneyboost.MoneyBoostLocalPush { public *; }
+-keep class com.joyboost.moneyboost.MoneyBoostLocalPush$Receiver { public *; }
 -keepclassmembers class com.unity3d.player.UnityPlayer {
     public static void UnitySendMessage(java.lang.String, java.lang.String, java.lang.String);
 }
